@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-dotenv = "0.15"
-reqwest = "0.12.7"
-scraper = "0.20.0"
+dotenvy = "0.15.7"
+thirtyfour = "0.34.0"
 tokio = { version = "1", features = ["full"] }

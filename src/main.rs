@@ -1,3 +1,6 @@
+use chrono::NaiveDate;
+use chrono::NaiveDateTime;
+use chrono::NaiveTime;
 use dotenvy::dotenv_override;
 use dotenvy::var;
 use icalendar::Calendar;
@@ -5,14 +8,13 @@ use icalendar::Component;
 use icalendar::Event;
 use icalendar::EventLike;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 use std::str::Split;
 use std::time::Duration;
 use thirtyfour::prelude::*;
 use time::Month;
-use time::OffsetDateTime;
-use time::PrimitiveDateTime;
-use time::UtcOffset;
 
 use time::Date;
 use time::Time;
@@ -21,6 +23,7 @@ use time::Time;
 pub struct Shift {
     date: Date,
     start: Time,
+    end_date: Date,
     end: Time,
     duration: Duration,
     number: String,
@@ -73,11 +76,15 @@ impl Shift {
             * 60
             * 60;
         let duration = Duration::from_secs(duration_hours + duration_minutes);
-
+        let mut end_date = date;
+        if start < end {
+            end_date = date + time::Duration::days(1);
+        }
         Self {
             date,
             number,
             start,
+            end_date,
             end,
             duration,
             kind,
@@ -165,7 +172,7 @@ fn get_month_year(text: &str) -> (Month, u32) {
     (*month, year)
 }
 
-fn create_ical(shifts: Vec<Shift>) {
+fn create_ical(shifts: Vec<Shift>) -> String {
     let mut calendar = Calendar::new().name("Hermes rooster").done();
     for shift in shifts {
         calendar.push(
@@ -178,13 +185,45 @@ fn create_ical(shifts: Vec<Shift>) {
                     shift.description
                 ))
                 .location(&shift.location)
-                .starts()
+                .starts(create_dateperhapstime(shift.date, shift.start))
+                .ends(create_dateperhapstime(shift.end_date, shift.end))
                 .done(),
         );
     }
+    println!("{}", calendar);
+    String::from(calendar.to_string())
 }
 
-fn create_dateperhapstime(date: Date, time: Time)
+fn create_dateperhapstime(date: Date, time: Time) -> NaiveDateTime {
+    let months = [
+        Month::January,
+        Month::February,
+        Month::March,
+        Month::April,
+        Month::May,
+        Month::June,
+        Month::July,
+        Month::August,
+        Month::September,
+        Month::October,
+        Month::November,
+        Month::December,
+    ];
+    let date_day = date.day();
+    let date_month = months
+        .iter()
+        .position(|month| month == &date.month())
+        .unwrap()
+        + 1;
+    let date_year = date.year();
+    let time_hrs = time.hour();
+    let time_min = time.minute();
+    let naive_time = NaiveTime::from_hms_opt(time_hrs as u32, time_min as u32, 0).unwrap();
+    let naive_date =
+        NaiveDate::from_ymd_opt(date_year as i32, date_month as u32, date_day as u32).unwrap();
+    let naive_date_time = NaiveDateTime::new(naive_date, naive_time);
+    naive_date_time
+}
 
 #[tokio::main]
 async fn main() -> WebDriverResult<()> {
@@ -204,7 +243,11 @@ async fn main() -> WebDriverResult<()> {
         .query(By::ClassName("calDay"))
         .all_from_selector()
         .await?;
-    get_elements(elements, month, year).await?;
+    let shifts = get_elements(elements, month, year).await?;
+    let calendar = create_ical(shifts);
+    let ical_path = "./hermes.ical";
+    let mut output = File::create(ical_path).unwrap();
+    write!(output, "{}", calendar);
     driver.screenshot(Path::new("./webpage.png")).await?;
     driver.quit().await?;
     Ok(())

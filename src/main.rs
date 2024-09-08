@@ -1,9 +1,7 @@
 use dotenvy::dotenv_override;
 use dotenvy::var;
 use icalendar::Calendar;
-use icalendar::CalendarDateTime;
 use icalendar::Component;
-use icalendar::DatePerhapsTime;
 use icalendar::Event;
 use icalendar::EventLike;
 use std::collections::HashMap;
@@ -21,8 +19,9 @@ use time::Time;
 
 #[derive(Debug, Clone)]
 pub struct Shift {
-    start: chrono::DateTime<chrono_tz::Tz>,
-    end: chrono::DateTime<chrono_tz::Tz>,
+    date: Date,
+    start: Time,
+    end: Time,
     duration: Duration,
     number: String,
     kind: String,
@@ -33,7 +32,12 @@ pub struct Shift {
 impl Shift {
     fn new(text: String, date: Date) -> Self {
         let parts = text.split("\u{a0}• \u{a0}• ");
-        let parts_clean: Vec<String> = parts.map(|x| x.replace("\u{a0}• ", "")).collect();
+        let parts_clean: Vec<String> = parts
+            .map(|x| {
+                let y = x.replace("\u{a0}• ", "");
+                y
+            })
+            .collect();
         let mut parts_list: Vec<Split<'_, &str>> =
             parts_clean.iter().map(|x| x.split(": ")).collect();
 
@@ -180,9 +184,7 @@ fn create_ical(shifts: Vec<Shift>) {
     }
 }
 
-fn create_dateperhapstime(date: Date, time: Time) -> DatePerhapsTime {
-    CalendarDateTime::from_ym
-}
+fn create_dateperhapstime(date: Date, time: Time)
 
 #[tokio::main]
 async fn main() -> WebDriverResult<()> {

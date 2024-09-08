@@ -4,7 +4,9 @@ use chrono::NaiveTime;
 use dotenvy::dotenv_override;
 use dotenvy::var;
 use icalendar::Calendar;
+use icalendar::CalendarDateTime;
 use icalendar::Component;
+use icalendar::DatePerhapsTime;
 use icalendar::Event;
 use icalendar::EventLike;
 use std::collections::HashMap;
@@ -77,7 +79,7 @@ impl Shift {
             * 60;
         let duration = Duration::from_secs(duration_hours + duration_minutes);
         let mut end_date = date;
-        if start < end {
+        if end < start {
             end_date = date + time::Duration::days(1);
         }
         Self {
@@ -166,6 +168,7 @@ fn get_month_year(text: &str) -> (Month, u32) {
         ("November", Month::November),
         ("December", Month::December),
     ]);
+    println!("{}", text);
     let month_name = text.split_whitespace().nth(1).unwrap();
     let year: u32 = text.split_whitespace().nth(2).unwrap().parse().unwrap();
     let month = month_dict.get(month_name).unwrap();
@@ -173,13 +176,16 @@ fn get_month_year(text: &str) -> (Month, u32) {
 }
 
 fn create_ical(shifts: Vec<Shift>) -> String {
-    let mut calendar = Calendar::new().name("Hermes rooster").done();
+    let mut calendar = Calendar::new()
+        .name("Hermes rooster")
+        .timezone("Europe/Amsterdam")
+        .done();
     for shift in shifts {
         calendar.push(
             Event::new()
                 .summary(&format!("Shift - {}", shift.number))
                 .description(&format!(
-                    "Dienstsoort: {} \n Duur: {} \n Omschrijving: {}",
+                    "Dienstsoort • {} \nDuur • {} \nOmschrijving • {}",
                     shift.kind,
                     (shift.duration.as_secs() / 60 / 24),
                     shift.description
@@ -194,7 +200,7 @@ fn create_ical(shifts: Vec<Shift>) -> String {
     String::from(calendar.to_string())
 }
 
-fn create_dateperhapstime(date: Date, time: Time) -> NaiveDateTime {
+fn create_dateperhapstime(date: Date, time: Time) -> CalendarDateTime {
     let months = [
         Month::January,
         Month::February,
@@ -222,7 +228,10 @@ fn create_dateperhapstime(date: Date, time: Time) -> NaiveDateTime {
     let naive_date =
         NaiveDate::from_ymd_opt(date_year as i32, date_month as u32, date_day as u32).unwrap();
     let naive_date_time = NaiveDateTime::new(naive_date, naive_time);
-    naive_date_time
+    CalendarDateTime::WithTimezone {
+        date_time: naive_date_time,
+        tzid: "Europe/Amsterdam".to_string(),
+    }
 }
 
 #[tokio::main]
@@ -233,6 +242,7 @@ async fn main() -> WebDriverResult<()> {
     let username = var("USERNAME").unwrap();
     let password = var("PASSWORD").unwrap();
     load_calendar(&driver, &username, &password).await?;
+    driver.screenshot(Path::new("./webpage.png")).await?;
     let month_year = driver
         .find(By::PartialLinkText("Rooster"))
         .await?
@@ -248,7 +258,6 @@ async fn main() -> WebDriverResult<()> {
     let ical_path = "./hermes.ical";
     let mut output = File::create(ical_path).unwrap();
     write!(output, "{}", calendar);
-    driver.screenshot(Path::new("./webpage.png")).await?;
     driver.quit().await?;
     Ok(())
 }

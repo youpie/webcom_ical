@@ -7,30 +7,193 @@ X-WR-CALNAME:Hermes rooster
 TIMEZONE-ID:Europe/Amsterdam
 X-WR-TIMEZONE:Europe/Amsterdam
 BEGIN:VEVENT
-DTSTAMP:20240908T180941Z
-DESCRIPTION:Dienstsoort • Rijdienst \NDuur • 19 \NOmschrijving • L
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Rijdienst \NDuur • 7 uur 52 minuten\NOmschri
+ jving • L
 DTEND;TZID=Europe/Amsterdam:20240903T004400
 DTSTART;TZID=Europe/Amsterdam:20240902T165200
 LOCATION:ehvgar\, Eindhoven\, Garage
 SUMMARY:Shift - L1052
-UID:a9467954-fbfe-4704-9f76-df664f5d850f
+UID:a830dc47-0174-4271-a291-b70b357e781e
 END:VEVENT
 BEGIN:VEVENT
-DTSTAMP:20240908T180941Z
-DESCRIPTION:Dienstsoort • Rijdienst \NDuur • 20 \NOmschrijving • L
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Rijdienst \NDuur • 8 uur 17 minuten\NOmschri
+ jving • L
 DTEND;TZID=Europe/Amsterdam:20240906T001600
 DTSTART;TZID=Europe/Amsterdam:20240905T155900
 LOCATION:ehvgar\, Eindhoven\, Garage
 SUMMARY:Shift - L1032
-UID:34c5d427-a07d-44ff-afa5-61555fefed28
+UID:5930d2ba-3387-43bb-9599-bb9cdea27e2a
 END:VEVENT
 BEGIN:VEVENT
-DTSTAMP:20240908T180941Z
-DESCRIPTION:Dienstsoort • Rijdienst \NDuur • 21 \NOmschrijving • L
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Rijdienst \NDuur • 8 uur 25 minuten\NOmschri
+ jving • L
 DTEND;TZID=Europe/Amsterdam:20240906T234700
 DTSTART;TZID=Europe/Amsterdam:20240906T152200
 LOCATION:ehvgar\, Eindhoven\, Garage
 SUMMARY:Shift - L1024
-UID:4194681a-f74c-4ac9-8ff3-2de8ee1a33bb
+UID:c224fe30-f041-4d7e-9304-384eb64e757c
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Rijdienst \NDuur • 8 uur 27 minuten\NOmschri
+ jving • L
+DTEND;TZID=Europe/Amsterdam:20240911T002100
+DTSTART;TZID=Europe/Amsterdam:20240910T155400
+LOCATION:ehvgar\, Eindhoven\, Garage
+SUMMARY:Shift - L1030
+UID:ef4e7289-a42d-4532-992d-1acd786d996d
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Extra dienst \NDuur • 7 uur 46 minuten\NOmsch
+ rijving • l9119
+DTEND;TZID=Europe/Amsterdam:20240801T184500
+DTSTART;TZID=Europe/Amsterdam:20240801T105900
+LOCATION:ehvgar\, Eindhoven\, Garage
+SUMMARY:Shift - l9119
+UID:a108c69a-1d53-4cbf-ae58-653b8008a21b
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Extra dienst \NDuur • 3 uur 35 minuten\NOmsch
+ rijving • l9120
+DTEND;TZID=Europe/Amsterdam:20240802T094800
+DTSTART;TZID=Europe/Amsterdam:20240802T061300
+LOCATION:ehvgar\, Eindhoven\, Garage
+SUMMARY:Shift - l9120
+UID:5b2ef4ef-37cf-47de-b71c-e030b4ee376e
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Extra dienst \NDuur • 8 uur 11 minuten\NOmsch
+ rijving • l9122
+DTEND;TZID=Europe/Amsterdam:20240806T003400
+DTSTART;TZID=Europe/Amsterdam:20240805T162300
+LOCATION:ehvgar\, Eindhoven\, Garage
+SUMMARY:Shift - l9122
+UID:ae07ba47-7f3a-415a-99eb-75a730904ff5
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Extra dienst \NDuur • 8 uur 17 minuten\NOmsch
+ rijving • l9122
+DTEND;TZID=Europe/Amsterdam:20240806T235200
+DTSTART;TZID=Europe/Amsterdam:20240806T153500
+LOCATION:ehvgar\, Eindhoven\, Garage
+SUMMARY:Shift - l9122
+UID:6e7987fb-b24b-4822-9863-8481e8544fcc
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Extra dienst \NDuur • 8 uur 11 minuten\NOmsch
+ rijving • l9122
+DTEND;TZID=Europe/Amsterdam:20240807T205100
+DTSTART;TZID=Europe/Amsterdam:20240807T124000
+LOCATION:ehvgar\, Eindhoven\, Garage
+SUMMARY:Shift - l9122
+UID:22307277-1fa3-4963-a703-d23be4c50de5
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Extra dienst \NDuur • 3 uur 41 minuten\NOmsch
+ rijving • l9107
+DTEND;TZID=Europe/Amsterdam:20240808T172500
+DTSTART;TZID=Europe/Amsterdam:20240808T134400
+LOCATION:ehvgar\, Eindhoven\, Garage
+SUMMARY:Shift - l9107
+UID:04c4ad0a-907e-40e7-9db1-ce952af2425d
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Extra dienst \NDuur • 7 uur 58 minuten\NOmsch
+ rijving • l9134
+DTEND;TZID=Europe/Amsterdam:20240811T165800
+DTSTART;TZID=Europe/Amsterdam:20240811T090000
+LOCATION:ehvgar\, Eindhoven\, Garage
+SUMMARY:Shift - l9134
+UID:fb7d23aa-1304-4965-8ea5-3de1328b5965
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Extra dienst \NDuur • 6 uur 57 minuten\NOmsch
+ rijving • l9136
+DTEND;TZID=Europe/Amsterdam:20240812T125100
+DTSTART;TZID=Europe/Amsterdam:20240812T055400
+LOCATION:ehvgar\, Eindhoven\, Garage
+SUMMARY:Shift - l9136
+UID:ff8fe629-f09c-4a56-b72e-d37bd81d5059
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Extra dienst \NDuur • 8 uur 13 minuten\NOmsch
+ rijving • l9136
+DTEND;TZID=Europe/Amsterdam:20240814T181900
+DTSTART;TZID=Europe/Amsterdam:20240814T070200
+LOCATION:ehvgar\, Eindhoven\, Garage
+SUMMARY:Shift - l9136
+UID:5c3fdc75-5f6f-48ac-b2ee-71d619951d13
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Extra dienst \NDuur • 8 uur 5 minuten\NOmschr
+ ijving • l9121
+DTEND;TZID=Europe/Amsterdam:20240815T141900
+DTSTART;TZID=Europe/Amsterdam:20240815T061400
+LOCATION:ehvgar\, Eindhoven\, Garage
+SUMMARY:Shift - l9121
+UID:5627c6c3-cfe1-432a-8850-561b2df69a5a
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Extra dienst \NDuur • 7 uur 42 minuten\NOmsch
+ rijving • l9085
+DTEND;TZID=Europe/Amsterdam:20240817T004200
+DTSTART;TZID=Europe/Amsterdam:20240816T170000
+LOCATION:ehvgar\, Eindhoven\, Garage
+SUMMARY:Shift - l9085
+UID:a3c6cd3f-54ff-4b92-bfb4-f9f9f3da0171
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Rijdienst \NDuur • 7 uur 53 minuten\NOmschri
+ jving • G
+DTEND;TZID=Europe/Amsterdam:20240821T105300
+DTSTART;TZID=Europe/Amsterdam:20240821T065900
+LOCATION:ehvgar\, Eindhoven\, Garage
+SUMMARY:Shift - G1525
+UID:cfafa0df-d2c1-455e-9f7a-bbc2b8ebb756
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Rijdienst \NDuur • 7 uur 53 minuten\NOmschri
+ jving • G
+DTEND;TZID=Europe/Amsterdam:20240821T184900
+DTSTART;TZID=Europe/Amsterdam:20240821T145200
+LOCATION:ehvgar\, Eindhoven\, Garage
+SUMMARY:Shift - G1525
+UID:b38b980e-2e9f-4891-bd33-0cd48883f591
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Rijdienst \NDuur • 7 uur 57 minuten\NOmschri
+ jving • V
+DTEND;TZID=Europe/Amsterdam:20240823T133700
+DTSTART;TZID=Europe/Amsterdam:20240823T054000
+LOCATION:ehvgar\, Eindhoven\, Garage
+SUMMARY:Shift - V1305
+UID:ebcc7757-183a-4300-9639-4075d12c6b73
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20240909T145957Z
+DESCRIPTION:Dienstsoort • Rijdienst \NDuur • 8 uur 28 minuten\NOmschri
+ jving • V
+DTEND;TZID=Europe/Amsterdam:20240824T152400
+DTSTART;TZID=Europe/Amsterdam:20240824T065600
+LOCATION:ehvgar\, Eindhoven\, Garage
+SUMMARY:Shift - V1705
+UID:e98ef3e2-91f6-49c7-9252-2795efa294bd
 END:VEVENT
 END:VCALENDAR

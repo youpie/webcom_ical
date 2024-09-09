@@ -7,7 +7,7 @@ edition = "2021"
 dotenvy = "0.15.7"
 thirtyfour = "0.34.0"
 tokio = { version = "1", features = ["full"] }
-time = { version = "0.3.36", features = ["parsing", "macros"] }
+time = { version = "0.3.36", features = ["parsing", "macros", "formatting"] }
 icalendar = "0.16.5"
 chrono = "0.4.38"
 chrono-tz = "0.5.1"

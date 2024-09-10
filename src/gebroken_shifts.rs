@@ -12,6 +12,7 @@ pub async fn gebroken_diensten_laden(driver: &WebDriver, shifts: &Vec<Shift>) ->
     let mut new_shifts: Vec<Shift> = vec![];
     for shift in shifts {
         if shift.is_broken {
+            println!("Creating broken shift: {}", shift.number);
             let shift_rows = load_broken_dienst_page(driver, &shift).await.unwrap();
             let between_times = find_broken_start_stop_time(shift_rows).await.unwrap();
             let broken_shifts = Shift::new_from_existing(between_times, shift);
@@ -46,11 +47,11 @@ pub async fn find_broken_start_stop_time(
     for row in shift_rows {
         let shift_columns = row.query(By::Tag("td")).all_from_selector().await?;
         if shift_columns.last().unwrap().text().await? == "Afstaptijd" {
-            println!("afstaptijd {}", shift_columns[3].text().await?);
+            //println!("afstaptijd {}", shift_columns[3].text().await?);
             afstaptijden.push(shift_columns[1].text().await?);
         }
         if shift_columns.last().unwrap().text().await? == "Opstaptijd" {
-            println!("opstaptijd {}", shift_columns[1].text().await?);
+            //println!("opstaptijd {}", shift_columns[1].text().await?);
             opstaptijden.push(shift_columns[1].text().await?);
         }
     }

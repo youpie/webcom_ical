@@ -20,6 +20,7 @@ use time::Month;
 use time::Date;
 use time::Time;
 
+pub mod email;
 pub mod gebroken_shifts;
 
 #[derive(Debug, Clone)]
@@ -64,7 +65,7 @@ impl Shift {
         let end = get_time(end_time_str);
         let mut is_broken = false;
         let shift_type = number.chars().nth(0).unwrap();
-        println!("shift type {}", shift_type);
+        println!("Found shift: {}", number);
         if shift_type == 'g' || shift_type == 'G' {
             is_broken = true;
         }
@@ -105,33 +106,15 @@ impl Shift {
         }
     }
 
+    // Create two new shifts from one broken shift.
+    // Assumes second shift cannot start after midnight
     fn new_from_existing(new_between_times: (Time, Time), existing_shift: &Self) -> Vec<Self> {
-        let shifts: Vec<Self> = vec![
-            Self {
-                date: existing_shift.date,
-                start: existing_shift.start,
-                end: new_between_times.0,
-                end_date: existing_shift.date,
-                duration: existing_shift.duration,
-                number: existing_shift.number.clone(),
-                kind: existing_shift.kind.clone(),
-                location: existing_shift.location.clone(),
-                description: existing_shift.description.clone(),
-                is_broken: true,
-            },
-            Self {
-                date: existing_shift.date,
-                start: new_between_times.1,
-                end: existing_shift.end,
-                end_date: existing_shift.end_date,
-                duration: existing_shift.duration,
-                number: existing_shift.number.clone(),
-                kind: existing_shift.kind.clone(),
-                location: existing_shift.location.clone(),
-                description: existing_shift.description.clone(),
-                is_broken: true,
-            },
-        ];
+        let mut part_one = existing_shift.clone();
+        part_one.end_date = part_one.date;
+        part_one.end = new_between_times.0;
+        let mut part_two = existing_shift.clone();
+        part_two.start = new_between_times.1;
+        let shifts: Vec<Self> = vec![part_one, part_two];
         shifts
     }
 }
@@ -160,7 +143,6 @@ async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> WebDriverR
         .await?
         .click()
         .await?;
-    driver.screenshot(Path::new("./homepage.png")).await?;
     Ok(())
 }
 
@@ -174,15 +156,11 @@ async fn get_elements(
         let text = element.attr("data-original-title").await?.unwrap();
         if !text.is_empty() && text.contains("Dienstduur") {
             // println!("Loading shift: {:?}", &text);
-            let dag_text = element
-                .find_all(By::Tag("strong"))
-                .await?
-                .first()
-                .unwrap()
-                .text()
-                .await?;
+            let dag_text = element.find(By::Tag("strong")).await?.text().await?;
+            let dag_text_split = dag_text.split_whitespace().nth(0).unwrap();
+
             // println!("dag {}", &dag_text);
-            let dag: u8 = dag_text.parse().unwrap();
+            let dag: u8 = dag_text_split.parse().unwrap();
             let date = Date::from_calendar_date(year as i32, month, dag).unwrap();
             let new_shift = Shift::new(text, date);
             temp_emlements.push(new_shift.clone());
@@ -204,7 +182,7 @@ async fn get_month_year(driver: &WebDriver) -> WebDriverResult<(Month, u32)> {
         ("Juli", Month::July),
         ("Augustus", Month::August),
         ("September", Month::September),
-        ("October", Month::October),
+        ("Oktober", Month::October),
         ("November", Month::November),
         ("December", Month::December),
     ]);
@@ -214,7 +192,7 @@ async fn get_month_year(driver: &WebDriver) -> WebDriverResult<(Month, u32)> {
         .await?
         .text()
         .await?;
-    println!("{}", text);
+    println!("Loading: {}", text);
     let month_name = text.split_whitespace().nth(1).unwrap();
     let year: u32 = text.split_whitespace().nth(2).unwrap().parse().unwrap();
     let month = month_dict.get(month_name).unwrap();
@@ -222,6 +200,7 @@ async fn get_month_year(driver: &WebDriver) -> WebDriverResult<(Month, u32)> {
 }
 
 fn create_ical(shifts: Vec<Shift>) -> String {
+    println!("Creating calendar file...");
     let mut calendar = Calendar::new()
         .name("Hermes rooster")
         .timezone("Europe/Amsterdam")
@@ -295,36 +274,37 @@ async fn load_previous_month(driver: &WebDriver) -> WebDriverResult<Vec<Shift>> 
     Ok(get_elements(elements, month, year).await?)
 }
 
-// async fn load_next_month(driver: &WebDriver) -> WebDriverResult<Vec<Shift>> {
-//     for _i in 0..1 {
-//         driver
-//             .find(By::Id("ctl00_ctl00_navilink1"))
-//             .await?
-//             .click()
-//             .await?;
-//     }
-//     let elements = driver
-//         .query(By::ClassName("calDay"))
-//         .all_from_selector()
-//         .await?;
-//     let (month, year) = get_month_year(driver).await?;
-//     Ok(get_elements(elements, month, year).await?)
-// }
+async fn load_next_month(driver: &WebDriver) -> WebDriverResult<Vec<Shift>> {
+    for _i in 0..2 {
+        driver
+            .find(By::Id("ctl00_ctl00_navilink1"))
+            .await?
+            .click()
+            .await?;
+    }
+    let elements = driver
+        .query(By::ClassName("calDay"))
+        .all_from_selector()
+        .await?;
+    let (month, year) = get_month_year(driver).await?;
+    Ok(get_elements(elements, month, year).await?)
+}
 
 #[tokio::main]
 async fn main() -> WebDriverResult<()> {
     dotenv_override().ok();
     let caps = DesiredCapabilities::firefox();
-    let driver = WebDriver::new("http://0.0.0.0:4445", caps).await?;
+    let driver = WebDriver::new("http://0.0.0.0:4444", caps).await?;
     let username = var("USERNAME").unwrap();
     let password = var("PASSWORD").unwrap();
     driver.delete_all_cookies().await?;
     driver
-        .goto("https://dmz-wbc-web02.connexxion.nl/WebComm/default.aspx?TestingCookie=1")
+        .goto("https://dmz-wbc-web01.connexxion.nl/WebComm/default.aspx?TestingCookie=1")
         .await?;
     load_calendar(&driver, &username, &password).await?;
     driver.execute("return document.readyState", vec![]).await?;
     let rooster_knop = driver.query(By::LinkText("Rooster")).first().await?;
+    println!("Loading calendar");
     rooster_knop.wait_until().displayed().await?;
     rooster_knop.click().await?;
     let (month, year) = get_month_year(&driver).await?;
@@ -334,10 +314,13 @@ async fn main() -> WebDriverResult<()> {
         .await?;
     let mut shifts = get_elements(elements, month, year).await?;
     shifts.append(&mut load_previous_month(&driver).await?);
+    shifts.append(&mut load_next_month(&driver).await?);
+    println!("Found {} shifts", shifts.len());
     let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await;
     let calendar = create_ical(shifts);
-    let ical_path = "./hermes.ical";
+    let ical_path = &format!("./{}.ics", username);
     let mut output = File::create(ical_path).unwrap();
+    println!("Writing to: {:?}", output);
     write!(output, "{}", calendar).unwrap();
     driver.quit().await?;
     Ok(())

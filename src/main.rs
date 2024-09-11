@@ -352,7 +352,7 @@ async fn main() -> WebDriverResult<()> {
     let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await; // Replace the shifts with the newly created list of broken shifts
     let shifts = gebroken_shifts::split_night_shift(&shifts);
     let calendar = create_ical(&shifts);
-    let ical_path = &format!("{}{}.ics",var("SAVE_TARGET").unwrap();, username);
+    let ical_path = &format!("{}{}.ics",var("SAVE_TARGET").unwrap(), username);
     let mut output = File::create(ical_path).unwrap();
     println!("Writing to: {:?}", output);
     write!(output, "{}", calendar).unwrap();

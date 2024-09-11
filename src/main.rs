@@ -214,7 +214,6 @@ async fn get_month_year(driver: &WebDriver) -> WebDriverResult<(Month, u32)> {
         ("November", Month::November),
         ("December", Month::December),
     ]);
-    driver.screenshot(Path::new("./webpage.png")).await?;
     let text = driver
         .find(By::PartialLinkText("Rooster"))
         .await?

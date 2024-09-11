@@ -60,7 +60,6 @@ pub async fn load_broken_dienst_page(
     let formatted_date = date.format(date_format).unwrap();
     navigate_to_subdirectory(driver, &format!("/WebComm/shift.aspx?{}", formatted_date)).await?;
     wait_for_response(driver).await?;
-    driver.screenshot(Path::new("./gebroken.png")).await?;
     let trip_body = driver.find(By::Tag("tbody")).await?;
     let trip_rows = trip_body.query(By::Tag("tr")).all_from_selector().await?;
     Ok(trip_rows)

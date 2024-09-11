@@ -37,6 +37,7 @@ pub struct Shift {
     location: String,
     description: String,
     is_broken: bool,
+    magic_number: i64,
 }
 
 impl Shift {
@@ -67,6 +68,9 @@ impl Shift {
         let end = get_time(end_time_str);
         let mut is_broken = false;
         let shift_type = number.chars().nth(0).unwrap();
+        let magic_number: i64 = number.split_at(1).1.parse::<i64>().unwrap()
+            * start.hour() as i64
+            * end.minute() as i64;
         println!("Found shift: {}", number);
         if shift_type == 'g' || shift_type == 'G' {
             is_broken = true;
@@ -105,6 +109,7 @@ impl Shift {
             location,
             description,
             is_broken,
+            magic_number,
         }
     }
 
@@ -330,7 +335,7 @@ async fn main() -> WebDriverResult<()> {
     dotenv_override().ok();
     sleep(std::time::Duration::from_secs(5)).await;
     let caps = DesiredCapabilities::firefox();
-    let driver = WebDriver::new("http://gecko_driver:4444", caps).await?;
+    let driver = WebDriver::new("http://0.0.0.0:4444", caps).await?;
     let username = var("USERNAME").unwrap();
     let password = var("PASSWORD").unwrap();
     driver.delete_all_cookies().await?;
@@ -348,15 +353,15 @@ async fn main() -> WebDriverResult<()> {
     shifts.append(&mut load_previous_month(&driver).await?);
     shifts.append(&mut load_next_month(&driver).await?);
     println!("Found {} shifts", shifts.len());
+    email::send_emails(&shifts).unwrap();
     save_shifts_on_disk(&shifts, Path::new("./previous_shifts.toml")).unwrap(); // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
     let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await; // Replace the shifts with the newly created list of broken shifts
     let shifts = gebroken_shifts::split_night_shift(&shifts);
     let calendar = create_ical(&shifts);
-    let ical_path = &format!("{}{}.ics",var("SAVE_TARGET").unwrap(), username);
+    let ical_path = &format!("{}{}.ics", var("SAVE_TARGET").unwrap(), username);
     let mut output = File::create(ical_path).unwrap();
     println!("Writing to: {:?}", output);
     write!(output, "{}", calendar).unwrap();
-    save_shifts_on_disk(&shifts, Path::new("./previous_shifts.toml")).unwrap();
     driver.quit().await?;
     Ok(())
 }

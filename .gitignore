@@ -2,3 +2,4 @@
 .env
 *.ics
 previous_shifts.toml
+/calendar/*

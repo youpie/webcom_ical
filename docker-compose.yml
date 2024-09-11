@@ -1,0 +1,10 @@
+services:
+  webcom_ical:
+    image: docker.io/library/webcom_ical
+    volumes:
+      - .env:/usr/src/webcom_ical/.env
+    depends_on:
+      - gecko_driver
+  gecko_driver:
+    container_name: gecko_driver
+    image: docker.io/library/gecko_driver

@@ -8,6 +8,7 @@ use icalendar::CalendarDateTime;
 use icalendar::Component;
 use icalendar::Event;
 use icalendar::EventLike;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
@@ -16,6 +17,7 @@ use std::str::Split;
 use thirtyfour::prelude::*;
 use time::Duration;
 use time::Month;
+use tokio::time::sleep;
 
 use time::Date;
 use time::Time;
@@ -23,7 +25,7 @@ use time::Time;
 pub mod email;
 pub mod gebroken_shifts;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Shift {
     date: Date,
     start: Time,
@@ -108,14 +110,36 @@ impl Shift {
 
     // Create two new shifts from one broken shift.
     // Assumes second shift cannot start after midnight
-    fn new_from_existing(new_between_times: (Time, Time), existing_shift: &Self) -> Vec<Self> {
+    fn new_from_existing(
+        new_between_times: (Time, Time),
+        existing_shift: &Self,
+        start_next_day: bool,
+    ) -> Vec<Self> {
         let mut part_one = existing_shift.clone();
-        part_one.end_date = part_one.date;
         part_one.end = new_between_times.0;
+        part_one.end_date = match start_next_day {
+            true => existing_shift.end_date,
+            false => existing_shift.date,
+        };
         let mut part_two = existing_shift.clone();
         part_two.start = new_between_times.1;
+        part_two.date = match start_next_day {
+            true => existing_shift.end_date,
+            false => existing_shift.date,
+        };
         let shifts: Vec<Self> = vec![part_one, part_two];
         shifts
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Shifts {
+    shifts: Vec<Shift>,
+}
+
+impl Shifts {
+    fn new(shifts: Vec<Shift>) -> Self {
+        Self { shifts }
     }
 }
 
@@ -143,6 +167,10 @@ async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> WebDriverR
         .await?
         .click()
         .await?;
+    let rooster_knop = driver.query(By::LinkText("Rooster")).first().await?;
+    println!("Loading calendar");
+    rooster_knop.wait_until().displayed().await?;
+    rooster_knop.click().await?;
     Ok(())
 }
 
@@ -199,7 +227,7 @@ async fn get_month_year(driver: &WebDriver) -> WebDriverResult<(Month, u32)> {
     Ok((*month, year))
 }
 
-fn create_ical(shifts: Vec<Shift>) -> String {
+fn create_ical(shifts: &Vec<Shift>) -> String {
     println!("Creating calendar file...");
     let mut calendar = Calendar::new()
         .name("Hermes rooster")
@@ -290,11 +318,20 @@ async fn load_next_month(driver: &WebDriver) -> WebDriverResult<Vec<Shift>> {
     Ok(get_elements(elements, month, year).await?)
 }
 
+fn save_shifts_on_disk(shifts: &Vec<Shift>, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let shifts_struct = Shifts::new(shifts.clone());
+    let shifts_serialised = toml::to_string(&shifts_struct)?;
+    let mut output = File::create(path).unwrap();
+    write!(output, "{}", shifts_serialised)?;
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> WebDriverResult<()> {
     dotenv_override().ok();
+    sleep(std::time::Duration::from_secs(5)).await;
     let caps = DesiredCapabilities::firefox();
-    let driver = WebDriver::new("http://0.0.0.0:4444", caps).await?;
+    let driver = WebDriver::new("http://gecko_driver:4444", caps).await?;
     let username = var("USERNAME").unwrap();
     let password = var("PASSWORD").unwrap();
     driver.delete_all_cookies().await?;
@@ -303,10 +340,6 @@ async fn main() -> WebDriverResult<()> {
         .await?;
     load_calendar(&driver, &username, &password).await?;
     driver.execute("return document.readyState", vec![]).await?;
-    let rooster_knop = driver.query(By::LinkText("Rooster")).first().await?;
-    println!("Loading calendar");
-    rooster_knop.wait_until().displayed().await?;
-    rooster_knop.click().await?;
     let (month, year) = get_month_year(&driver).await?;
     let elements = driver
         .query(By::ClassName("calDay"))
@@ -316,12 +349,15 @@ async fn main() -> WebDriverResult<()> {
     shifts.append(&mut load_previous_month(&driver).await?);
     shifts.append(&mut load_next_month(&driver).await?);
     println!("Found {} shifts", shifts.len());
-    let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await;
-    let calendar = create_ical(shifts);
-    let ical_path = &format!("./{}.ics", username);
+    save_shifts_on_disk(&shifts, Path::new("./previous_shifts.toml")).unwrap(); // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
+    let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await; // Replace the shifts with the newly created list of broken shifts
+    let shifts = gebroken_shifts::split_night_shift(&shifts);
+    let calendar = create_ical(&shifts);
+    let ical_path = &format!("{}{}.ics",var("SAVE_TARGET").unwrap();, username);
     let mut output = File::create(ical_path).unwrap();
     println!("Writing to: {:?}", output);
     write!(output, "{}", calendar).unwrap();
+    save_shifts_on_disk(&shifts, Path::new("./previous_shifts.toml")).unwrap();
     driver.quit().await?;
     Ok(())
 }

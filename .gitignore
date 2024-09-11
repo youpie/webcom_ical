@@ -1,2 +1,4 @@
 /target
 .env
+*.ics
+previous_shifts.toml

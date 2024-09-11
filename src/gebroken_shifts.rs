@@ -1,10 +1,12 @@
-use prelude::ElementWaitable;
+use async_recursion::async_recursion;
+use dotenvy::var;
 use std::path::Path;
-use thirtyfour::prelude::ElementQueryable;
-use thirtyfour::*;
-use thirtyfour::{error::WebDriverResult, WebDriver};
-use time::macros::format_description;
-use time::Time;
+use thirtyfour::{
+    error::{WebDriverError, WebDriverResult},
+    prelude::*,
+    WebDriver, WebElement,
+};
+use time::{macros::format_description, Time};
 
 use crate::Shift;
 
@@ -15,13 +17,38 @@ pub async fn gebroken_diensten_laden(driver: &WebDriver, shifts: &Vec<Shift>) ->
             println!("Creating broken shift: {}", shift.number);
             let shift_rows = load_broken_dienst_page(driver, &shift).await.unwrap();
             let between_times = find_broken_start_stop_time(shift_rows).await.unwrap();
-            let broken_shifts = Shift::new_from_existing(between_times, shift);
+            let broken_shifts = Shift::new_from_existing(between_times, shift, false);
             new_shifts.extend(broken_shifts);
         } else {
             new_shifts.push(shift.clone());
         }
     }
     new_shifts
+}
+
+pub fn split_night_shift(shifts: &Vec<Shift>) -> Vec<Shift> {
+    let split_option = var("BREAK_UP_NIGHT_SHIFT").unwrap();
+    let mut temp_shift: Vec<Shift> = vec![];
+    if split_option == "true" {
+        for shift in shifts {
+            if shift.end_date != shift.date {
+                let split_shift = Shift::new_from_existing(
+                    (
+                        Time::from_hms(0, 0, 0).unwrap(),
+                        Time::from_hms(0, 0, 0).unwrap(),
+                    ),
+                    shift,
+                    true,
+                );
+                temp_shift.extend(split_shift);
+            } else {
+                temp_shift.push(shift.clone());
+            }
+        }
+    } else {
+        temp_shift = shifts.clone();
+    }
+    temp_shift
 }
 
 pub async fn load_broken_dienst_page(
@@ -67,13 +94,18 @@ async fn navigate_to_subdirectory(driver: &WebDriver, subdirectory: &str) -> Web
     Ok(())
 }
 
+#[async_recursion]
 async fn wait_for_response(driver: &WebDriver) -> WebDriverResult<()> {
-    driver
+    let query = driver
         .query(By::PartialLinkText("Werk en afwezigheden"))
         .first()
-        .await?
-        .wait_until()
-        .clickable()
         .await?;
+    let test = query.wait_until().clickable().await;
+    match test {
+        Err(WebDriverError::ElementClickIntercepted(_)) => {
+            wait_for_response(driver).await?;
+        }
+        x => return x,
+    };
     Ok(())
 }

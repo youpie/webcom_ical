@@ -345,9 +345,9 @@ fn save_shifts_on_disk(shifts: &Vec<Shift>, path: &Path) -> Result<(), Box<dyn s
 #[tokio::main]
 async fn main() -> WebDriverResult<()> {
     dotenv_override().ok();
-    sleep(std::time::Duration::from_secs(5)).await;
+    let gecko_ip = var("GECKO_IP").unwrap();
     let caps = DesiredCapabilities::firefox();
-    let driver = WebDriver::new("http://0.0.0.0:4444", caps).await?;
+    let driver = WebDriver::new(format!("http://{}", gecko_ip), caps).await?;
     let username = var("USERNAME").unwrap();
     let password = var("PASSWORD").unwrap();
     driver.delete_all_cookies().await?;

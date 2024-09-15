@@ -15,9 +15,9 @@ use std::io::Write;
 use std::path::Path;
 use std::str::Split;
 use thirtyfour::prelude::*;
+use time::macros::format_description;
 use time::Duration;
 use time::Month;
-use tokio::time::sleep;
 
 use time::Date;
 use time::Time;
@@ -250,15 +250,21 @@ fn create_ical(shifts: &Vec<Shift>) -> String {
         .timezone("Europe/Amsterdam")
         .done();
     for shift in shifts {
+        let date_format = format_description!("[year]-[month]-[day]");
+        let shift_link = format!(
+            "https://dmz-wbc-web02.connexxion.nl/WebComm/shiprint.aspx?{}",
+            shift.date.format(date_format).unwrap()
+        );
         calendar.push(
             Event::new()
                 .summary(&format!("Shift - {}", shift.number))
                 .description(&format!(
-                    "Dienstsoort • {} \nDuur • {} uur {} minuten\nOmschrijving • {}",
+                    "Dienstsoort • {} \nDuur • {} uur {} minuten\nOmschrijving • {}\nShift sheet • {}",
                     shift.kind,
                     shift.duration.whole_hours(),
                     shift.duration.whole_minutes() % 60,
-                    shift.description
+                    shift.description,
+                    shift_link
                 ))
                 .location(&shift.location)
                 .starts(create_dateperhapstime(shift.date, shift.start))

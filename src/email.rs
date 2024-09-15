@@ -95,48 +95,6 @@ fn load_previous_shifts() -> GenResult<Vec<Shift>> {
     Ok(shifts.shifts)
 }
 
-fn find_send_new_shift_mails(
-    mailer: &SmtpTransport,
-    previous_shifts: &Vec<Shift>,
-    current_shifts: &Vec<Shift>,
-    env: &EnvMailVariables,
-    send_mail: bool,
-) -> GenResult<Vec<Shift>> {
-    let mut new_shifts: Vec<Shift> = current_shifts.clone(); //First add all new shifts, and remove all not new ones
-    let mut index_to_be_removed: Vec<usize> = vec![];
-    let current_date: Date = Date::parse(
-        &chrono::offset::Local::now().format("%d-%m-%Y").to_string(),
-        format_description!("[day]-[month]-[year]"),
-    )?;
-    println!("current date {:?}", current_date);
-    println!("length shifts {:?}", new_shifts.len());
-    for previous_shift in previous_shifts {
-        for current_shift in current_shifts {
-            if previous_shift.date == current_shift.date || current_shift.date < current_date {
-                let index = current_shifts
-                    .iter()
-                    .position(|r| r.magic_number == current_shift.magic_number)
-                    .unwrap();
-                index_to_be_removed.push(index);
-            }
-        }
-    }
-    index_to_be_removed.sort();
-    index_to_be_removed.reverse();
-    index_to_be_removed.dedup();
-    println!("shifts to be removed: {:?}", index_to_be_removed);
-    index_to_be_removed
-        .iter()
-        .map(|index| new_shifts.remove(*index))
-        .count();
-
-    if !new_shifts.is_empty() {
-        println!("Updated shifts found, sending mail");
-        create_send_new_email(mailer, &new_shifts, env, false)?;
-    }
-    Ok(new_shifts)
-}
-
 fn find_send_shift_mails(
     mailer: &SmtpTransport,
     previous_shifts: &Vec<Shift>,

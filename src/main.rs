@@ -38,10 +38,11 @@ pub struct Shift {
     description: String,
     is_broken: bool,
     magic_number: i64,
+    name: String,
 }
 
 impl Shift {
-    fn new(text: String, date: Date) -> Self {
+    fn new(text: String, date: Date, name: &str) -> Self {
         let parts = text.split("\u{a0}• \u{a0}• ");
         let parts_clean: Vec<String> = parts
             .map(|x| {
@@ -110,6 +111,7 @@ impl Shift {
             description,
             is_broken,
             magic_number,
+            name: name.to_string(),
         }
     }
 
@@ -158,7 +160,7 @@ fn get_time(str_time: &str) -> Time {
     Time::from_hms(hour, min, 0).unwrap()
 }
 
-async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> WebDriverResult<()> {
+async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> WebDriverResult<String> {
     let username_field = driver
         .find(By::Id("ctl00_cntMainBody_lgnView_lgnLogin_UserName"))
         .await?;
@@ -172,17 +174,27 @@ async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> WebDriverR
         .await?
         .click()
         .await?;
+    let name_text = driver.find(By::Tag("h3")).await?.text().await?;
+    let name = name_text
+        .split_whitespace()
+        .nth(0)
+        .unwrap()
+        .split(",")
+        .last()
+        .unwrap()
+        .to_string();
+    println!("{}", name_text);
     let rooster_knop = driver.query(By::LinkText("Rooster")).first().await?;
-    println!("Loading calendar");
     rooster_knop.wait_until().displayed().await?;
     rooster_knop.click().await?;
-    Ok(())
+    Ok(name)
 }
 
 async fn get_elements(
     elements: Vec<WebElement>,
     month: Month,
     year: u32,
+    name: String,
 ) -> WebDriverResult<Vec<Shift>> {
     let mut temp_emlements: Vec<Shift> = vec![];
     for element in elements {
@@ -195,7 +207,7 @@ async fn get_elements(
             // println!("dag {}", &dag_text);
             let dag: u8 = dag_text_split.parse().unwrap();
             let date = Date::from_calendar_date(year as i32, month, dag).unwrap();
-            let new_shift = Shift::new(text, date);
+            let new_shift = Shift::new(text, date, &name);
             temp_emlements.push(new_shift.clone());
             // println!("Created shift {:?}", &new_shift);
         }
@@ -292,7 +304,7 @@ fn create_dateperhapstime(date: Date, time: Time) -> CalendarDateTime {
     }
 }
 
-async fn load_previous_month(driver: &WebDriver) -> WebDriverResult<Vec<Shift>> {
+async fn load_previous_month(driver: &WebDriver, name: String) -> WebDriverResult<Vec<Shift>> {
     driver
         .find(By::Id("ctl00_ctl00_navilink0"))
         .await?
@@ -303,10 +315,10 @@ async fn load_previous_month(driver: &WebDriver) -> WebDriverResult<Vec<Shift>> 
         .all_from_selector()
         .await?;
     let (month, year) = get_month_year(driver).await?;
-    Ok(get_elements(elements, month, year).await?)
+    Ok(get_elements(elements, month, year, name).await?)
 }
 
-async fn load_next_month(driver: &WebDriver) -> WebDriverResult<Vec<Shift>> {
+async fn load_next_month(driver: &WebDriver, name: String) -> WebDriverResult<Vec<Shift>> {
     for _i in 0..2 {
         driver
             .find(By::Id("ctl00_ctl00_navilink1"))
@@ -319,7 +331,7 @@ async fn load_next_month(driver: &WebDriver) -> WebDriverResult<Vec<Shift>> {
         .all_from_selector()
         .await?;
     let (month, year) = get_month_year(driver).await?;
-    Ok(get_elements(elements, month, year).await?)
+    Ok(get_elements(elements, month, year, name).await?)
 }
 
 fn save_shifts_on_disk(shifts: &Vec<Shift>, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -342,16 +354,16 @@ async fn main() -> WebDriverResult<()> {
     driver
         .goto("https://dmz-wbc-web01.connexxion.nl/WebComm/default.aspx?TestingCookie=1")
         .await?;
-    load_calendar(&driver, &username, &password).await?;
+    let name = load_calendar(&driver, &username, &password).await?;
     driver.execute("return document.readyState", vec![]).await?;
     let (month, year) = get_month_year(&driver).await?;
     let elements = driver
         .query(By::ClassName("calDay"))
         .all_from_selector()
         .await?;
-    let mut shifts = get_elements(elements, month, year).await?;
-    shifts.append(&mut load_previous_month(&driver).await?);
-    shifts.append(&mut load_next_month(&driver).await?);
+    let mut shifts = get_elements(elements, month, year, name.clone()).await?;
+    shifts.append(&mut load_previous_month(&driver, name.clone()).await?);
+    shifts.append(&mut load_next_month(&driver, name).await?);
     println!("Found {} shifts", shifts.len());
     email::send_emails(&shifts).unwrap();
     save_shifts_on_disk(&shifts, Path::new("./previous_shifts.toml")).unwrap(); // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.

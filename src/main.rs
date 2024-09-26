@@ -11,6 +11,9 @@ use icalendar::EventLike;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
+use std::hash::DefaultHasher;
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::io::Write;
 use std::path::Path;
 use std::str::Split;
@@ -43,7 +46,8 @@ pub struct Shift {
 
 impl Shift {
     fn new(text: String, date: Date, name: &str) -> Self {
-        let parts = text.split("\u{a0}• \u{a0}• ");
+        let text_clone = text.clone();
+        let parts = text_clone.split("\u{a0}• \u{a0}• ");
         let parts_clean: Vec<String> = parts
             .map(|x| {
                 let y = x.replace("\u{a0}• ", "");
@@ -69,9 +73,9 @@ impl Shift {
         let end = get_time(end_time_str);
         let mut is_broken = false;
         let shift_type = number.chars().nth(0).unwrap();
-        let magic_number: i64 = number.split_at(1).1.parse::<i64>().unwrap()
-            * start.hour() as i64
-            * end.minute() as i64;
+        let mut hasher = DefaultHasher::new();
+        text.hash(&mut hasher);
+        let magic_number = hasher.finish() as i64;
         println!("Found shift: {}", number);
         if shift_type == 'g' || shift_type == 'G' {
             is_broken = true;
@@ -174,6 +178,7 @@ async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> WebDriverR
         .await?
         .click()
         .await?;
+    gebroken_shifts::wait_for_response(driver, By::Tag("h3"), false).await?;
     let name_text = driver.find(By::Tag("h3")).await?.text().await?;
     let name = name_text
         .split_whitespace()
@@ -252,7 +257,7 @@ fn create_ical(shifts: &Vec<Shift>) -> String {
     for shift in shifts {
         let date_format = format_description!("[year]-[month]-[day]");
         let shift_link = format!(
-            "https://dmz-wbc-web02.connexxion.nl/WebComm/shiprint.aspx?{}",
+            "https://dmz-wbc-web01.connexxion.nl/WebComm/shiprint.aspx?{}",
             shift.date.format(date_format).unwrap()
         );
         calendar.push(
@@ -342,9 +347,9 @@ async fn load_next_month(driver: &WebDriver, name: String) -> WebDriverResult<Ve
 
 fn save_shifts_on_disk(shifts: &Vec<Shift>, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let shifts_struct = Shifts::new(shifts.clone());
-    let shifts_serialised = toml::to_string(&shifts_struct)?;
+    let shifts_serialised = toml::to_string(&shifts_struct).unwrap();
     let mut output = File::create(path).unwrap();
-    write!(output, "{}", shifts_serialised)?;
+    write!(output, "{}", shifts_serialised).unwrap();
     Ok(())
 }
 
@@ -358,7 +363,7 @@ async fn main() -> WebDriverResult<()> {
     let password = var("PASSWORD").unwrap();
     driver.delete_all_cookies().await?;
     driver
-        .goto("https://dmz-wbc-web01.connexxion.nl/WebComm/default.aspx?TestingCookie=1")
+        .goto("https://dmz-wbc-web02.connexxion.nl/WebComm/default.aspx?TestingCookie=1")
         .await?;
     let name = load_calendar(&driver, &username, &password).await?;
     driver.execute("return document.readyState", vec![]).await?;

@@ -1,7 +1,7 @@
 use async_recursion::async_recursion;
 use dotenvy::var;
-use std::path::Path;
 use thirtyfour::{
+    common::command::BySelector,
     error::{WebDriverError, WebDriverResult},
     prelude::*,
     WebDriver, WebElement,
@@ -15,15 +15,26 @@ pub async fn gebroken_diensten_laden(driver: &WebDriver, shifts: &Vec<Shift>) ->
     for shift in shifts {
         if shift.is_broken {
             println!("Creating broken shift: {}", shift.number);
-            let shift_rows = load_broken_dienst_page(driver, &shift).await.unwrap();
-            let between_times = find_broken_start_stop_time(shift_rows).await.unwrap();
-            let broken_shifts = Shift::new_from_existing(between_times, shift, false);
-            new_shifts.extend(broken_shifts);
+            match get_broken_shift_time(driver, shift).await {
+                Ok(x) => {
+                    new_shifts.extend(x);
+                }
+                Err(_) => {
+                    new_shifts.push(shift.clone());
+                }
+            };
         } else {
             new_shifts.push(shift.clone());
         }
     }
     new_shifts
+}
+
+async fn get_broken_shift_time(driver: &WebDriver, shift: &Shift) -> WebDriverResult<Vec<Shift>> {
+    let broken_diensten = load_broken_dienst_page(driver, &shift).await?;
+    let between_times = find_broken_start_stop_time(broken_diensten).await?;
+    let broken_shifts = Shift::new_from_existing(between_times, shift, false);
+    Ok(broken_shifts)
 }
 
 pub fn split_night_shift(shifts: &Vec<Shift>) -> Vec<Shift> {
@@ -59,7 +70,7 @@ pub async fn load_broken_dienst_page(
     let date_format = format_description!("[year]-[month]-[day]");
     let formatted_date = date.format(date_format).unwrap();
     navigate_to_subdirectory(driver, &format!("/WebComm/shift.aspx?{}", formatted_date)).await?;
-    wait_for_response(driver).await?;
+    wait_for_response(driver, By::PartialLinkText("Werk en afwezigheden"), true).await?;
     let trip_body = driver.find(By::Tag("tbody")).await?;
     let trip_rows = trip_body.query(By::Tag("tr")).all_from_selector().await?;
     Ok(trip_rows)
@@ -82,6 +93,14 @@ pub async fn find_broken_start_stop_time(
         }
     }
     let tijd_formaat = format_description!("[hour]:[minute]");
+    match afstaptijden.len() {
+        1 => {
+            return Err(WebDriverError::FatalError(
+                "Broken broken shift".to_string(),
+            ));
+        }
+        _ => (),
+    };
     let afstaptijd = Time::parse(afstaptijden.first().unwrap(), tijd_formaat).unwrap();
     let opstaptijd = Time::parse(opstaptijden.last().unwrap(), tijd_formaat).unwrap();
     Ok((afstaptijd, opstaptijd))
@@ -94,15 +113,19 @@ async fn navigate_to_subdirectory(driver: &WebDriver, subdirectory: &str) -> Web
 }
 
 #[async_recursion]
-async fn wait_for_response(driver: &WebDriver) -> WebDriverResult<()> {
-    let query = driver
-        .query(By::PartialLinkText("Werk en afwezigheden"))
-        .first()
-        .await?;
-    let test = query.wait_until().clickable().await;
+pub async fn wait_for_response(
+    driver: &WebDriver,
+    element: By,
+    clickable: bool,
+) -> WebDriverResult<()> {
+    let query = driver.query(element.clone()).first().await?;
+    let test = match clickable {
+        true => query.wait_until().clickable().await,
+        false => query.wait_until().displayed().await,
+    };
     match test {
         Err(WebDriverError::ElementClickIntercepted(_)) => {
-            wait_for_response(driver).await?;
+            wait_for_response(driver, element, clickable).await?;
         }
         x => return x,
     };

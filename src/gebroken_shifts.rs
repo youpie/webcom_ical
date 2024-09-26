@@ -1,7 +1,6 @@
 use async_recursion::async_recursion;
 use dotenvy::var;
 use thirtyfour::{
-    common::command::BySelector,
     error::{WebDriverError, WebDriverResult},
     prelude::*,
     WebDriver, WebElement,
@@ -19,7 +18,11 @@ pub async fn gebroken_diensten_laden(driver: &WebDriver, shifts: &Vec<Shift>) ->
                 Ok(x) => {
                     new_shifts.extend(x);
                 }
-                Err(_) => {
+                Err(x) => {
+                    println!(
+                        "An error occured creating a broken shift: {}",
+                        x.to_string()
+                    );
                     new_shifts.push(shift.clone());
                 }
             };

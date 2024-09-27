@@ -56,10 +56,7 @@ impl EnvMailVariables {
 
 pub fn send_emails(current_shifts: &Vec<Shift>) -> GenResult<()> {
     let env = EnvMailVariables::new()?;
-    let creds = Credentials::new(env.smtp_username.clone(), env.smtp_password.clone());
-    let mailer = SmtpTransport::relay(&env.smtp_server)?
-        .credentials(creds)
-        .build();
+    let mailer = load_mailer(&env)?;
     let previous_shifts = match load_previous_shifts() {
         Ok(x) => x,
         _ => {
@@ -86,6 +83,14 @@ pub fn send_emails(current_shifts: &Vec<Shift>) -> GenResult<()> {
         env.send_mail_updated_shift,
     )?;
     Ok(())
+}
+
+fn load_mailer(env: &EnvMailVariables) -> GenResult<SmtpTransport> {
+    let creds = Credentials::new(env.smtp_username.clone(), env.smtp_password.clone());
+    let mailer = SmtpTransport::relay(&env.smtp_server)?
+        .credentials(creds)
+        .build();
+    Ok(mailer)
 }
 
 fn load_previous_shifts() -> GenResult<Vec<Shift>> {
@@ -210,6 +215,31 @@ Duur: {} uur {} minuten",
         ))
         .header(ContentType::TEXT_PLAIN)
         .body(email_body)?;
+    mailer.send(&email)?;
+    Ok(())
+}
+
+pub fn send_errors(errors: Vec<Box<dyn std::error::Error>>, name: &str) -> GenResult<()> {
+    let env = EnvMailVariables::new()?;
+    if !env.send_error_mail {
+        println!("tried to send error mail, but is disabled");
+        return Ok(());
+    }
+    println!(
+        "Er zijn fouten gebeurt, mailtje met fouten wordt gestuurd naar {}",
+        &env.mail_error_to
+    );
+    let mailer = load_mailer(&env)?;
+    let mut email_errors = "Er zijn fouten opgetreden tijdens het laden van shifts\n".to_string();
+    for error in errors {
+        email_errors.push_str(&format!("Error: \n{:?}\n\n", error));
+    }
+    let email = Message::builder()
+        .from(format!("Foutje Berichtmans <{}>", &env.mail_from).parse()?)
+        .to(format!("{} <{}>", &name, &env.mail_error_to).parse()?)
+        .subject(&format!("Fout bij laden shifts van: {}", name))
+        .header(ContentType::TEXT_PLAIN)
+        .body(email_errors)?;
     mailer.send(&email)?;
     Ok(())
 }

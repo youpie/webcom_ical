@@ -3,6 +3,7 @@ use chrono::NaiveDateTime;
 use chrono::NaiveTime;
 use dotenvy::dotenv_override;
 use dotenvy::var;
+use email::send_errors;
 use icalendar::Calendar;
 use icalendar::CalendarDateTime;
 use icalendar::Component;
@@ -27,6 +28,8 @@ use time::Time;
 
 pub mod email;
 pub mod gebroken_shifts;
+
+type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Shift {
@@ -75,7 +78,7 @@ impl Shift {
         let shift_type = number.chars().nth(0).unwrap();
         let mut hasher = DefaultHasher::new();
         text.hash(&mut hasher);
-        let magic_number = hasher.finish() as i64;
+        let magic_number = (hasher.finish() as i128 - i64::MAX as i128) as i64;
         println!("Found shift: {}", number);
         if shift_type == 'g' || shift_type == 'G' {
             is_broken = true;
@@ -203,7 +206,14 @@ async fn get_elements(
 ) -> WebDriverResult<Vec<Shift>> {
     let mut temp_emlements: Vec<Shift> = vec![];
     for element in elements {
-        let text = element.attr("data-original-title").await?.unwrap();
+        let text = match element.attr("data-original-title").await? {
+            Some(x) => x,
+            None => {
+                return Err(WebDriverError::FatalError(
+                    "no elements in rooster".to_string(),
+                ));
+            }
+        };
         if !text.is_empty() && text.contains("Dienstduur") {
             // println!("Loading shift: {:?}", &text);
             let dag_text = element.find(By::Tag("strong")).await?.text().await?;
@@ -321,6 +331,7 @@ async fn load_previous_month(driver: &WebDriver, name: String) -> WebDriverResul
         .await?
         .click()
         .await?;
+    gebroken_shifts::wait_for_response(driver, By::ClassName("calDay"), false).await?;
     let elements = driver
         .query(By::ClassName("calDay"))
         .all_from_selector()
@@ -337,6 +348,7 @@ async fn load_next_month(driver: &WebDriver, name: String) -> WebDriverResult<Ve
             .click()
             .await?;
     }
+    gebroken_shifts::wait_for_response(driver, By::ClassName("calDay"), false).await?;
     let elements = driver
         .query(By::ClassName("calDay"))
         .all_from_selector()
@@ -353,17 +365,10 @@ fn save_shifts_on_disk(shifts: &Vec<Shift>, path: &Path) -> Result<(), Box<dyn s
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> WebDriverResult<()> {
-    dotenv_override().ok();
-    let gecko_ip = var("GECKO_IP").unwrap();
-    let caps = DesiredCapabilities::firefox();
-    let driver = WebDriver::new(format!("http://{}", gecko_ip), caps).await?;
-    let username = var("USERNAME").unwrap();
-    let password = var("PASSWORD").unwrap();
+async fn main_program(driver: &WebDriver, username: &str, password: &str) -> GenResult<()> {
     driver.delete_all_cookies().await?;
     driver
-        .goto("https://dmz-wbc-web02.connexxion.nl/WebComm/default.aspx?TestingCookie=1")
+        .goto("https://dmz-wbc-web01.connexxion.nl/WebComm/default.aspx?TestingCookie=1")
         .await?;
     let name = load_calendar(&driver, &username, &password).await?;
     driver.execute("return document.readyState", vec![]).await?;
@@ -376,15 +381,52 @@ async fn main() -> WebDriverResult<()> {
     shifts.append(&mut load_previous_month(&driver, name.clone()).await?);
     shifts.append(&mut load_next_month(&driver, name).await?);
     println!("Found {} shifts", shifts.len());
-    email::send_emails(&shifts).unwrap();
-    save_shifts_on_disk(&shifts, Path::new("./previous_shifts.toml")).unwrap(); // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
-    let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await; // Replace the shifts with the newly created list of broken shifts
+    email::send_emails(&shifts)?;
+    save_shifts_on_disk(&shifts, Path::new("./previous_shifts.toml"))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
+    let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
     let shifts = gebroken_shifts::split_night_shift(&shifts);
     let calendar = create_ical(&shifts);
-    let ical_path = &format!("{}{}.ics", var("SAVE_TARGET").unwrap(), username);
-    let mut output = File::create(ical_path).unwrap();
+    let ical_path = &format!("{}{}.ics", var("SAVE_TARGET")?, username);
+    let mut output = File::create(ical_path)?;
     println!("Writing to: {:?}", output);
-    write!(output, "{}", calendar).unwrap();
+    write!(output, "{}", calendar)?;
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> WebDriverResult<()> {
+    dotenv_override().ok();
+    let gecko_ip = var("GECKO_IP").unwrap();
+    let caps = DesiredCapabilities::firefox();
+    let driver = WebDriver::new(format!("http://{}", gecko_ip), caps).await?;
+    let username = var("USERNAME").unwrap();
+    let password = var("PASSWORD").unwrap();
+    let mut retry_count: usize = 0;
+    let mut running_errors: Vec<Box<dyn std::error::Error>> = vec![];
+    while retry_count <= 2 {
+        match main_program(&driver, &username, &password).await {
+            Ok(_) => retry_count = 3,
+            Err(x) => {
+                println!(
+                    "Fout tijdens shift laden, opnieuw proberen, poging: {}. Fout: {:?}",
+                    retry_count + 1,
+                    &x
+                );
+                running_errors.push(x);
+            }
+        };
+        retry_count += 1;
+    }
+    if running_errors.is_empty() {
+        println!("Alles is in een keer goed gegaan, jippie!");
+    } else if running_errors.len() < 2 {
+        println!("Errors have occured, but succeded in the end");
+    } else {
+        match send_errors(running_errors, &username) {
+            Ok(_) => (),
+            Err(x) => println!("failed to send error email, ironic: {:?}", x),
+        }
+    }
     driver.quit().await?;
     Ok(())
 }

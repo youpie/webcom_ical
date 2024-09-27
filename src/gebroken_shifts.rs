@@ -9,7 +9,10 @@ use time::{macros::format_description, Time};
 
 use crate::Shift;
 
-pub async fn gebroken_diensten_laden(driver: &WebDriver, shifts: &Vec<Shift>) -> Vec<Shift> {
+pub async fn gebroken_diensten_laden(
+    driver: &WebDriver,
+    shifts: &Vec<Shift>,
+) -> WebDriverResult<Vec<Shift>> {
     let mut new_shifts: Vec<Shift> = vec![];
     for shift in shifts {
         if shift.is_broken {
@@ -26,11 +29,13 @@ pub async fn gebroken_diensten_laden(driver: &WebDriver, shifts: &Vec<Shift>) ->
                     new_shifts.push(shift.clone());
                 }
             };
+            navigate_to_subdirectory(driver, "/WebComm/roster.aspx").await?; //Ga terug naar de rooster pagina, anders laden de gebroken shifts niet goed
+            wait_for_response(driver, By::ClassName("calDay"), false).await?;
         } else {
             new_shifts.push(shift.clone());
         }
     }
-    new_shifts
+    Ok(new_shifts)
 }
 
 async fn get_broken_shift_time(driver: &WebDriver, shift: &Shift) -> WebDriverResult<Vec<Shift>> {

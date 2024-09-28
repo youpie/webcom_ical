@@ -419,7 +419,7 @@ async fn main() -> WebDriverResult<()> {
     }
     if running_errors.is_empty() {
         println!("Alles is in een keer goed gegaan, jippie!");
-    } else if running_errors.len() < 2 {
+    } else if running_errors.len() < 3 {
         println!("Errors have occured, but succeded in the end");
     } else {
         match send_errors(running_errors, &username) {

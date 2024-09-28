@@ -1,3 +1,9 @@
+> [!CAUTION]
+> Ik kan niet garanderen dat al je shifts correct ingeladen worden. Dus zorg dat je ook regelmatig webcom bekijkt. Als er wat mis gaat, maak dan een issue aan op github.
+
+> [!NOTE]
+> Als je dit niet allemaal zelf wil instellen, kan ik het ook voor je doen. Stuur mij dan even een berichtje of mailtje.
+
 Webcom is een frustrerende, trage website. Het doel van dit programma is om automatisch mijn shifts in te laden in een ical bestand of link
 
 # Hoe moet je dit programma gebruiken
@@ -61,4 +67,15 @@ docker compose up
 OF
 ``` bash
 docker-compose up
+```
+
+## 8. Check regelmatig voor updates
+dit moet ik misschien gewoon toevoegen aan de app zelf lol
+maar voor nu kan het bijvoorbeeld met `crontab`, met [deze link](https://crontab-generator.org/) kan je crontabs genereren
+``` Bash
+crontab -e
+```
+voeg dan deze lijn toe
+``` Bash
+10 */1 * * * docker start docker start webcom_ical >/dev/null 2>&1
 ```

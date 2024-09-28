@@ -23,6 +23,10 @@ pub struct EnvMailVariables {
     send_error_mail: bool,
 }
 
+/*
+Loads all env variables needed for sending mails
+Does not load defaults if they are not found and will just error
+*/
 impl EnvMailVariables {
     pub fn new() -> GenResult<Self> {
         let smtp_server = var("SMTP_SERVER")?;
@@ -46,6 +50,9 @@ impl EnvMailVariables {
             send_error_mail,
         })
     }
+    /*
+    Simple function to convert "true" to true, and anything else to false
+    */
     fn str_to_bool(input: &str) -> bool {
         match input {
             "true" => true,
@@ -54,6 +61,11 @@ impl EnvMailVariables {
     }
 }
 
+/*
+Main function for sending mails, it will always be called and will individually check if that function needs to be called
+If loading previous shifts fails for whatever it will not error but just do an early return.
+Because if the previous shifts file is not, it will just not send mails that time
+*/
 pub fn send_emails(current_shifts: &Vec<Shift>) -> GenResult<()> {
     let env = EnvMailVariables::new()?;
     let mailer = load_mailer(&env)?;
@@ -85,6 +97,7 @@ pub fn send_emails(current_shifts: &Vec<Shift>) -> GenResult<()> {
     Ok(())
 }
 
+// Creates SMTPtransport from username, password and server found in env
 fn load_mailer(env: &EnvMailVariables) -> GenResult<SmtpTransport> {
     let creds = Credentials::new(env.smtp_username.clone(), env.smtp_password.clone());
     let mailer = SmtpTransport::relay(&env.smtp_server)?
@@ -93,6 +106,7 @@ fn load_mailer(env: &EnvMailVariables) -> GenResult<SmtpTransport> {
     Ok(mailer)
 }
 
+// Loads shifts from last time this program was run
 fn load_previous_shifts() -> GenResult<Vec<Shift>> {
     let path = Path::new("./previous_shifts.toml");
     let shifts_toml = std::fs::read_to_string(path)?;
@@ -100,6 +114,12 @@ fn load_previous_shifts() -> GenResult<Vec<Shift>> {
     Ok(shifts.shifts)
 }
 
+/*
+A really ugly function that often displays weird behaviour
+Will search for new shifts given previous shifts.
+Will be ran twice, If provided new shifts, it will look for updated shifts instead
+Will send an email is send_mail is true
+*/
 fn find_send_shift_mails(
     mailer: &SmtpTransport,
     previous_shifts: &Vec<Shift>,
@@ -167,6 +187,11 @@ fn find_send_shift_mails(
     Ok(updated_shifts)
 }
 
+/*
+Composes and sends mail with either new shifts or updated shifts if required. in plaintext
+Depending on if update is true or false
+Will always send under the name of Peter
+*/
 fn create_send_new_email(
     mailer: &SmtpTransport,
     new_shifts: &Vec<Shift>,
@@ -219,6 +244,10 @@ Duur: {} uur {} minuten",
     Ok(())
 }
 
+/*
+Composes and sends email of found errors, in plaintext
+List of errors can be as long as possible, but for now is always 3
+*/
 pub fn send_errors(errors: Vec<Box<dyn std::error::Error>>, name: &str) -> GenResult<()> {
     let env = EnvMailVariables::new()?;
     if !env.send_error_mail {

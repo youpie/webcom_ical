@@ -48,6 +48,11 @@ pub struct Shift {
 }
 
 impl Shift {
+    /*
+    Creates a new Shift struct from a simple string straight from webcom
+    Also hashes the string to see if it has been updated
+    Looks intimidating, bus is mostly boilerplate + a bit of logic for correctly parsing the duration
+    */
     fn new(text: String, date: Date, name: &str) -> Self {
         let text_clone = text.clone();
         let parts = text_clone.split("\u{a0}• \u{a0}• ");
@@ -146,6 +151,9 @@ impl Shift {
     }
 }
 
+/*
+An absolutely useless struct that is only needed  becasue a Vec<> cannot be serialised
+*/
 #[derive(Serialize, Deserialize)]
 pub struct Shifts {
     shifts: Vec<Shift>,
@@ -157,6 +165,8 @@ impl Shifts {
     }
 }
 
+// Creates and returns a Time::time from a given string of time eg: 12:34
+// Uses A LOT of unwraps, so can easilly fail. :)
 fn get_time(str_time: &str) -> Time {
     let mut time_split = str_time.split(":");
     let mut hour: u8 = time_split.clone().nth(0).unwrap().parse().unwrap();
@@ -167,6 +177,10 @@ fn get_time(str_time: &str) -> Time {
     Time::from_hms(hour, min, 0).unwrap()
 }
 
+/*
+Logs into webcom, has no logic for when the login fails.
+It will also find and return the first name of the user, this will fail if the login is unsuccesful
+*/
 async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> WebDriverResult<String> {
     let username_field = driver
         .find(By::Id("ctl00_cntMainBody_lgnView_lgnLogin_UserName"))
@@ -198,6 +212,10 @@ async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> WebDriverR
     Ok(name)
 }
 
+/*
+Checks all supplied WebElements, it checks if the day contains the text "Dienstuur"  and if so, adds it to a Vec of valid shifts in the calendar
+Does not search itself for elements
+*/
 async fn get_elements(
     elements: Vec<WebElement>,
     month: Month,
@@ -231,6 +249,10 @@ async fn get_elements(
     Ok(temp_emlements)
 }
 
+/*
+The webdriver needs to be at a calendar view. It loads the current month of the calendar
+Uses a really simple way (a dictionary) to convert a string of a month to time::Month
+*/
 async fn get_month_year(driver: &WebDriver) -> WebDriverResult<(Month, u32)> {
     let month_dict = HashMap::from([
         ("Januari", Month::January),
@@ -258,6 +280,9 @@ async fn get_month_year(driver: &WebDriver) -> WebDriverResult<(Month, u32)> {
     Ok((*month, year))
 }
 
+/*
+Creates the ICAL file to add to the calendar
+*/
 fn create_ical(shifts: &Vec<Shift>) -> String {
     println!("Creating calendar file...");
     let mut calendar = Calendar::new()
@@ -291,6 +316,10 @@ fn create_ical(shifts: &Vec<Shift>) -> String {
     String::from(calendar.to_string())
 }
 
+/*
+I use the create Time to keep track of dates and time. But the crate used for creating the ICAL file uses chrono to keep time.
+This really ugly function converts between the two.
+*/
 fn create_dateperhapstime(date: Date, time: Time) -> CalendarDateTime {
     let months = [
         Month::January,
@@ -325,6 +354,9 @@ fn create_dateperhapstime(date: Date, time: Time) -> CalendarDateTime {
     }
 }
 
+/*
+Just presses the previous button in webcom to load the previous month
+*/
 async fn load_previous_month(driver: &WebDriver, name: String) -> WebDriverResult<Vec<Shift>> {
     driver
         .find(By::Id("ctl00_ctl00_navilink0"))
@@ -340,6 +372,10 @@ async fn load_previous_month(driver: &WebDriver, name: String) -> WebDriverResul
     Ok(get_elements(elements, month, year, name).await?)
 }
 
+/*
+Just presses the next button in webcom twice to load the next month.
+Only works correctly if the previous month function has been ran before
+*/
 async fn load_next_month(driver: &WebDriver, name: String) -> WebDriverResult<Vec<Shift>> {
     for _i in 0..2 {
         driver
@@ -357,7 +393,12 @@ async fn load_next_month(driver: &WebDriver, name: String) -> WebDriverResult<Ve
     Ok(get_elements(elements, month, year, name).await?)
 }
 
-fn save_shifts_on_disk(shifts: &Vec<Shift>, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+/*
+Serialise the shifts to be saved to disk.
+This is needed to send a mail when a new shift is found
+Needs to create a struct with a Vec<Shift> because otherwise it wouldn't serialise correctly
+*/
+fn save_shifts_on_disk(shifts: &Vec<Shift>, path: &Path) -> GenResult<()> {
     let shifts_struct = Shifts::new(shifts.clone());
     let shifts_serialised = toml::to_string(&shifts_struct).unwrap();
     let mut output = File::create(path).unwrap();
@@ -365,6 +406,7 @@ fn save_shifts_on_disk(shifts: &Vec<Shift>, path: &Path) -> Result<(), Box<dyn s
     Ok(())
 }
 
+// Main program logic that has to run, if it fails it will all be reran.
 async fn main_program(driver: &WebDriver, username: &str, password: &str) -> GenResult<()> {
     driver.delete_all_cookies().await?;
     driver
@@ -393,6 +435,10 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     Ok(())
 }
 
+/*
+This starts the WebDriver session
+Loads the main logic, and retries if it fails
+*/
 #[tokio::main]
 async fn main() -> WebDriverResult<()> {
     dotenv_override().ok();

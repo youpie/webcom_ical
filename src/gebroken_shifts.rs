@@ -1,3 +1,4 @@
+use crate::Shift;
 use async_recursion::async_recursion;
 use dotenvy::var;
 use thirtyfour::{
@@ -7,8 +8,14 @@ use thirtyfour::{
 };
 use time::{macros::format_description, Time};
 
-use crate::Shift;
-
+/*
+Main function for loading broken shifts
+First visits the web page
+Finds the op- and afstaptijden
+Creates two new shifts and adds them to the list
+Returns the new list
+Does not return most errors as there are a few valid reason this function fails
+*/
 pub async fn gebroken_diensten_laden(
     driver: &WebDriver,
     shifts: &Vec<Shift>,
@@ -38,6 +45,9 @@ pub async fn gebroken_diensten_laden(
     Ok(new_shifts)
 }
 
+/*
+A small function to combine the three functions needed for creating a broken shift into one match statement
+*/
 async fn get_broken_shift_time(driver: &WebDriver, shift: &Shift) -> WebDriverResult<Vec<Shift>> {
     let broken_diensten = load_broken_dienst_page(driver, &shift).await?;
     let between_times = find_broken_start_stop_time(broken_diensten).await?;
@@ -45,6 +55,11 @@ async fn get_broken_shift_time(driver: &WebDriver, shift: &Shift) -> WebDriverRe
     Ok(broken_shifts)
 }
 
+/*
+A function created to overcome a limitation of gnome calendar
+https://gitlab.gnome.org/GNOME/gnome-calendar/-/issues/944
+Not needed for most people
+*/
 pub fn split_night_shift(shifts: &Vec<Shift>) -> Vec<Shift> {
     let split_option = var("BREAK_UP_NIGHT_SHIFT").unwrap();
     let mut temp_shift: Vec<Shift> = vec![];
@@ -70,6 +85,10 @@ pub fn split_night_shift(shifts: &Vec<Shift>) -> Vec<Shift> {
     temp_shift
 }
 
+/*
+Creates the URL needed for the broken shift
+Waits untill the page is fully loaded and then gets and returns all rows of the shift sheet
+*/
 pub async fn load_broken_dienst_page(
     driver: &WebDriver,
     shift: &Shift,
@@ -84,6 +103,11 @@ pub async fn load_broken_dienst_page(
     Ok(trip_rows)
 }
 
+/*
+Finds the the first afstaptijd and second opstaptijd in the shift sheet, converts these to time:time and returns them
+returns afstaptijd, opstaptijd in that order
+Returns error if only 1 opstap/afstaptijd is found, this is the case when you get assigned half of a broken shfit
+*/
 pub async fn find_broken_start_stop_time(
     shift_rows: Vec<WebElement>,
 ) -> WebDriverResult<(Time, Time)> {
@@ -114,12 +138,21 @@ pub async fn find_broken_start_stop_time(
     Ok((afstaptijd, opstaptijd))
 }
 
+/*
+A function to navigate to a subdirectory of the current URL
+Needed because if the while url is entered, the cookies will be lost and you will have to log in again
+*/
 async fn navigate_to_subdirectory(driver: &WebDriver, subdirectory: &str) -> WebDriverResult<()> {
     let script = format!("window.location.href = '{}';", subdirectory);
     driver.execute(&script, vec![]).await?;
     Ok(())
 }
 
+/*
+A simple function to wait until a page is truly fully loaded
+You need to provide a element on the page to wait for
+If clickable is false it will only check if it is displayed, not clickable
+*/
 #[async_recursion]
 pub async fn wait_for_response(
     driver: &WebDriver,

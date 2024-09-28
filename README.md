@@ -1,10 +1,10 @@
+Webcom is een frustrerende, trage website. Met dit programma kan je een mailtje krijgen als je een nieuwe shift hebt, en kan je al je shifts automatisch toevoegen aan je agenda.
+
 > [!CAUTION]
 > Ik kan niet garanderen dat al je shifts correct ingeladen worden. Dus zorg dat je ook regelmatig webcom bekijkt. Als er wat mis gaat, maak dan een issue aan op github.
 
 > [!NOTE]
-> Als je dit niet allemaal zelf wil instellen, kan ik het ook voor je doen. Stuur mij dan even een berichtje of mailtje.
-
-Webcom is een frustrerende, trage website. Het doel van dit programma is om automatisch mijn shifts in te laden in een ical bestand of link
+> Als je dit niet allemaal zelf wil instellen, kan ik het ook voor je doen. Stuur mij dan even een berichtje of mailtje. Maar ik ben dan niet verantwoordelijk als er wat mis gaat
 
 # Hoe moet je dit programma gebruiken
 Om dit programma te gebruiken is enige technische kennis wel vereisd. Waarschijnlijk werkt het op Windows en MacOS maar ik heb het alleen nog maar getest op Linux.. De programma's die je nodig hebt:

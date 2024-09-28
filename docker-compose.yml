@@ -3,6 +3,7 @@ services:
     image: docker.io/library/webcom_ical
     volumes:
       - .env:/usr/src/webcom_ical/.env
+      - ./calendar/:/usr/src/webcom_ical/calendar/
     depends_on:
       - gecko_driver
   gecko_driver:

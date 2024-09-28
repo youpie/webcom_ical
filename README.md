@@ -39,7 +39,12 @@ cp docker-compose.yml user_data/
 cp .env.example user_data/.env
 ```
 
-5. Vul het .env bestand in
+5. Ga naar het nieuwe mapje
+``` bash
+cd user_data
+```
+
+6. Vul het .env bestand in
 Open het .env bestand, en vul in ieder geval je gebruikersnaam en wachtwoord van webcom in.
 Je kan hier ook de gegevens van je email server invullen, als je niet weet wat dit is, laat dan maar haha.
 > [!WARNING]
@@ -48,7 +53,7 @@ Je kan hier ook de gegevens van je email server invullen, als je niet weet wat d
 > [!TIP]
 > Bij de `Preferences` zijn de opties `true` of `false`
 
-6. Start de container
+7. Start de container
 Start nu de gegenereerde container met
 ``` bash
 docker compose up

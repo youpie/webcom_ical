@@ -7,7 +7,7 @@ use lettre::{
 };
 use time::{macros::format_description, Date};
 
-use crate::{Shift, Shifts};
+use crate::{save_shifts_on_disk, Shift, Shifts};
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -76,6 +76,19 @@ pub fn send_emails(current_shifts: &Vec<Shift>) -> GenResult<()> {
             return Ok(());
         } //If there is any error loading previous shifts, just do an early return..
     };
+    println!(
+        "Found {} previous shifts, and {} new shifts",
+        previous_shifts.len(),
+        current_shifts.len()
+    );
+    if previous_shifts.len() != current_shifts.len() {
+        println!("difference in old and new shift size found, making backup");
+        let save_path = var("SAVE_TARGET").unwrap();
+        let _ = save_shifts_on_disk(
+            &previous_shifts,
+            Path::new(&format!("{}previous_shifts_backup.toml", save_path)),
+        );
+    }
     println!("Searching new shifts");
     let new_shifts = find_send_shift_mails(
         &mailer,
@@ -83,7 +96,7 @@ pub fn send_emails(current_shifts: &Vec<Shift>) -> GenResult<()> {
         current_shifts,
         None,
         &env,
-        env.send_email_new_shift,
+        env.send_email_new_shift && previous_shifts.len() != current_shifts.len(),
     )?;
     println!("Searching updated shifts");
     let _updated_shifts = find_send_shift_mails(
@@ -135,6 +148,7 @@ fn find_send_shift_mails(
         format_description!("[day]-[month]-[year]"),
     )?;
     if new_shifts.is_some() {
+        //This only gets ran if it is searching for updated shifts. It removes the new shifts from the list, so that they don't get flagged as updated shifts
         for new_shift in new_shifts.unwrap() {
             for current_shift in current_shifts {
                 if new_shift.date == current_shift.date {
@@ -149,11 +163,13 @@ fn find_send_shift_mails(
     }
     //println!("length shifts {:?}", new_shifts.len());
     for previous_shift in previous_shifts {
+        println!("Looking at shift {}", previous_shift.number);
         for current_shift in current_shifts {
             if (previous_shift.magic_number == current_shift.magic_number
                 || current_shift.date < current_date)
                 && new_shifts.is_some()
             {
+                println!("Shift found {}", current_shift.number);
                 let index = current_shifts
                     .iter()
                     .position(|r| r.magic_number == current_shift.magic_number)
@@ -163,6 +179,7 @@ fn find_send_shift_mails(
             if (previous_shift.date == current_shift.date || current_shift.date < current_date)
                 && new_shifts.is_none()
             {
+                println!("Shift found {}", current_shift.number);
                 let index = current_shifts
                     .iter()
                     .position(|r| r.magic_number == current_shift.magic_number)
@@ -174,12 +191,12 @@ fn find_send_shift_mails(
     index_to_be_removed.sort();
     index_to_be_removed.reverse();
     index_to_be_removed.dedup();
-    //println!("shifts to be removed: {:?}", index_to_be_removed);
+    println!("shifts to be removed: {:?}", index_to_be_removed);
     index_to_be_removed
         .iter()
         .map(|index| updated_shifts.remove(*index))
         .count();
-    //println!("Updated shifts: {:?}", &new_shifts);
+    println!("Updated shifts: {:?}", &new_shifts);
     if !updated_shifts.is_empty() && send_mail {
         //println!("New shifts found, sending mail");
         create_send_new_email(mailer, &updated_shifts, env, new_shifts.is_some())?;

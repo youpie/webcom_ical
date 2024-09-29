@@ -299,7 +299,10 @@ fn create_ical(shifts: &Vec<Shift>) -> String {
             Event::new()
                 .summary(&format!("Shift - {}", shift.number))
                 .description(&format!(
-                    "Dienstsoort • {} \nDuur • {} uur {} minuten\nOmschrijving • {}\nShift sheet • {}",
+                    "Dienstsoort • {}
+                    Duur • {} uur {} minuten
+                    Omschrijving • {}
+                    Shift sheet • {}",
                     shift.kind,
                     shift.duration.whole_hours(),
                     shift.duration.whole_minutes() % 60,

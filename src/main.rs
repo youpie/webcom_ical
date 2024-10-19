@@ -74,7 +74,7 @@ impl Shift {
         let kind: String = parts_list[6].nth(1).unwrap_or("").to_string();
         let location: String = parts_list[7].nth(1).unwrap_or("").to_string();
         let description: String = parts_list[8].nth(1).unwrap_or("").to_string();
-
+        dbg!(&text);
         let start_time_str = time.split_whitespace().nth(0).unwrap();
         let end_time_str = time.split_whitespace().nth(2).unwrap();
         let start = get_time(start_time_str);

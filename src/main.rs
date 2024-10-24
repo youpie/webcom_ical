@@ -358,11 +358,12 @@ fn create_dateperhapstime(date: Date, time: Time) -> CalendarDateTime {
 /*
 Just presses the previous button in webcom to load the previous month
 */
-async fn load_previous_month(driver: &WebDriver, name: String) -> GenResult<Vec<Shift>> {
-    let current_date: Date = Date::parse(
-        &chrono::offset::Local::now().format("%d-%m-%Y").to_string(),
-        format_description!("[day]-[month]-[year]"),
-    )?;
+async fn load_previous_month(driver: &WebDriver, name: String) -> WebDriverResult<Vec<Shift>> {
+    driver
+        .find(By::Id("ctl00_ctl00_navilink0"))
+        .await?
+        .click()
+        .await?;
     gebroken_shifts::wait_for_response(driver, By::ClassName("calDay"), false).await?;
     let elements = driver
         .query(By::ClassName("calDay"))
@@ -449,9 +450,13 @@ async fn main() -> WebDriverResult<()> {
     let password = var("PASSWORD").unwrap();
     let mut retry_count: usize = 0;
     let mut running_errors: Vec<Box<dyn std::error::Error>> = vec![];
-    while retry_count <= 2 {
+    let max_retry_count: usize = var("RETRY_COUNT")
+        .unwrap_or("3".to_string())
+        .parse()
+        .unwrap();
+    while retry_count <= max_retry_count - 1 {
         match main_program(&driver, &username, &password).await {
-            Ok(_) => retry_count = 3,
+            Ok(_) => retry_count = max_retry_count,
             Err(x) => {
                 println!(
                     "Fout tijdens shift laden, opnieuw proberen, poging: {}. Fout: {:?}",
@@ -474,15 +479,5 @@ async fn main() -> WebDriverResult<()> {
         }
     }
     driver.quit().await?;
-    Ok(())
-}
-
-/*
-A function to navigate to a subdirectory of the current URL
-Needed because if the while url is entered, the cookies will be lost and you will have to log in again
-*/
-async fn navigate_to_subdirectory(driver: &WebDriver, subdirectory: &str) -> WebDriverResult<()> {
-    let script = format!("window.location.href = '{}';", subdirectory);
-    driver.execute(&script, vec![]).await?;
     Ok(())
 }

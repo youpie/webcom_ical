@@ -74,7 +74,6 @@ impl Shift {
         let kind: String = parts_list[6].nth(1).unwrap_or("").to_string();
         let location: String = parts_list[7].nth(1).unwrap_or("").to_string();
         let description: String = parts_list[8].nth(1).unwrap_or("").to_string();
-        dbg!(&text);
         let start_time_str = time.split_whitespace().nth(0).unwrap();
         let end_time_str = time.split_whitespace().nth(2).unwrap();
         let start = get_time(start_time_str);
@@ -84,7 +83,6 @@ impl Shift {
         let mut hasher = DefaultHasher::new();
         text.hash(&mut hasher);
         let magic_number = (hasher.finish() as i128 - i64::MAX as i128) as i64;
-        println!("Found shift: {}", number);
         if shift_type == 'g' || shift_type == 'G' {
             is_broken = true;
         }
@@ -360,12 +358,11 @@ fn create_dateperhapstime(date: Date, time: Time) -> CalendarDateTime {
 /*
 Just presses the previous button in webcom to load the previous month
 */
-async fn load_previous_month(driver: &WebDriver, name: String) -> WebDriverResult<Vec<Shift>> {
-    driver
-        .find(By::Id("ctl00_ctl00_navilink0"))
-        .await?
-        .click()
-        .await?;
+async fn load_previous_month(driver: &WebDriver, name: String) -> GenResult<Vec<Shift>> {
+    let current_date: Date = Date::parse(
+        &chrono::offset::Local::now().format("%d-%m-%Y").to_string(),
+        format_description!("[day]-[month]-[year]"),
+    )?;
     gebroken_shifts::wait_for_response(driver, By::ClassName("calDay"), false).await?;
     let elements = driver
         .query(By::ClassName("calDay"))
@@ -477,5 +474,15 @@ async fn main() -> WebDriverResult<()> {
         }
     }
     driver.quit().await?;
+    Ok(())
+}
+
+/*
+A function to navigate to a subdirectory of the current URL
+Needed because if the while url is entered, the cookies will be lost and you will have to log in again
+*/
+async fn navigate_to_subdirectory(driver: &WebDriver, subdirectory: &str) -> WebDriverResult<()> {
+    let script = format!("window.location.href = '{}';", subdirectory);
+    driver.execute(&script, vec![]).await?;
     Ok(())
 }

@@ -9,3 +9,4 @@ services:
   gecko_driver:
     container_name: gecko_driver
     image: docker.io/library/gecko_driver
+    restart: on-failure

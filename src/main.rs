@@ -297,10 +297,10 @@ fn create_ical(shifts: &Vec<Shift>) -> String {
             Event::new()
                 .summary(&format!("Shift - {}", shift.number))
                 .description(&format!(
-                    "Dienstsoort • {}
-                    Duur • {} uur {} minuten
-                    Omschrijving • {}
-                    Shift sheet • {}",
+"Dienstsoort • {}
+Duur • {} uur {} minuten
+Omschrijving • {}
+Shift sheet • {}",
                     shift.kind,
                     shift.duration.whole_hours(),
                     shift.duration.whole_minutes() % 60,
@@ -453,7 +453,7 @@ async fn main() -> WebDriverResult<()> {
     let max_retry_count: usize = var("RETRY_COUNT")
         .unwrap_or("3".to_string())
         .parse()
-        .unwrap();
+        .unwrap_or(3);
     while retry_count <= max_retry_count - 1 {
         match main_program(&driver, &username, &password).await {
             Ok(_) => retry_count = max_retry_count,
@@ -470,7 +470,7 @@ async fn main() -> WebDriverResult<()> {
     }
     if running_errors.is_empty() {
         println!("Alles is in een keer goed gegaan, jippie!");
-    } else if running_errors.len() < 3 {
+    } else if running_errors.len() < max_retry_count {
         println!("Errors have occured, but succeded in the end");
     } else {
         match send_errors(running_errors, &username) {

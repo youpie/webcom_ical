@@ -5,6 +5,7 @@ use lettre::{
     message::header::ContentType, transport::smtp::authentication::Credentials, Message,
     SmtpTransport, Transport,
 };
+use thirtyfour::error::WebDriverResult;
 use time::{macros::format_description, Date};
 
 use crate::{Shift, Shifts};
@@ -233,6 +234,25 @@ pub fn send_errors(errors: Vec<Box<dyn std::error::Error>>, name: &str) -> GenRe
         .from(format!("Foutje Berichtmans <{}>", &env.mail_from).parse()?)
         .to(format!("{} <{}>", &name, &env.mail_error_to).parse()?)
         .subject(&format!("Fout bij laden shifts van: {}", name))
+        .header(ContentType::TEXT_PLAIN)
+        .body(email_errors)?;
+    mailer.send(&email)?;
+    Ok(())
+}
+
+pub fn send_gecko_error_mail<T: std::fmt::Debug>(error: WebDriverResult<T>) -> GenResult<()> {
+    let env = EnvMailVariables::new()?;
+    if !env.send_error_mail {
+        println!("tried to send error mail, but is disabled");
+        return Ok(());
+    }
+    let mailer = load_mailer(&env)?;
+    let mut email_errors = "!!! KAN NIET VERBINDEN MET GECKO !!!\n".to_string();
+    email_errors.push_str(&format!("Error: \n{:?}\n\n", error));
+    let email = Message::builder()
+        .from(format!("Foutje Berichtmans <{}>", &env.mail_from).parse()?)
+        .to(format!("{} <{}>", "user", &env.mail_error_to).parse()?)
+        .subject(&format!("KAN NIET VERBINDEN MET GECKO"))
         .header(ContentType::TEXT_PLAIN)
         .body(email_errors)?;
     mailer.send(&email)?;

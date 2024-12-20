@@ -4,13 +4,15 @@ use chrono::NaiveTime;
 use dotenvy::dotenv_override;
 use dotenvy::var;
 use email::send_errors;
+use gebroken_shifts::navigate_to_subdirectory;
+use gebroken_shifts::wait_for_response;
 use icalendar::Calendar;
 use icalendar::CalendarDateTime;
 use icalendar::Component;
 use icalendar::Event;
 use icalendar::EventLike;
+use reqwest;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs::File;
 use std::hash::DefaultHasher;
 use std::hash::Hash;
@@ -30,6 +32,13 @@ pub mod email;
 pub mod gebroken_shifts;
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
+
+#[derive(Debug)]
+enum FailureType {
+    TriesExceeded,
+    GeckoEngine,
+    OK,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Shift {
@@ -179,7 +188,8 @@ fn get_time(str_time: &str) -> Time {
 Logs into webcom, has no logic for when the login fails.
 It will also find and return the first name of the user, this will fail if the login is unsuccesful
 */
-async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> WebDriverResult<String> {
+async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> GenResult<String> {
+    println!("Logging in..");
     let username_field = driver
         .find(By::Id("ctl00_cntMainBody_lgnView_lgnLogin_UserName"))
         .await?;
@@ -193,7 +203,8 @@ async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> WebDriverR
         .await?
         .click()
         .await?;
-    gebroken_shifts::wait_for_response(driver, By::Tag("h3"), false).await?;
+    //wait_until_loaded(&driver).await?;
+    wait_for_response(&driver, By::Tag("h3"), false).await?;
     let name_text = driver.find(By::Tag("h3")).await?.text().await?;
     let name = name_text
         .split_whitespace()
@@ -204,9 +215,11 @@ async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> WebDriverR
         .unwrap()
         .to_string();
     println!("{}", name_text);
-    let rooster_knop = driver.query(By::LinkText("Rooster")).first().await?;
-    rooster_knop.wait_until().displayed().await?;
-    rooster_knop.click().await?;
+    // let rooster_knop = driver.query(By::LinkText("Rooster")).first().await?;
+    // rooster_knop.wait_until().displayed().await?;
+    // rooster_knop.click().await?;
+    println!("Loading rooster..");
+    navigate_to_subdirectory(driver, "roster.aspx").await?;
     Ok(name)
 }
 
@@ -215,12 +228,16 @@ Checks all supplied WebElements, it checks if the day contains the text "Dienstu
 Does not search itself for elements
 */
 async fn get_elements(
-    elements: Vec<WebElement>,
+    driver: &WebDriver,
     month: Month,
-    year: u32,
+    year: i32,
     name: String,
 ) -> WebDriverResult<Vec<Shift>> {
     let mut temp_emlements: Vec<Shift> = vec![];
+    let elements = driver
+        .query(By::ClassName("calDay"))
+        .all_from_selector()
+        .await?;
     for element in elements {
         let text = match element.attr("data-original-title").await? {
             Some(x) => x,
@@ -240,42 +257,10 @@ async fn get_elements(
             let date = Date::from_calendar_date(year as i32, month, dag).unwrap();
             let new_shift = Shift::new(text, date, &name);
             temp_emlements.push(new_shift.clone());
-            // println!("Created shift {:?}", &new_shift);
+            println!("Found Shift {}", &new_shift.number);
         }
     }
-
     Ok(temp_emlements)
-}
-
-/*
-The webdriver needs to be at a calendar view. It loads the current month of the calendar
-Uses a really simple way (a dictionary) to convert a string of a month to time::Month
-*/
-async fn get_month_year(driver: &WebDriver) -> WebDriverResult<(Month, u32)> {
-    let month_dict = HashMap::from([
-        ("Januari", Month::January),
-        ("Februari", Month::February),
-        ("Maart", Month::March),
-        ("April", Month::April),
-        ("Mei", Month::May),
-        ("Juni", Month::June),
-        ("Juli", Month::July),
-        ("Augustus", Month::August),
-        ("September", Month::September),
-        ("Oktober", Month::October),
-        ("November", Month::November),
-        ("December", Month::December),
-    ]);
-    let text = driver
-        .find(By::PartialLinkText("Rooster"))
-        .await?
-        .text()
-        .await?;
-    println!("Loading: {}", text);
-    let month_name = text.split_whitespace().nth(1).unwrap();
-    let year: u32 = text.split_whitespace().nth(2).unwrap().parse().unwrap();
-    let month = month_dict.get(month_name).unwrap();
-    Ok((*month, year))
 }
 
 /*
@@ -297,7 +282,7 @@ fn create_ical(shifts: &Vec<Shift>) -> String {
             Event::new()
                 .summary(&format!("Shift - {}", shift.number))
                 .description(&format!(
-"Dienstsoort • {}
+                    "Dienstsoort • {}
 Duur • {} uur {} minuten
 Omschrijving • {}
 Shift sheet • {}",
@@ -358,40 +343,55 @@ fn create_dateperhapstime(date: Date, time: Time) -> CalendarDateTime {
 /*
 Just presses the previous button in webcom to load the previous month
 */
-async fn load_previous_month(driver: &WebDriver, name: String) -> WebDriverResult<Vec<Shift>> {
-    driver
-        .find(By::Id("ctl00_ctl00_navilink0"))
-        .await?
-        .click()
-        .await?;
-    gebroken_shifts::wait_for_response(driver, By::ClassName("calDay"), false).await?;
-    let elements = driver
-        .query(By::ClassName("calDay"))
-        .all_from_selector()
-        .await?;
-    let (month, year) = get_month_year(driver).await?;
-    Ok(get_elements(elements, month, year, name).await?)
+async fn load_previous_month_shifts(
+    driver: &WebDriver,
+    name: String,
+) -> WebDriverResult<Vec<Shift>> {
+    println!("Loading Previous Month..");
+    let now = time::OffsetDateTime::now_utc();
+    let today = now.date();
+    let new_month = today.month().previous();
+    let new_year = if new_month == Month::December {
+        today.year() - 1
+    } else {
+        today.year()
+    };
+    navigate_to_subdirectory(
+        &driver,
+        &format!("roster.aspx?{}-{}-01", new_year, new_month as u8),
+    )
+    .await?;
+    wait_until_loaded(&driver).await.unwrap();
+    Ok(get_elements(&driver, new_month, new_year, name).await?)
 }
 
 /*
 Just presses the next button in webcom twice to load the next month.
 Only works correctly if the previous month function has been ran before
 */
-async fn load_next_month(driver: &WebDriver, name: String) -> WebDriverResult<Vec<Shift>> {
-    for _i in 0..2 {
-        driver
-            .find(By::Id("ctl00_ctl00_navilink1"))
-            .await?
-            .click()
-            .await?;
-    }
-    gebroken_shifts::wait_for_response(driver, By::ClassName("calDay"), false).await?;
-    let elements = driver
-        .query(By::ClassName("calDay"))
-        .all_from_selector()
-        .await?;
-    let (month, year) = get_month_year(driver).await?;
-    Ok(get_elements(elements, month, year, name).await?)
+async fn load_next_month_shifts(driver: &WebDriver, name: String) -> WebDriverResult<Vec<Shift>> {
+    println!("Loading Next Month..");
+    let now = time::OffsetDateTime::now_utc();
+    let today = now.date();
+    let new_month = today.month().next();
+    let new_year = if new_month == Month::January {
+        today.year() + 1
+    } else {
+        today.year()
+    };
+    navigate_to_subdirectory(
+        &driver,
+        &format!("roster.aspx?{}-{}-01", new_year, new_month as u8),
+    )
+    .await?;
+    wait_until_loaded(&driver).await.unwrap();
+    Ok(get_elements(&driver, new_month, new_year, name).await?)
+}
+
+async fn load_current_month_shifts(driver: &WebDriver, name: String) -> GenResult<Vec<Shift>> {
+    let now = time::OffsetDateTime::now_utc();
+    let today = now.date();
+    Ok(get_elements(&driver, today.month(), today.year(), name).await?)
 }
 
 /*
@@ -407,22 +407,51 @@ fn save_shifts_on_disk(shifts: &Vec<Shift>, path: &Path) -> GenResult<()> {
     Ok(())
 }
 
+pub async fn wait_until_loaded(driver: &WebDriver) -> GenResult<()> {
+    let mut started_loading = false;
+    let timeout_duration = std::time::Duration::from_secs(30);
+    let _ = tokio::time::timeout(timeout_duration, async {
+        loop {
+            let ready_state: ScriptRet = driver
+                .execute("return document.readyState", vec![])
+                .await
+                .unwrap();
+            let current_state = format!("{:?}", ready_state.json());
+            if current_state == "String(\"complete\")" && started_loading {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                return Ok::<(), WebDriverError>(());
+            }
+            if current_state == "String(\"loading\")" {
+                started_loading = true;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await?;
+    Ok(())
+}
+
 // Main program logic that has to run, if it fails it will all be reran.
-async fn main_program(driver: &WebDriver, username: &str, password: &str) -> GenResult<()> {
+async fn main_program(
+    driver: &WebDriver,
+    username: &str,
+    password: &str,
+    retry_count: usize,
+) -> GenResult<()> {
     driver.delete_all_cookies().await?;
+    let main_url = format!(
+        "https://dmz-wbc-web0{}.connexxion.nl/WebComm/default.aspx?TestingCookie=1",
+        (retry_count % 2) + 1
+    );
+    println!("Loading site: {}..",main_url);
     driver
-        .goto("https://dmz-wbc-web01.connexxion.nl/WebComm/default.aspx?TestingCookie=1")
+        .goto(main_url)
         .await?;
     let name = load_calendar(&driver, &username, &password).await?;
-    driver.execute("return document.readyState", vec![]).await?;
-    let (month, year) = get_month_year(&driver).await?;
-    let elements = driver
-        .query(By::ClassName("calDay"))
-        .all_from_selector()
-        .await?;
-    let mut shifts = get_elements(elements, month, year, name.clone()).await?;
-    shifts.append(&mut load_previous_month(&driver, name.clone()).await?);
-    shifts.append(&mut load_next_month(&driver, name).await?);
+    wait_until_loaded(&driver).await?;
+    let mut shifts = load_current_month_shifts(&driver, name.clone()).await?;
+    shifts.append(&mut load_previous_month_shifts(&driver, name.clone()).await?);
+    shifts.append(&mut load_next_month_shifts(&driver, name).await?);
     println!("Found {} shifts", shifts.len());
     email::send_emails(&shifts)?;
     save_shifts_on_disk(&shifts, Path::new("./previous_shifts.toml"))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
@@ -431,8 +460,29 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     let calendar = create_ical(&shifts);
     let ical_path = &format!("{}{}.ics", var("SAVE_TARGET")?, username);
     let mut output = File::create(ical_path)?;
-    println!("Writing to: {:?}", output);
+    println!("Writing to: {}", ical_path);
     write!(output, "{}", calendar)?;
+    Ok(())
+}
+
+async fn initiate_webdriver() -> GenResult<WebDriver> {
+    let gecko_ip = var("GECKO_IP")?;
+    let caps = DesiredCapabilities::firefox();
+    let driver = WebDriver::new(format!("http://{}", gecko_ip), caps).await?;
+    Ok(driver)
+}
+
+async fn heartbeat(reason: FailureType, url: Option<String>) -> GenResult<()> {
+    if url.is_none(){println!("no heartbeat URL");return Ok(());}
+    reqwest::get(format!(
+        "{}?status={}&msg={:?}&ping=",url.unwrap(),
+        match reason {
+            FailureType::GeckoEngine => "down",
+            _ => "up",
+        },
+        reason
+    ))
+    .await?;
     Ok(())
 }
 
@@ -443,9 +493,17 @@ Loads the main logic, and retries if it fails
 #[tokio::main]
 async fn main() -> WebDriverResult<()> {
     dotenv_override().ok();
-    let gecko_ip = var("GECKO_IP").unwrap();
-    let caps = DesiredCapabilities::firefox();
-    let driver = WebDriver::new(format!("http://{}", gecko_ip), caps).await?;
+    let mut error_reason = FailureType::OK;
+    let heartbeat_url = var("HEARTBEAT_URL").ok();
+    let driver = match initiate_webdriver().await {
+        Ok(driver) => driver,
+        Err(error) => {
+            send_errors(vec![error], "flats").unwrap();
+            error_reason = FailureType::GeckoEngine;
+            heartbeat(error_reason,heartbeat_url).await.unwrap();
+            return Err(WebDriverError::FatalError("driver fout".to_string()));
+        }
+    };
     let username = var("USERNAME").unwrap();
     let password = var("PASSWORD").unwrap();
     let mut retry_count: usize = 0;
@@ -455,13 +513,13 @@ async fn main() -> WebDriverResult<()> {
         .parse()
         .unwrap_or(3);
     while retry_count <= max_retry_count - 1 {
-        match main_program(&driver, &username, &password).await {
+        match main_program(&driver, &username, &password, retry_count).await {
             Ok(_) => retry_count = max_retry_count,
             Err(x) => {
                 println!(
-                    "Fout tijdens shift laden, opnieuw proberen, poging: {}. Fout: {:?}",
+                    "Fout tijdens shift laden, opnieuw proberen, poging: {}. Fout: {}",
                     retry_count + 1,
-                    &x
+                    &x.to_string()
                 );
                 running_errors.push(x);
             }
@@ -473,11 +531,13 @@ async fn main() -> WebDriverResult<()> {
     } else if running_errors.len() < max_retry_count {
         println!("Errors have occured, but succeded in the end");
     } else {
+        error_reason = FailureType::TriesExceeded;
         match send_errors(running_errors, &username) {
             Ok(_) => (),
             Err(x) => println!("failed to send error email, ironic: {:?}", x),
         }
     }
+    heartbeat(error_reason,heartbeat_url).await.unwrap();
     driver.quit().await?;
     Ok(())
 }

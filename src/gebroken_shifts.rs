@@ -1,4 +1,4 @@
-use crate::Shift;
+use crate::{GenResult, Shift};
 use async_recursion::async_recursion;
 use dotenvy::var;
 use thirtyfour::{
@@ -7,6 +7,7 @@ use thirtyfour::{
     WebDriver, WebElement,
 };
 use time::{macros::format_description, Time};
+use crate::wait_until_loaded;
 
 /*
 Main function for loading broken shifts
@@ -30,8 +31,8 @@ pub async fn gebroken_diensten_laden(
                 }
                 Err(x) => {
                     println!(
-                        "An error occured creating a broken shift: {}",
-                        x.to_string()
+                        "An error occured creating a broken shift: {:?}",
+                        x
                     );
                     new_shifts.push(shift.clone());
                 }
@@ -48,7 +49,7 @@ pub async fn gebroken_diensten_laden(
 /*
 A small function to combine the three functions needed for creating a broken shift into one match statement
 */
-async fn get_broken_shift_time(driver: &WebDriver, shift: &Shift) -> WebDriverResult<Vec<Shift>> {
+async fn get_broken_shift_time(driver: &WebDriver, shift: &Shift) -> GenResult<Vec<Shift>> {
     let broken_diensten = load_broken_dienst_page(driver, &shift).await?;
     let between_times = find_broken_start_stop_time(broken_diensten).await?;
     let broken_shifts = Shift::new_from_existing(between_times, shift, false);
@@ -92,12 +93,13 @@ Waits untill the page is fully loaded and then gets and returns all rows of the 
 pub async fn load_broken_dienst_page(
     driver: &WebDriver,
     shift: &Shift,
-) -> WebDriverResult<Vec<WebElement>> {
+) -> GenResult<Vec<WebElement>> {
     let date = shift.date;
     let date_format = format_description!("[year]-[month]-[day]");
     let formatted_date = date.format(date_format).unwrap();
     navigate_to_subdirectory(driver, &format!("/WebComm/shift.aspx?{}", formatted_date)).await?;
-    wait_for_response(driver, By::PartialLinkText("Werk en afwezigheden"), true).await?;
+    wait_until_loaded(&driver).await?;
+    //wait_for_response(driver, By::PartialLinkText("Werk en afwezigheden"), true).await?;
     let trip_body = driver.find(By::Tag("tbody")).await?;
     let trip_rows = trip_body.query(By::Tag("tr")).all_from_selector().await?;
     Ok(trip_rows)
@@ -128,7 +130,7 @@ pub async fn find_broken_start_stop_time(
     match afstaptijden.len() {
         1 => {
             return Err(WebDriverError::FatalError(
-                "Broken broken shift".to_string(),
+                "Not complete broken shift".to_string(),
             ));
         }
         _ => (),
@@ -142,7 +144,7 @@ pub async fn find_broken_start_stop_time(
 A function to navigate to a subdirectory of the current URL
 Needed because if the while url is entered, the cookies will be lost and you will have to log in again
 */
-async fn navigate_to_subdirectory(driver: &WebDriver, subdirectory: &str) -> WebDriverResult<()> {
+pub async fn navigate_to_subdirectory(driver: &WebDriver, subdirectory: &str) -> WebDriverResult<()> {
     let script = format!("window.location.href = '{}';", subdirectory);
     driver.execute(&script, vec![]).await?;
     Ok(())

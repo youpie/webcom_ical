@@ -440,7 +440,7 @@ async fn main_program(
 ) -> GenResult<()> {
     driver.delete_all_cookies().await?;
     let main_url = format!(
-        "https://dmz-wbc-web0{}.connexxion.nl/WebComm/default.aspx?TestingCookie=1",
+        "https://dmz-wbc-web0{}.connexxion.nl/WebComm/default.aspx",
         (retry_count % 2) + 1
     );
     println!("Loading site: {}..",main_url);
@@ -498,6 +498,7 @@ async fn main() -> WebDriverResult<()> {
     let driver = match initiate_webdriver().await {
         Ok(driver) => driver,
         Err(error) => {
+            println!("Kon driver niet opstarten: {:?}", &error);
             send_errors(vec![error], "flats").unwrap();
             error_reason = FailureType::GeckoEngine;
             heartbeat(error_reason,heartbeat_url).await.unwrap();

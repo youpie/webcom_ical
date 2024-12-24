@@ -23,6 +23,7 @@ pub struct EnvMailVariables {
     send_mail_updated_shift: bool,
     send_error_mail: bool,
 }
+const ERROR_VALUE: &str = "Foutje gemaakt oops";
 
 /*
 Loads all env variables needed for sending mails
@@ -267,9 +268,11 @@ pub fn send_welcome_mail(path: &PathBuf, username: &str, name: &str) -> GenResul
     
     let env = EnvMailVariables::new()?;
     let mailer = load_mailer(&env)?;
-    let domain = var("DOMAIN").unwrap_or("Foutje gemaakt oops".to_string());
+    let domain = var("DOMAIN").unwrap_or(ERROR_VALUE.to_string());
+    let ical_username = var("ICAL_USER").unwrap_or(ERROR_VALUE.to_string());
+    let ical_password = var("ICAL_PASS").unwrap_or(ERROR_VALUE.to_string());
     let ical_url = format!("{}/{}.ics",domain,username);
-    let body = format!("Welkom bij Webcom Ical {}!\n\nJe shifts zijn voor het eerst succesvol ingeladen. De link om deze in te laden is: \n{}\nOoit staat hier ook een uitleg om deze link toe te voegen aan je agenda, maar voor nu moet je het zelf uitzoeken :)",name,ical_url);
+    let body = format!("Welkom bij Webcom Ical {}!\n\nJe shifts zijn voor het eerst succesvol ingeladen. De link om deze in te laden is: \n{}\nOoit staat hier ook een uitleg om deze link toe te voegen aan je agenda, maar voor nu moet je het zelf uitzoeken :)\n\nInloggegevens website:\nUsername:{}\nPassword{}",name,ical_url,ical_username,ical_password);
     let email = Message::builder()
         .from(format!("Peter <{}>", &env.mail_from).parse()?)
         .to(format!("{} <{}>", name, &env.mail_to).parse()?)

@@ -7,7 +7,6 @@ use thirtyfour::{
     WebDriver, WebElement,
 };
 use time::{macros::format_description, Time};
-use crate::wait_until_loaded;
 
 /*
 Main function for loading broken shifts
@@ -98,8 +97,8 @@ pub async fn load_broken_dienst_page(
     let date_format = format_description!("[year]-[month]-[day]");
     let formatted_date = date.format(date_format).unwrap();
     navigate_to_subdirectory(driver, &format!("/WebComm/shift.aspx?{}", formatted_date)).await?;
-    wait_until_loaded(&driver).await?;
-    //wait_for_response(driver, By::PartialLinkText("Werk en afwezigheden"), true).await?;
+    //wait_until_loaded(&driver).await?;
+    wait_for_response(driver, By::PartialLinkText("Werk en afwezigheden"), true).await?;
     let trip_body = driver.find(By::Tag("tbody")).await?;
     let trip_rows = trip_body.query(By::Tag("tr")).all_from_selector().await?;
     Ok(trip_rows)

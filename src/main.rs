@@ -19,6 +19,7 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::io::Write;
 use std::path::Path;
+use std::path::PathBuf;
 use std::str::Split;
 use thirtyfour::prelude::*;
 use time::macros::format_description;
@@ -65,6 +66,7 @@ impl Shift {
     fn new(text: String, date: Date, name: &str) -> Self {
         let text_clone = text.clone();
         let parts = text_clone.split("\u{a0}• \u{a0}• ");
+        let mut location_modifier = 1;
         let parts_clean: Vec<String> = parts
             .map(|x| {
                 let y = x.replace("\u{a0}• ", "");
@@ -81,8 +83,12 @@ impl Shift {
         let _working_hours: String = parts_list[4].nth(1).unwrap_or("").to_string();
         let _day_of_week: String = parts_list[5].nth(1).unwrap_or("").to_string();
         let kind: String = parts_list[6].nth(1).unwrap_or("").to_string();
-        let location: String = parts_list[7].nth(1).unwrap_or("").to_string();
-        let description: String = parts_list[8].nth(1).unwrap_or("").to_string();
+        let mut location = "Onbekend".to_string();
+        if parts_list[7].nth(0).unwrap_or("") == "Startplaats"{
+            location_modifier = 0;
+            location = parts_list[7].nth(1).unwrap_or("").to_string();
+        }
+        let description: String = parts_list[8-location_modifier].nth(1).unwrap_or("").to_string();
         let start_time_str = time.split_whitespace().nth(0).unwrap();
         let end_time_str = time.split_whitespace().nth(2).unwrap();
         let start = get_time(start_time_str);
@@ -207,12 +213,9 @@ async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> GenResult<
     wait_for_response(&driver, By::Tag("h3"), false).await?;
     let name_text = driver.find(By::Tag("h3")).await?.text().await?;
     let name = name_text
-        .split_whitespace()
-        .nth(0)
-        .unwrap()
         .split(",")
         .last()
-        .unwrap()
+        .unwrap().split_whitespace().nth(0).unwrap()
         .to_string();
     println!("{}", name_text);
     // let rooster_knop = driver.query(By::LinkText("Rooster")).first().await?;
@@ -431,37 +434,66 @@ pub async fn wait_until_loaded(driver: &WebDriver) -> GenResult<()> {
     Ok(())
 }
 
+async fn wait_untill_redirect(driver: &WebDriver) -> GenResult<()> {
+    let initial_url = driver.current_url().await?;
+    let mut current_url = driver.current_url().await?;
+    let timeout = std::time::Duration::from_secs(30); // Maximum wait time.
+
+    tokio::time::timeout(timeout, async {
+        loop {
+        let new_url = driver.current_url().await.unwrap();
+        if new_url != current_url {
+            current_url = new_url;
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    }).await?;
+
+    if current_url == initial_url {
+        println!("Timeout waiting for redirect.");
+        return Err(Box::new(WebDriverError::Timeout("Redirect did not occur".into())));
+    }
+
+    println!("Redirected to: {}", current_url);
+    wait_until_loaded(driver).await?;
+    Ok(())
+}
+
 // Main program logic that has to run, if it fails it will all be reran.
 async fn main_program(
     driver: &WebDriver,
     username: &str,
     password: &str,
-    retry_count: usize,
 ) -> GenResult<()> {
     driver.delete_all_cookies().await?;
-    let main_url = format!(
-        "https://dmz-wbc-web0{}.connexxion.nl/WebComm/default.aspx",
-        (retry_count % 2) + 1
-    );
+    // let main_url = format!(
+    //     "https://dmz-wbc-web0{}.connexxion.nl/WebComm/default.aspx",
+    //     (retry_count % 2) + 1
+    // );
+    let main_url = format!("webcom.connexxion.nl");
     println!("Loading site: {}..",main_url);
     driver
         .goto(main_url)
         .await?;
+    wait_untill_redirect(&driver).await?;
     let name = load_calendar(&driver, &username, &password).await?;
     wait_until_loaded(&driver).await?;
     let mut shifts = load_current_month_shifts(&driver, name.clone()).await?;
     shifts.append(&mut load_previous_month_shifts(&driver, name.clone()).await?);
-    shifts.append(&mut load_next_month_shifts(&driver, name).await?);
+    shifts.append(&mut load_next_month_shifts(&driver, name.clone()).await?);
     println!("Found {} shifts", shifts.len());
     email::send_emails(&shifts)?;
     save_shifts_on_disk(&shifts, Path::new("./previous_shifts.toml"))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
     let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
     let shifts = gebroken_shifts::split_night_shift(&shifts);
     let calendar = create_ical(&shifts);
-    let ical_path = &format!("{}{}.ics", var("SAVE_TARGET")?, username);
-    let mut output = File::create(ical_path)?;
-    println!("Writing to: {}", ical_path);
+    let ical_path = PathBuf::from(&format!("{}{}.ics", var("SAVE_TARGET")?, username));
+    email::send_welcome_mail(&ical_path,username, &name)?;
+    let mut output = File::create(&ical_path)?;
+    println!("Writing to: {:?}", &ical_path);
     write!(output, "{}", calendar)?;
+    
     Ok(())
 }
 
@@ -514,7 +546,7 @@ async fn main() -> WebDriverResult<()> {
         .parse()
         .unwrap_or(3);
     while retry_count <= max_retry_count - 1 {
-        match main_program(&driver, &username, &password, retry_count).await {
+        match main_program(&driver, &username, &password).await {
             Ok(_) => retry_count = max_retry_count,
             Err(x) => {
                 println!(

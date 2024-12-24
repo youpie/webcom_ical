@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use dotenvy::var;
 use lettre::{
@@ -228,7 +228,7 @@ pub fn send_errors(errors: Vec<Box<dyn std::error::Error>>, name: &str) -> GenRe
     let mailer = load_mailer(&env)?;
     let mut email_errors = "Er zijn fouten opgetreden tijdens het laden van shifts\n".to_string();
     for error in errors {
-        email_errors.push_str(&format!("Error: \n{:?}\n\n", error));
+        email_errors.push_str(&format!("Error: \n{}\n\n", error.to_string()));
     }
     let email = Message::builder()
         .from(format!("Foutje Berichtmans <{}>", &env.mail_from).parse()?)
@@ -248,13 +248,34 @@ pub fn send_gecko_error_mail<T: std::fmt::Debug>(error: WebDriverResult<T>) -> G
     }
     let mailer = load_mailer(&env)?;
     let mut email_errors = "!!! KAN NIET VERBINDEN MET GECKO !!!\n".to_string();
-    email_errors.push_str(&format!("Error: \n{:?}\n\n", error));
+    email_errors.push_str(&format!("Error: \n{}\n\n", error.err().unwrap().to_string()));
     let email = Message::builder()
         .from(format!("Foutje Berichtmans <{}>", &env.mail_from).parse()?)
         .to(format!("{} <{}>", "user", &env.mail_error_to).parse()?)
         .subject(&format!("KAN NIET VERBINDEN MET GECKO"))
         .header(ContentType::TEXT_PLAIN)
         .body(email_errors)?;
+    mailer.send(&email)?;
+    Ok(())
+}
+
+pub fn send_welcome_mail(path: &PathBuf, username: &str, name: &str) -> GenResult<()>{
+    if path.exists() {return Ok(());}
+    let send_welcome_mail = EnvMailVariables::str_to_bool(&var("SEND_WELCOME_MAIL").unwrap_or("false".to_string()));
+    println!("welkom mail sturen {send_welcome_mail}");
+    if !send_welcome_mail {return Ok(());}
+    
+    let env = EnvMailVariables::new()?;
+    let mailer = load_mailer(&env)?;
+    let domain = var("DOMAIN").unwrap_or("Foutje gemaakt oops".to_string());
+    let ical_url = format!("{}/{}.ics",domain,username);
+    let body = format!("Welkom bij Webcom Ical {}!\n\nJe shifts zijn voor het eerst succesvol ingeladen. De link om deze in te laden is: \n{}\nOoit staat hier ook een uitleg om deze link toe te voegen aan je agenda, maar voor nu moet je het zelf uitzoeken :)",name,ical_url);
+    let email = Message::builder()
+        .from(format!("Peter <{}>", &env.mail_from).parse()?)
+        .to(format!("{} <{}>", name, &env.mail_to).parse()?)
+        .subject(&format!("Welkom bij Webcom Ical {}!",name))
+        .header(ContentType::TEXT_PLAIN)
+        .body(body)?;
     mailer.send(&email)?;
     Ok(())
 }

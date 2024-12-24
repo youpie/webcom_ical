@@ -1,12 +1,12 @@
+name: webcom_${USERNAME}
 services:
   webcom_ical:
     image: docker.io/library/webcom_ical
     volumes:
       - .env:/usr/src/webcom_ical/.env
-      - ./calendar/:/usr/src/webcom_ical/calendar/
+      - ${SAVE_TARGET}:/usr/src/webcom_ical/calendar/
     depends_on:
       - gecko_driver
   gecko_driver:
-    container_name: gecko_driver
     image: docker.io/library/gecko_driver
     restart: on-failure

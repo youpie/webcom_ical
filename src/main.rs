@@ -580,13 +580,18 @@ async fn main() -> WebDriverResult<()> {
     while retry_count <= max_retry_count - 1 {
         match main_program(&driver, &username, &password).await {
             Ok(_) => retry_count = max_retry_count,
-            Err(x) => {
-                println!(
+            Err(x) => {match x.downcast_ref::<FailureType>(){
+                Some(FailureType::SignInFailed(y)) => {
+                    retry_count = max_retry_count;
+                    println!("Inloggen niet succesvol, fout: {:?}",y)
+                },
+                _ => {println!(
                     "Fout tijdens shift laden, opnieuw proberen, poging: {}. Fout: {}",
                     retry_count + 1,
                     &x.to_string()
                 );
-                running_errors.push(x);
+                running_errors.push(x);}
+            }
             }
         };
         retry_count += 1;

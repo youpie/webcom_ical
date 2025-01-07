@@ -25,6 +25,7 @@ use thirtyfour::prelude::*;
 use time::macros::format_description;
 use time::Duration;
 use time::Month;
+use thiserror::Error;
 
 use time::Date;
 use time::Time;
@@ -34,11 +35,27 @@ pub mod gebroken_shifts;
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
+
+
 #[derive(Debug)]
+enum SignInFailure {
+    TooManyTries,
+    IncorrectCredentials,
+    Other(String)
+}
+
+#[derive(Debug, Error)]
 enum FailureType {
     TriesExceeded,
     GeckoEngine,
+    SignInFailed(SignInFailure),
     OK,
+}
+
+impl std::fmt::Display for FailureType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{:?}",self)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -190,12 +207,7 @@ fn get_time(str_time: &str) -> Time {
     Time::from_hms(hour, min, 0).unwrap()
 }
 
-/*
-Logs into webcom, has no logic for when the login fails.
-It will also find and return the first name of the user, this will fail if the login is unsuccesful
-*/
-async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> GenResult<String> {
-    println!("Logging in..");
+async fn sign_in_webcom(driver: &WebDriver, user: &str, pass: &str) -> GenResult<String> {
     let username_field = driver
         .find(By::Id("ctl00_cntMainBody_lgnView_lgnLogin_UserName"))
         .await?;
@@ -209,15 +221,54 @@ async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> GenResult<
         .await?
         .click()
         .await?;
+    println!("waiting until loaded");
     //wait_until_loaded(&driver).await?;
-    wait_for_response(&driver, By::Tag("h3"), false).await?;
-    let name_text = driver.find(By::Tag("h3")).await?.text().await?;
+    let _ = wait_for_response(&driver, By::Tag("h3"), false).await;
+    println!("loaded");
+    let name_text = match driver.find(By::Tag("h3")).await{
+        Ok(element) => element.text().await?,
+        Err(_) => {return Err(Box::new(check_sign_in_error(driver).await?));},
+    };
     let name = name_text
         .split(",")
         .last()
         .unwrap().split_whitespace().nth(0).unwrap()
         .to_string();
-    println!("{}", name_text);
+    Ok(name)
+}
+
+async fn check_sign_in_error(driver: &WebDriver) -> GenResult<FailureType>{
+    println!("Sign in failed");
+    match driver.find(By::Id("ctl00_lblMessage")).await {
+        Ok(element) => {let element_text = element.text().await?;
+            let sign_in_error_type = get_sign_in_error_type(&element_text);
+            println!("Found error banner: {:?}",&sign_in_error_type);
+            return Ok(FailureType::SignInFailed(sign_in_error_type));}
+        Err(_) => {println!("Geen fount banner gevonden")}
+    };
+    Ok(FailureType::SignInFailed(SignInFailure::Other("Geen idee waarom er niet ingelogd kon worden".to_string())))
+}
+
+fn get_sign_in_error_type(text: &str) -> SignInFailure {
+    match text {
+        "Uw aanmelding was niet succesvol. Voer a.u.b. het personeelsnummer of 'naam, voornaam' in" => SignInFailure::IncorrectCredentials,
+        "Te veel verkeerde aanmeldpogingen" => SignInFailure::TooManyTries,
+        _ => SignInFailure::Other(text.to_string())
+    }
+
+}
+
+/*
+Logs into webcom, has no logic for when the login fails.
+It will also find and return the first name of the user, this will fail if the login is unsuccesful
+*/
+async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> GenResult<String> {
+    println!("Logging in..");
+    let name = sign_in_webcom(driver, user, pass).await?;
+    //wait_until_loaded(&driver).await?;
+    
+    
+    //println!("{}", name_text);
     // let rooster_knop = driver.query(By::LinkText("Rooster")).first().await?;
     // rooster_knop.wait_until().displayed().await?;
     // rooster_knop.click().await?;
@@ -273,7 +324,7 @@ fn create_ical(shifts: &Vec<Shift>) -> String {
     println!("Creating calendar file...");
     let mut calendar = Calendar::new()
         .name("Hermes rooster")
-        .timezone("Europe/Amsterdam")
+        .append_property(("METHOD","PUBLISH")).timezone("Europe/Amsterdam")
         .done();
     for shift in shifts {
         let date_format = format_description!("[year]-[month]-[day]");
@@ -307,29 +358,10 @@ Shift sheet • {}",
 
 /*
 I use the create Time to keep track of dates and time. But the crate used for creating the ICAL file uses chrono to keep time.
-This really ugly function converts between the two.
 */
 fn create_dateperhapstime(date: Date, time: Time) -> CalendarDateTime {
-    let months = [
-        Month::January,
-        Month::February,
-        Month::March,
-        Month::April,
-        Month::May,
-        Month::June,
-        Month::July,
-        Month::August,
-        Month::September,
-        Month::October,
-        Month::November,
-        Month::December,
-    ];
     let date_day = date.day();
-    let date_month = months
-        .iter()
-        .position(|month| month == &date.month())
-        .unwrap()
-        + 1;
+    let date_month = date.month() as u8;
     let date_year = date.year();
     let time_hrs = time.hour();
     let time_min = time.minute();

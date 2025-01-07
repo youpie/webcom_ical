@@ -3,3 +3,4 @@
 *.ics
 previous_shifts.toml
 /calendar/*
+*.pdf

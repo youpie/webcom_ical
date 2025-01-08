@@ -36,8 +36,13 @@ pub mod gebroken_shifts;
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 
+#[derive(Debug, Serialize, Deserialize,Clone)]
+pub struct IncorrectCredentialsCount {
+    retry_count: usize,
+    error: Option<SignInFailure>,
+}
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 enum SignInFailure {
     TooManyTries,
     IncorrectCredentials,
@@ -542,11 +547,68 @@ async fn heartbeat(reason: FailureType, url: Option<String>) -> GenResult<()> {
         "{}?status={}&msg={:?}&ping=",url.unwrap(),
         match reason {
             FailureType::GeckoEngine => "down",
+            FailureType::SignInFailed(_) => "down",
             _ => "up",
         },
         reason
     ))
     .await?;
+    Ok(())
+}
+
+fn load_sign_in_failure_count(path: &Path) -> GenResult<IncorrectCredentialsCount> {
+    let failure_count_toml = std::fs::read_to_string(path)?;
+    let failure_counter: IncorrectCredentialsCount = toml::from_str(&failure_count_toml)?;
+    Ok(failure_counter)
+}
+
+fn save_sign_in_failure_count(path: &Path, counter: IncorrectCredentialsCount) -> GenResult<()> {
+    let failure_counter_serialised = toml::to_string(&counter)?;
+    let mut output = File::create(path)?;
+    write!(output, "{}", failure_counter_serialised)?;
+    Ok(())
+}
+
+// If returning true, continue execution
+fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>>{
+    let resend_error_mail_count: usize = var("SIGN_IN_FAIL_MAIL_REPEAT").unwrap_or("1".to_string()).parse().unwrap_or(1);
+    let sign_in_attempt_reduce: usize = var("SIGN_IN_FAILED_REDUCE").unwrap_or("1".to_string()).parse().unwrap_or(1);
+    let path = Path::new("./sign_in_failure_count.toml");
+    let mut failure_counter = load_sign_in_failure_count(path)?;
+    if failure_counter.retry_count % resend_error_mail_count == 0 && failure_counter.error.is_some() {
+        email::send_failed_signin_mail(username, &failure_counter)?;
+    }
+    // else check if retry counter == reduce_ammount, if not, stop running
+    if failure_counter.retry_count == 0 {
+        return Ok(None);
+    }
+    else if failure_counter.retry_count % sign_in_attempt_reduce == 0 {
+        return Ok(None);            
+    }
+    else {
+        failure_counter.retry_count += 1;
+        save_sign_in_failure_count(path, failure_counter.clone())?;
+        return Ok(Some(failure_counter.error.unwrap()));
+    }
+}
+
+fn sign_in_failed_update(username: &str, failed: bool, failure_type: Option<SignInFailure>) -> GenResult<()>{
+    let path = Path::new("./sign_in_failure_count.toml");
+    let mut failure_counter = load_sign_in_failure_count(path)?;
+    // if failed == true, set increment counter and set error
+    if failed == true{
+        failure_counter.retry_count += 1;
+        failure_counter.error = failure_type;
+    }
+    // if failed == false, reset counter
+    else if failed == false{
+        if failure_counter.error.is_some() {
+            email::send_sign_in_succesful(username)?;
+        }
+        failure_counter.retry_count = 0;
+        failure_counter.error = None;
+    }
+    save_sign_in_failure_count(path, failure_counter)?;
     Ok(())
 }
 
@@ -577,12 +639,22 @@ async fn main() -> WebDriverResult<()> {
         .unwrap_or("3".to_string())
         .parse()
         .unwrap_or(3);
+
+    let start_main = sign_in_failed_check(&username).unwrap();
+    if let Some(failure) = start_main {
+        retry_count = max_retry_count;
+        error_reason = FailureType::SignInFailed(failure);
+    }
     while retry_count <= max_retry_count - 1 {
         match main_program(&driver, &username, &password).await {
-            Ok(_) => retry_count = max_retry_count,
-            Err(x) => {match x.downcast_ref::<FailureType>(){
+            Ok(_) => {sign_in_failed_update(&username,false, None).unwrap();
+                retry_count = max_retry_count;
+                },
+            Err(x) => {
+                match x.downcast_ref::<FailureType>(){
                 Some(FailureType::SignInFailed(y)) => {
                     retry_count = max_retry_count;
+                    sign_in_failed_update(&username,true, Some(y.clone())).unwrap();
                     println!("Inloggen niet succesvol, fout: {:?}",y)
                 },
                 _ => {println!(

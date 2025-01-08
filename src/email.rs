@@ -8,7 +8,7 @@ use lettre::{
 use thirtyfour::error::WebDriverResult;
 use time::{macros::format_description, Date};
 
-use crate::{Shift, Shifts};
+use crate::{IncorrectCredentialsCount, Shift, Shifts, SignInFailure};
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -263,7 +263,7 @@ pub fn send_gecko_error_mail<T: std::fmt::Debug>(error: WebDriverResult<T>) -> G
 pub fn send_welcome_mail(path: &PathBuf, username: &str, name: &str) -> GenResult<()>{
     if path.exists() {return Ok(());}
     let send_welcome_mail = EnvMailVariables::str_to_bool(&var("SEND_WELCOME_MAIL").unwrap_or("false".to_string()));
-    println!("welkom mail sturen {send_welcome_mail}");
+    
     if !send_welcome_mail {return Ok(());}
     
     let env = EnvMailVariables::new()?;
@@ -272,11 +272,54 @@ pub fn send_welcome_mail(path: &PathBuf, username: &str, name: &str) -> GenResul
     let ical_username = var("ICAL_USER").unwrap_or(ERROR_VALUE.to_string());
     let ical_password = var("ICAL_PASS").unwrap_or(ERROR_VALUE.to_string());
     let ical_url = format!("{}/{}.ics",domain,username);
-    let body = format!("Welkom bij Webcom Ical {}!\n\nJe shifts zijn voor het eerst succesvol ingeladen. De link om deze in te laden is: \n{}\nOoit staat hier ook een uitleg om deze link toe te voegen aan je agenda, maar voor nu moet je het zelf uitzoeken :)\n\nInloggegevens website:\nUsername:{}\nPassword{}",name,ical_url,ical_username,ical_password);
+    let mut body = format!("Welkom bij Webcom Ical {}!\n\nJe shifts zijn voor het eerst succesvol ingeladen. De link om deze in te laden is: \n{}\nOoit staat hier ook een uitleg om deze link toe te voegen aan je agenda, maar voor nu moet je het zelf uitzoeken :)",name,ical_url);
+    if ical_username != "" {
+        body.push_str(&format!("\n\nInloggegevens website:\nUsername:{}\nPassword{}",ical_username,ical_password));
+    }
+    println!("welkom mail sturen {ical_username}");
     let email = Message::builder()
         .from(format!("Peter <{}>", &env.mail_from).parse()?)
         .to(format!("{} <{}>", name, &env.mail_to).parse()?)
         .subject(&format!("Welkom bij Webcom Ical {}!",name))
+        .header(ContentType::TEXT_PLAIN)
+        .body(body)?;
+    mailer.send(&email)?;
+    Ok(())
+}
+
+pub fn send_failed_signin_mail(name: &str, error: &IncorrectCredentialsCount) -> GenResult<()>{
+    let send_failed_sign_in = EnvMailVariables::str_to_bool(&var("SEND_MAIL_SIGNIN_FAILED").unwrap_or("false".to_string()));
+    if !send_failed_sign_in {return Ok(());}
+    let env = EnvMailVariables::new()?;
+    let mailer = load_mailer(&env)?;
+    let mut body = format!("Beste,\n\nWebcom Ical was niet in staat in te loggen op webcom, hierdoor is het al {} keer niet gelukt om je shifts in te laden\nDe fout is:\n\n",error.retry_count+1);
+    body.push_str(match &error.error{
+        None => "Een onbekende fout...",
+        Some(SignInFailure::IncorrectCredentials) => "Incorrecte inloggegevens, heb je misschien je wachtwoord veranderd?",
+        Some(SignInFailure::TooManyTries) => "Te veel incorrecte inlogpogingen...",
+        Some(SignInFailure::Other(fault)) => fault
+    });
+    body.push_str(&format!("\n\nNeem contact op met: {} om dit op te lossen",&env.mail_error_to));
+    let email = Message::builder()
+        .from(format!("WEBCOM ICAL <{}>", &env.mail_from).parse()?)
+        .to(format!("{} <{}>", name, &env.mail_to).parse()?)
+        .subject("INLOGGEN WEBCOM NIET GELUKT!")
+        .header(ContentType::TEXT_PLAIN)
+        .body(body)?;
+    mailer.send(&email)?;
+    Ok(())
+}
+
+pub fn send_sign_in_succesful(name: &str) -> GenResult<()>{
+    let send_failed_sign_in = EnvMailVariables::str_to_bool(&var("SEND_MAIL_SIGNIN_FAILED").unwrap_or("false".to_string()));
+    if !send_failed_sign_in {return Ok(());}
+    let env = EnvMailVariables::new()?;
+    let mailer = load_mailer(&env)?;
+    let body = "Beste,\n\nGoed nieuws, Webcom Ical was weer in staat in te loggen. Je diensten zullen weer ingeladen worden!".to_string();
+    let email = Message::builder()
+        .from(format!("WEBCOM ICAL <{}>", &env.mail_from).parse()?)
+        .to(format!("{} <{}>", name, &env.mail_to).parse()?)
+        .subject("INLOGGEN WEBCOM NIET GELUKT!")
         .header(ContentType::TEXT_PLAIN)
         .body(body)?;
     mailer.send(&email)?;

@@ -35,7 +35,6 @@ pub mod gebroken_shifts;
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
-
 #[derive(Debug, Serialize, Deserialize,Clone)]
 pub struct IncorrectCredentialsCount {
     retry_count: usize,
@@ -640,6 +639,8 @@ Loads the main logic, and retries if it fails
 #[tokio::main]
 async fn main() -> WebDriverResult<()> {
     dotenv_override().ok();
+    let version= var("CARGO_PKG_VERSION").unwrap();
+    println!("Starting Webcom Ical version {version}");
     let mut error_reason = FailureType::OK;
     let heartbeat_url = var("HEARTBEAT_URL").ok();
     let driver = match initiate_webdriver().await {

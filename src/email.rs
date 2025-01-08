@@ -287,13 +287,14 @@ pub fn send_welcome_mail(path: &PathBuf, username: &str, name: &str) -> GenResul
     Ok(())
 }
 
-pub fn send_failed_signin_mail(name: &str, error: &IncorrectCredentialsCount) -> GenResult<()>{
+pub fn send_failed_signin_mail(name: &str, error: &IncorrectCredentialsCount, first_time: bool) -> GenResult<()>{
     let send_failed_sign_in = EnvMailVariables::str_to_bool(&var("SEND_MAIL_SIGNIN_FAILED").unwrap_or("false".to_string()));
     if !send_failed_sign_in {return Ok(());}
     println!("Sending failed sign in mail");
     let env = EnvMailVariables::new()?;
     let mailer = load_mailer(&env)?;
-    let mut body = format!("Beste,\n\nWebcom Ical was niet in staat in te loggen op webcom, hierdoor is het al {} keer niet gelukt om je shifts in te laden\nDe fout is:\n\n",error.retry_count+1);
+    let still_not_working_modifier = if first_time {""} else {"nog steeds "};
+    let mut body = format!("Beste,\n\nWebcom Ical was {}niet in staat in te loggen op webcom, hierdoor is het al {} keer niet gelukt om je shifts in te laden\nDe fout is:\n\n",still_not_working_modifier,error.retry_count);
     body.push_str(match &error.error{
         None => "Een onbekende fout...",
         Some(SignInFailure::IncorrectCredentials) => "Incorrecte inloggegevens, heb je misschien je wachtwoord veranderd?",
@@ -314,6 +315,7 @@ pub fn send_failed_signin_mail(name: &str, error: &IncorrectCredentialsCount) ->
 pub fn send_sign_in_succesful(name: &str) -> GenResult<()>{
     let send_failed_sign_in = EnvMailVariables::str_to_bool(&var("SEND_MAIL_SIGNIN_FAILED").unwrap_or("false".to_string()));
     if !send_failed_sign_in {return Ok(());}
+    println!("Sending succesful sign in mail");
     let env = EnvMailVariables::new()?;
     let mailer = load_mailer(&env)?;
     let body = "Beste,\n\nGoed nieuws, Webcom Ical was weer in staat in te loggen. Je diensten zullen weer ingeladen worden!".to_string();

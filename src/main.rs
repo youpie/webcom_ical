@@ -598,13 +598,12 @@ fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>>{
         return_value = None;           
     }
     else{
-        println!("Skipped execution due to sign in error");
+        println!("Skipped execution due to previous sign in error");
         failure_counter.retry_count += 1;
         return_value = Some(failure_counter.error.clone().unwrap());
     }
-
-    if failure_counter.retry_count % resend_error_mail_count == 0 && failure_counter.error.is_some() {
-        email::send_failed_signin_mail(username, &failure_counter)?;
+    if failure_counter.retry_count % resend_error_mail_count == 0 && failure_counter.error.is_some(){
+        email::send_failed_signin_mail(username, &failure_counter,false)?;
     }
     save_sign_in_failure_count(path, &failure_counter)?;
     Ok(return_value)
@@ -617,10 +616,15 @@ fn sign_in_failed_update(username: &str, failed: bool, failure_type: Option<Sign
     if failed == true{
         failure_counter.retry_count += 1;
         failure_counter.error = failure_type;
+        if failure_counter.retry_count == 1 {
+            email::send_failed_signin_mail(username, &failure_counter, true)?;
+        }
     }
     // if failed == false, reset counter
     else if failed == false{
+        println!("not failed!");
         if failure_counter.error.is_some() {
+            println!("Sign in succesful again!");
             email::send_sign_in_succesful(username)?;
         }
         failure_counter.retry_count = 0;

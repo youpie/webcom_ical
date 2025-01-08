@@ -577,8 +577,8 @@ fn save_sign_in_failure_count(path: &Path, counter: &IncorrectCredentialsCount) 
 
 // If returning true, continue execution
 fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>>{
-    let resend_error_mail_count: usize = var("SIGNIN_FAIL_MAIL_REPEAT").unwrap_or("2".to_string()).parse().unwrap_or(2);
-    let sign_in_attempt_reduce: usize = var("SIGNIN_FAILED_REDUCE").unwrap_or("1".to_string()).parse().unwrap_or(1);
+    let resend_error_mail_count: usize = var("SIGNIN_FAIL_MAIL_REPEAT").unwrap_or("10".to_string()).parse().unwrap_or(2);
+    let sign_in_attempt_reduce: usize = var("SIGNIN_FAILED_REDUCE").unwrap_or("2".to_string()).parse().unwrap_or(1);
     let path = Path::new("./sign_in_failure_count.toml");
     let mut failure_counter = match load_sign_in_failure_count(path){
         Ok(value) => value,
@@ -593,7 +593,7 @@ fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>>{
         return_value = None;
     }
     else if failure_counter.retry_count % sign_in_attempt_reduce == 0 {
-
+        println!("Continuing execution with sign in error, reduce val: {sign_in_attempt_reduce}, current count {}",failure_counter.retry_count);
         failure_counter.retry_count += 1;
         return_value = None;           
     }
@@ -614,15 +614,14 @@ fn sign_in_failed_update(username: &str, failed: bool, failure_type: Option<Sign
     let mut failure_counter = load_sign_in_failure_count(path)?;
     // if failed == true, set increment counter and set error
     if failed == true{
-        failure_counter.retry_count += 1;
         failure_counter.error = failure_type;
-        if failure_counter.retry_count == 1 {
+        if failure_counter.retry_count == 0{
+            failure_counter.retry_count += 1;
             email::send_failed_signin_mail(username, &failure_counter, true)?;
         }
     }
     // if failed == false, reset counter
     else if failed == false{
-        println!("not failed!");
         if failure_counter.error.is_some() {
             println!("Sign in succesful again!");
             email::send_sign_in_succesful(username)?;

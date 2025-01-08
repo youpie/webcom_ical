@@ -639,7 +639,7 @@ Loads the main logic, and retries if it fails
 #[tokio::main]
 async fn main() -> WebDriverResult<()> {
     dotenv_override().ok();
-    let version= var("CARGO_PKG_VERSION").unwrap();
+    let version= var("CARGO_PKG_VERSION").unwrap_or("onbekend".to_string());
     println!("Starting Webcom Ical version {version}");
     let mut error_reason = FailureType::OK;
     let heartbeat_url = var("HEARTBEAT_URL").ok();

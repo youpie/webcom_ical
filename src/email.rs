@@ -288,7 +288,7 @@ pub fn send_welcome_mail(path: &PathBuf, username: &str, name: &str) -> GenResul
 }
 
 pub fn send_failed_signin_mail(name: &str, error: &IncorrectCredentialsCount, first_time: bool) -> GenResult<()>{
-    let send_failed_sign_in = EnvMailVariables::str_to_bool(&var("SEND_MAIL_SIGNIN_FAILED").unwrap_or("false".to_string()));
+    let send_failed_sign_in = EnvMailVariables::str_to_bool(&var("SEND_MAIL_SIGNIN_FAILED").unwrap_or("true".to_string()));
     if !send_failed_sign_in {return Ok(());}
     println!("Sending failed sign in mail");
     let env = EnvMailVariables::new()?;
@@ -313,7 +313,7 @@ pub fn send_failed_signin_mail(name: &str, error: &IncorrectCredentialsCount, fi
 }
 
 pub fn send_sign_in_succesful(name: &str) -> GenResult<()>{
-    let send_failed_sign_in = EnvMailVariables::str_to_bool(&var("SEND_MAIL_SIGNIN_FAILED").unwrap_or("false".to_string()));
+    let send_failed_sign_in = EnvMailVariables::str_to_bool(&var("SEND_MAIL_SIGNIN_FAILED").unwrap_or("true".to_string()));
     if !send_failed_sign_in {return Ok(());}
     println!("Sending succesful sign in mail");
     let env = EnvMailVariables::new()?;

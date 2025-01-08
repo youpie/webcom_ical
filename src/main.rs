@@ -577,7 +577,7 @@ fn save_sign_in_failure_count(path: &Path, counter: &IncorrectCredentialsCount) 
 
 // If returning true, continue execution
 fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>>{
-    let resend_error_mail_count: usize = var("SIGNIN_FAIL_MAIL_REPEAT").unwrap_or("10".to_string()).parse().unwrap_or(2);
+    let resend_error_mail_count: usize = var("SIGNIN_FAIL_MAIL_REPEAT").unwrap_or("24".to_string()).parse().unwrap_or(2);
     let sign_in_attempt_reduce: usize = var("SIGNIN_FAILED_REDUCE").unwrap_or("2".to_string()).parse().unwrap_or(1);
     let path = Path::new("./sign_in_failure_count.toml");
     let mut failure_counter = match load_sign_in_failure_count(path){

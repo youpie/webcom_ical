@@ -42,6 +42,12 @@ pub struct IncorrectCredentialsCount {
     error: Option<SignInFailure>,
 }
 
+impl IncorrectCredentialsCount{
+    fn new() -> Self{
+        Self{retry_count: 0, error: None}
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 enum SignInFailure {
     TooManyTries,
@@ -562,8 +568,8 @@ fn load_sign_in_failure_count(path: &Path) -> GenResult<IncorrectCredentialsCoun
     Ok(failure_counter)
 }
 
-fn save_sign_in_failure_count(path: &Path, counter: IncorrectCredentialsCount) -> GenResult<()> {
-    let failure_counter_serialised = toml::to_string(&counter)?;
+fn save_sign_in_failure_count(path: &Path, counter: &IncorrectCredentialsCount) -> GenResult<()> {
+    let failure_counter_serialised = toml::to_string(counter)?;
     let mut output = File::create(path)?;
     write!(output, "{}", failure_counter_serialised)?;
     Ok(())
@@ -571,25 +577,37 @@ fn save_sign_in_failure_count(path: &Path, counter: IncorrectCredentialsCount) -
 
 // If returning true, continue execution
 fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>>{
-    let resend_error_mail_count: usize = var("SIGN_IN_FAIL_MAIL_REPEAT").unwrap_or("1".to_string()).parse().unwrap_or(1);
-    let sign_in_attempt_reduce: usize = var("SIGN_IN_FAILED_REDUCE").unwrap_or("1".to_string()).parse().unwrap_or(1);
+    let resend_error_mail_count: usize = var("SIGNIN_FAIL_MAIL_REPEAT").unwrap_or("2".to_string()).parse().unwrap_or(2);
+    let sign_in_attempt_reduce: usize = var("SIGNIN_FAILED_REDUCE").unwrap_or("1".to_string()).parse().unwrap_or(1);
     let path = Path::new("./sign_in_failure_count.toml");
-    let mut failure_counter = load_sign_in_failure_count(path)?;
+    let mut failure_counter = match load_sign_in_failure_count(path){
+        Ok(value) => value,
+        Err(_) => {
+            let new = IncorrectCredentialsCount::new();
+            save_sign_in_failure_count(path, &new)?;
+            new}
+    };
+    let return_value: Option<SignInFailure>;
+    // else check if retry counter == reduce_ammount, if not, stop running
+    if failure_counter.retry_count == 0 {
+        return_value = None;
+    }
+    else if failure_counter.retry_count % sign_in_attempt_reduce == 0 {
+
+        failure_counter.retry_count += 1;
+        return_value = None;           
+    }
+    else{
+        println!("Skipped execution due to sign in error");
+        failure_counter.retry_count += 1;
+        return_value = Some(failure_counter.error.clone().unwrap());
+    }
+
     if failure_counter.retry_count % resend_error_mail_count == 0 && failure_counter.error.is_some() {
         email::send_failed_signin_mail(username, &failure_counter)?;
     }
-    // else check if retry counter == reduce_ammount, if not, stop running
-    if failure_counter.retry_count == 0 {
-        return Ok(None);
-    }
-    else if failure_counter.retry_count % sign_in_attempt_reduce == 0 {
-        return Ok(None);            
-    }
-    else {
-        failure_counter.retry_count += 1;
-        save_sign_in_failure_count(path, failure_counter.clone())?;
-        return Ok(Some(failure_counter.error.unwrap()));
-    }
+    save_sign_in_failure_count(path, &failure_counter)?;
+    Ok(return_value)
 }
 
 fn sign_in_failed_update(username: &str, failed: bool, failure_type: Option<SignInFailure>) -> GenResult<()>{
@@ -608,7 +626,7 @@ fn sign_in_failed_update(username: &str, failed: bool, failure_type: Option<Sign
         failure_counter.retry_count = 0;
         failure_counter.error = None;
     }
-    save_sign_in_failure_count(path, failure_counter)?;
+    save_sign_in_failure_count(path, &failure_counter)?;
     Ok(())
 }
 
@@ -655,6 +673,7 @@ async fn main() -> WebDriverResult<()> {
                 Some(FailureType::SignInFailed(y)) => {
                     retry_count = max_retry_count;
                     sign_in_failed_update(&username,true, Some(y.clone())).unwrap();
+                    error_reason = FailureType::SignInFailed(y.to_owned());
                     println!("Inloggen niet succesvol, fout: {:?}",y)
                 },
                 _ => {println!(

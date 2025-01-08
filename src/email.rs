@@ -290,6 +290,7 @@ pub fn send_welcome_mail(path: &PathBuf, username: &str, name: &str) -> GenResul
 pub fn send_failed_signin_mail(name: &str, error: &IncorrectCredentialsCount) -> GenResult<()>{
     let send_failed_sign_in = EnvMailVariables::str_to_bool(&var("SEND_MAIL_SIGNIN_FAILED").unwrap_or("false".to_string()));
     if !send_failed_sign_in {return Ok(());}
+    println!("Sending failed sign in mail");
     let env = EnvMailVariables::new()?;
     let mailer = load_mailer(&env)?;
     let mut body = format!("Beste,\n\nWebcom Ical was niet in staat in te loggen op webcom, hierdoor is het al {} keer niet gelukt om je shifts in te laden\nDe fout is:\n\n",error.retry_count+1);
@@ -319,7 +320,7 @@ pub fn send_sign_in_succesful(name: &str) -> GenResult<()>{
     let email = Message::builder()
         .from(format!("WEBCOM ICAL <{}>", &env.mail_from).parse()?)
         .to(format!("{} <{}>", name, &env.mail_to).parse()?)
-        .subject("INLOGGEN WEBCOM NIET GELUKT!")
+        .subject("Webcom Ical kan weer inloggen!")
         .header(ContentType::TEXT_PLAIN)
         .body(body)?;
     mailer.send(&email)?;

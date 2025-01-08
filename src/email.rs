@@ -23,7 +23,7 @@ pub struct EnvMailVariables {
     send_mail_updated_shift: bool,
     send_error_mail: bool,
 }
-const ERROR_VALUE: &str = "Foutje gemaakt oops";
+const ERROR_VALUE: &str = "HIER HOORT WAT ANDERS DAN DEZE TEKST TE STAAN, CONFIGURATIE INCORRECT";
 
 /*
 Loads all env variables needed for sending mails

@@ -256,7 +256,7 @@ async fn check_sign_in_error(driver: &WebDriver) -> GenResult<FailureType>{
             return Ok(FailureType::SignInFailed(sign_in_error_type));}
         Err(_) => {println!("Geen fount banner gevonden")}
     };
-    Ok(FailureType::OK)
+    Ok(FailureType::SignInFailed(SignInFailure::Other("Geen idee waarom er niet ingelogd kon worden".to_string())))
 }
 
 fn get_sign_in_error_type(text: &str) -> SignInFailure {
@@ -675,10 +675,16 @@ async fn main() -> WebDriverResult<()> {
             Err(x) => {
                 match x.downcast_ref::<FailureType>(){
                 Some(FailureType::SignInFailed(y)) => {
-                    retry_count = max_retry_count;
-                    sign_in_failed_update(&username,true, Some(y.clone())).unwrap();
-                    error_reason = FailureType::SignInFailed(y.to_owned());
-                    println!("Inloggen niet succesvol, fout: {:?}",y)
+                    // Do not stop webcom if the sign in failure reason is unknown
+                    if let SignInFailure::Other(x) = y{
+                        println!("Kon niet inloggen, maar een onbekende fout: {}. Probeert opnieuw",x)
+                    }
+                    else{
+                        retry_count = max_retry_count;
+                        sign_in_failed_update(&username,true, Some(y.clone())).unwrap();
+                        error_reason = FailureType::SignInFailed(y.to_owned());
+                        println!("Inloggen niet succesvol, fout: {:?}",y)
+                    }
                 },
                 _ => {println!(
                     "Fout tijdens shift laden, opnieuw proberen, poging: {}. Fout: {}",

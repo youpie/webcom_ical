@@ -119,23 +119,24 @@ fn find_send_shift_mails(
     )?;
 
     // Track shifts by start date
-    let previous_by_start: std::collections::HashMap<_, _> = previous_shifts
+    let previous_shifts_by_start_date: std::collections::HashMap<_, _> = previous_shifts
         .iter()
         .map(|shift| (shift.date, shift))
         .collect();
-
+    let mut removed_shifts_list = previous_shifts_by_start_date.clone();
     // Iterate through the current shifts to check for updates or new shifts
     for current_shift in current_shifts {
         if current_shift.date < current_date {
             continue; // Skip old shifts
         }
 
-        match previous_by_start.get(&current_shift.date) {
+        match previous_shifts_by_start_date.get(&current_shift.date) {
             Some(previous_shift) => {
                 // If the shift exists, compare its full details for updates
                 if current_shift.magic_number != previous_shift.magic_number {
                     updated_shifts.push(current_shift.clone());
                 }
+                removed_shifts_list.remove_entry(&current_shift.date);
             }
             None => {
                 // It's a new shift
@@ -209,6 +210,10 @@ Duur: {} uur {} minuten",
         .header(ContentType::TEXT_PLAIN)
         .body(email_body)?;
     mailer.send(&email)?;
+    Ok(())
+}
+
+fn send_removed_shifts_mail(removed_shifts: Vec<Shift>) -> GenResult<()>{
     Ok(())
 }
 

@@ -256,7 +256,7 @@ async fn check_sign_in_error(driver: &WebDriver) -> GenResult<FailureType>{
             return Ok(FailureType::SignInFailed(sign_in_error_type));}
         Err(_) => {println!("Geen fount banner gevonden")}
     };
-    Ok(FailureType::SignInFailed(SignInFailure::Other("Geen idee waarom er niet ingelogd kon worden".to_string())))
+    Ok(FailureType::OK)
 }
 
 fn get_sign_in_error_type(text: &str) -> SignInFailure {

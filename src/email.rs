@@ -343,8 +343,8 @@ pub fn send_welcome_mail(path: &PathBuf, username: &str, name: &str) -> GenResul
     let mut body = format!("Welkom bij Webcom Ical {}!\n\nJe shifts zijn voor het eerst succesvol ingeladen. De link om deze in te laden is: \n{}\nOoit staat hier ook een uitleg om deze link toe te voegen aan je agenda, maar voor nu moet je het zelf uitzoeken :)",name,ical_url);
     if ical_username != "" {
         body.push_str(&format!(
-            "\n\nInloggegevens website:\nUsername:{}\nPassword{}",
-            ical_username, ical_password
+            "\n\nInloggegevens agenda:\nUsername:{}\nPassword{}\n\nAls je een link wil zonder authenticatie. Stuur een mail naar {}",
+            ical_username, ical_password,&env.mail_error_to
         ));
     }
     println!("welkom mail sturen {ical_username}");

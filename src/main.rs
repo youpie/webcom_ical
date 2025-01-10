@@ -463,7 +463,7 @@ pub async fn wait_until_loaded(driver: &WebDriver) -> GenResult<()> {
                 .unwrap();
             let current_state = format!("{:?}", ready_state.json());
             if current_state == "String(\"complete\")" && started_loading {
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 return Ok::<(), WebDriverError>(());
             }
             if current_state == "String(\"loading\")" {
@@ -500,50 +500,6 @@ async fn wait_untill_redirect(driver: &WebDriver) -> GenResult<()> {
     println!("Redirected to: {}", current_url);
     wait_until_loaded(driver).await?;
     Ok(())
-}
-
-// Main program logic that has to run, if it fails it will all be reran.
-async fn main_program(
-    driver: &WebDriver,
-    username: &str,
-    password: &str,
-) -> GenResult<()> {
-    driver.delete_all_cookies().await?;
-    // let main_url = format!(
-    //     "https://dmz-wbc-web0{}.connexxion.nl/WebComm/default.aspx",
-    //     (retry_count % 2) + 1
-    // );
-    let main_url = format!("webcom.connexxion.nl");
-    println!("Loading site: {}..",main_url);
-    driver
-        .goto(main_url)
-        .await?;
-    wait_untill_redirect(&driver).await?;
-    let name = load_calendar(&driver, &username, &password).await?;
-    wait_until_loaded(&driver).await?;
-    let mut shifts = load_current_month_shifts(&driver, name.clone()).await?;
-    shifts.append(&mut load_previous_month_shifts(&driver, name.clone()).await?);
-    shifts.append(&mut load_next_month_shifts(&driver, name.clone()).await?);
-    println!("Found {} shifts", shifts.len());
-    email::send_emails(&shifts)?;
-    save_shifts_on_disk(&shifts, Path::new("./previous_shifts.toml"))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
-    let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
-    let shifts = gebroken_shifts::split_night_shift(&shifts);
-    let calendar = create_ical(&shifts);
-    let ical_path = PathBuf::from(&format!("{}{}.ics", var("SAVE_TARGET")?, username));
-    email::send_welcome_mail(&ical_path,username, &name)?;
-    let mut output = File::create(&ical_path)?;
-    println!("Writing to: {:?}", &ical_path);
-    write!(output, "{}", calendar)?;
-    
-    Ok(())
-}
-
-async fn initiate_webdriver() -> GenResult<WebDriver> {
-    let gecko_ip = var("GECKO_IP")?;
-    let caps = DesiredCapabilities::firefox();
-    let driver = WebDriver::new(format!("http://{}", gecko_ip), caps).await?;
-    Ok(driver)
 }
 
 async fn heartbeat(reason: FailureType, url: Option<String>) -> GenResult<()> {
@@ -630,6 +586,50 @@ fn sign_in_failed_update(username: &str, failed: bool, failure_type: Option<Sign
     }
     save_sign_in_failure_count(path, &failure_counter)?;
     Ok(())
+}
+
+// Main program logic that has to run, if it fails it will all be reran.
+async fn main_program(
+    driver: &WebDriver,
+    username: &str,
+    password: &str,
+) -> GenResult<()> {
+    driver.delete_all_cookies().await?;
+    // let main_url = format!(
+    //     "https://dmz-wbc-web0{}.connexxion.nl/WebComm/default.aspx",
+    //     (retry_count % 2) + 1
+    // );
+    let main_url = format!("webcom.connexxion.nl");
+    println!("Loading site: {}..",main_url);
+    driver
+        .goto(main_url)
+        .await?;
+    wait_untill_redirect(&driver).await?;
+    let name = load_calendar(&driver, &username, &password).await?;
+    wait_until_loaded(&driver).await?;
+    let mut shifts = load_current_month_shifts(&driver, name.clone()).await?;
+    shifts.append(&mut load_previous_month_shifts(&driver, name.clone()).await?);
+    shifts.append(&mut load_next_month_shifts(&driver, name.clone()).await?);
+    println!("Found {} shifts", shifts.len());
+    email::send_emails(&shifts)?;
+    save_shifts_on_disk(&shifts, Path::new("./previous_shifts.toml"))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
+    let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
+    let shifts = gebroken_shifts::split_night_shift(&shifts);
+    let calendar = create_ical(&shifts);
+    let ical_path = PathBuf::from(&format!("{}{}.ics", var("SAVE_TARGET")?, username));
+    email::send_welcome_mail(&ical_path,username, &name)?;
+    let mut output = File::create(&ical_path)?;
+    println!("Writing to: {:?}", &ical_path);
+    write!(output, "{}", calendar)?;
+    
+    Ok(())
+}
+
+async fn initiate_webdriver() -> GenResult<WebDriver> {
+    let gecko_ip = var("GECKO_IP")?;
+    let caps = DesiredCapabilities::firefox();
+    let driver = WebDriver::new(format!("http://{}", gecko_ip), caps).await?;
+    Ok(driver)
 }
 
 /*

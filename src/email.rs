@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    fmt::Display,
+    path::{Path, PathBuf},
+};
 
 use dotenvy::var;
 use lettre::{
@@ -123,10 +126,11 @@ fn find_send_shift_mails(
         .iter()
         .map(|shift| (shift.date, shift))
         .collect();
-    let mut removed_shifts_list = previous_shifts_by_start_date.clone();
+    let mut removed_shifts_dict = previous_shifts_by_start_date.clone();
     // Iterate through the current shifts to check for updates or new shifts
     for current_shift in current_shifts {
         if current_shift.date < current_date {
+            removed_shifts_dict.remove_entry(&current_shift.date);
             continue; // Skip old shifts
         }
 
@@ -136,7 +140,7 @@ fn find_send_shift_mails(
                 if current_shift.magic_number != previous_shift.magic_number {
                     updated_shifts.push(current_shift.clone());
                 }
-                removed_shifts_list.remove_entry(&current_shift.date);
+                removed_shifts_dict.remove_entry(&current_shift.date);
             }
             None => {
                 // It's a new shift
@@ -151,6 +155,10 @@ fn find_send_shift_mails(
 
     if !updated_shifts.is_empty() && env.send_mail_updated_shift {
         create_send_new_email(mailer, &updated_shifts, env, true)?;
+    }
+    let removed_shifts: Vec<Shift> = removed_shifts_dict.values().cloned().cloned().collect();
+    if !removed_shifts.is_empty() && env.send_mail_updated_shift {
+        send_removed_shifts_mail(mailer, env, &removed_shifts)?;
     }
 
     Ok(updated_shifts)
@@ -213,8 +221,55 @@ Duur: {} uur {} minuten",
     Ok(())
 }
 
-fn send_removed_shifts_mail(removed_shifts: Vec<Shift>) -> GenResult<()>{
+fn send_removed_shifts_mail(
+    mailer: &SmtpTransport,
+    env: &EnvMailVariables,
+    removed_shifts: &Vec<Shift>,
+) -> GenResult<()> {
+    let date_description = format_description!("[day]-[month]-[year]");
+    let time_description = format_description!("[hour]:[minute]");
+    println!("Sending removed shifts mail");
+    let enkelvoud_meervoud = if removed_shifts.len() == 1 {
+        "is"
+    } else {
+        "zijn"
+    };
+    let email_shift_s = if removed_shifts.len() == 1 { "" } else { "en" };
+    let name = &removed_shifts.last().unwrap().name;
+    let mut body = format!("Beste {},\n\n{} dienst{} {} weggehaald van jouw rooster.\nJe hoeft op deze dag{} niet meer te werken:",name,removed_shifts.len(),email_shift_s, enkelvoud_meervoud,email_shift_s);
+    for shift in removed_shifts {
+        body.push_str(&format!(
+            "\nDienst {}
+Datum: {}
+Begintijd: {}
+Eindtijd: {}\n",
+            strikethrough(&shift.number),
+            strikethrough(shift.date.format(date_description)?),
+            strikethrough(&shift.start.format(time_description)?),
+            strikethrough(&shift.end.format(time_description)?),
+        ));
+    }
+    let email = Message::builder()
+        .from(format!("Peter <{}>", &env.mail_from).parse()?)
+        .to(format!("{} <{}>", &name, &env.mail_to).parse()?)
+        .subject(&format!(
+            "{} dienst{} {} verwijderd",
+            removed_shifts.len(),
+            email_shift_s,
+            enkelvoud_meervoud
+        ))
+        .header(ContentType::TEXT_PLAIN)
+        .body(body)?;
+    mailer.send(&email)?;
     Ok(())
+}
+
+fn strikethrough<T: Display>(input: T) -> String {
+    let input_str = format!("{input}");
+    input_str
+        .chars()
+        .map(|c| format!("{}{}", c, '\u{0336}'))
+        .collect()
 }
 
 /*
@@ -254,7 +309,10 @@ pub fn send_gecko_error_mail<T: std::fmt::Debug>(error: WebDriverResult<T>) -> G
     }
     let mailer = load_mailer(&env)?;
     let mut email_errors = "!!! KAN NIET VERBINDEN MET GECKO !!!\n".to_string();
-    email_errors.push_str(&format!("Error: \n{}\n\n", error.err().unwrap().to_string()));
+    email_errors.push_str(&format!(
+        "Error: \n{}\n\n",
+        error.err().unwrap().to_string()
+    ));
     let email = Message::builder()
         .from(format!("Foutje Berichtmans <{}>", &env.mail_from).parse()?)
         .to(format!("{} <{}>", "user", &env.mail_error_to).parse()?)
@@ -265,48 +323,69 @@ pub fn send_gecko_error_mail<T: std::fmt::Debug>(error: WebDriverResult<T>) -> G
     Ok(())
 }
 
-pub fn send_welcome_mail(path: &PathBuf, username: &str, name: &str) -> GenResult<()>{
-    if path.exists() {return Ok(());}
-    let send_welcome_mail = EnvMailVariables::str_to_bool(&var("SEND_WELCOME_MAIL").unwrap_or("false".to_string()));
-    
-    if !send_welcome_mail {return Ok(());}
-    
+pub fn send_welcome_mail(path: &PathBuf, username: &str, name: &str) -> GenResult<()> {
+    if path.exists() {
+        return Ok(());
+    }
+    let send_welcome_mail =
+        EnvMailVariables::str_to_bool(&var("SEND_WELCOME_MAIL").unwrap_or("false".to_string()));
+
+    if !send_welcome_mail {
+        return Ok(());
+    }
+
     let env = EnvMailVariables::new()?;
     let mailer = load_mailer(&env)?;
     let domain = var("DOMAIN").unwrap_or(ERROR_VALUE.to_string());
     let ical_username = var("ICAL_USER").unwrap_or(ERROR_VALUE.to_string());
     let ical_password = var("ICAL_PASS").unwrap_or(ERROR_VALUE.to_string());
-    let ical_url = format!("{}/{}.ics",domain,username);
+    let ical_url = format!("{}/{}.ics", domain, username);
     let mut body = format!("Welkom bij Webcom Ical {}!\n\nJe shifts zijn voor het eerst succesvol ingeladen. De link om deze in te laden is: \n{}\nOoit staat hier ook een uitleg om deze link toe te voegen aan je agenda, maar voor nu moet je het zelf uitzoeken :)",name,ical_url);
     if ical_username != "" {
-        body.push_str(&format!("\n\nInloggegevens website:\nUsername:{}\nPassword{}",ical_username,ical_password));
+        body.push_str(&format!(
+            "\n\nInloggegevens website:\nUsername:{}\nPassword{}",
+            ical_username, ical_password
+        ));
     }
     println!("welkom mail sturen {ical_username}");
     let email = Message::builder()
         .from(format!("Peter <{}>", &env.mail_from).parse()?)
         .to(format!("{} <{}>", name, &env.mail_to).parse()?)
-        .subject(&format!("Welkom bij Webcom Ical {}!",name))
+        .subject(&format!("Welkom bij Webcom Ical {}!", name))
         .header(ContentType::TEXT_PLAIN)
         .body(body)?;
     mailer.send(&email)?;
     Ok(())
 }
 
-pub fn send_failed_signin_mail(name: &str, error: &IncorrectCredentialsCount, first_time: bool) -> GenResult<()>{
-    let send_failed_sign_in = EnvMailVariables::str_to_bool(&var("SEND_MAIL_SIGNIN_FAILED").unwrap_or("true".to_string()));
-    if !send_failed_sign_in {return Ok(());}
+pub fn send_failed_signin_mail(
+    name: &str,
+    error: &IncorrectCredentialsCount,
+    first_time: bool,
+) -> GenResult<()> {
+    let send_failed_sign_in = EnvMailVariables::str_to_bool(
+        &var("SEND_MAIL_SIGNIN_FAILED").unwrap_or("true".to_string()),
+    );
+    if !send_failed_sign_in {
+        return Ok(());
+    }
     println!("Sending failed sign in mail");
     let env = EnvMailVariables::new()?;
     let mailer = load_mailer(&env)?;
-    let still_not_working_modifier = if first_time {""} else {"nog steeds "};
+    let still_not_working_modifier = if first_time { "" } else { "nog steeds " };
     let mut body = format!("Beste,\n\nWebcom Ical was {}niet in staat in te loggen op webcom, hierdoor is het al {} keer niet gelukt om je shifts in te laden\nDe fout is:\n\n",still_not_working_modifier,error.retry_count);
-    body.push_str(match &error.error{
+    body.push_str(match &error.error {
         None => "Een onbekende fout...",
-        Some(SignInFailure::IncorrectCredentials) => "Incorrecte inloggegevens, heb je misschien je wachtwoord veranderd?",
+        Some(SignInFailure::IncorrectCredentials) => {
+            "Incorrecte inloggegevens, heb je misschien je wachtwoord veranderd?"
+        }
         Some(SignInFailure::TooManyTries) => "Te veel incorrecte inlogpogingen...",
-        Some(SignInFailure::Other(fault)) => fault
+        Some(SignInFailure::Other(fault)) => fault,
     });
-    body.push_str(&format!("\n\nNeem contact op met: {} om dit op te lossen",&env.mail_error_to));
+    body.push_str(&format!(
+        "\n\nNeem contact op met: {} om dit op te lossen",
+        &env.mail_error_to
+    ));
     let email = Message::builder()
         .from(format!("WEBCOM ICAL <{}>", &env.mail_from).parse()?)
         .to(format!("{} <{}>", name, &env.mail_to).parse()?)
@@ -317,9 +396,13 @@ pub fn send_failed_signin_mail(name: &str, error: &IncorrectCredentialsCount, fi
     Ok(())
 }
 
-pub fn send_sign_in_succesful(name: &str) -> GenResult<()>{
-    let send_failed_sign_in = EnvMailVariables::str_to_bool(&var("SEND_MAIL_SIGNIN_FAILED").unwrap_or("true".to_string()));
-    if !send_failed_sign_in {return Ok(());}
+pub fn send_sign_in_succesful(name: &str) -> GenResult<()> {
+    let send_failed_sign_in = EnvMailVariables::str_to_bool(
+        &var("SEND_MAIL_SIGNIN_FAILED").unwrap_or("true".to_string()),
+    );
+    if !send_failed_sign_in {
+        return Ok(());
+    }
     println!("Sending succesful sign in mail");
     let env = EnvMailVariables::new()?;
     let mailer = load_mailer(&env)?;

@@ -4,7 +4,7 @@ services:
     image: docker.io/library/webcom_ical
     volumes:
       - .env:/usr/src/webcom_ical/.env
-      - {% if unsecured == "true" %}{{save_target}}{% else %}{{save_target_unsecure}}{% endif %}:/usr/src/webcom_ical/calendar/
+      - {% if unsecured == "false" %}{{save_target}}{% else %}{{save_target_unsecure}}{% endif %}:/usr/src/webcom_ical/calendar/
     depends_on:
       - gecko_driver
   gecko_driver:

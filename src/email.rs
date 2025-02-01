@@ -156,8 +156,9 @@ fn find_send_shift_mails(
     if !updated_shifts.is_empty() && env.send_mail_updated_shift {
         create_send_new_email(mailer, &updated_shifts, env, true)?;
     }
-    let removed_shifts: Vec<Shift> = removed_shifts_dict.values().cloned().cloned().collect();
+    let mut removed_shifts: Vec<Shift> = removed_shifts_dict.values().cloned().cloned().collect();
     if !removed_shifts.is_empty() && env.send_mail_updated_shift {
+        removed_shifts.retain(|shift| shift.date >= current_date);
         send_removed_shifts_mail(mailer, env, &removed_shifts)?;
     }
 

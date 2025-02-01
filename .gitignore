@@ -5,3 +5,4 @@ previous_shifts.toml
 sign_in_failure_count.toml
 /calendar/*
 *.pdf
+/ansible/group_vars/all.yml

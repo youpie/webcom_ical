@@ -1,0 +1,66 @@
+# playbook.yml
+---
+- name: Create new webcom ical
+  vars_files:
+      - group_vars/all.yml
+  vars_prompt:
+    - name: personeelsnummer
+      prompt: "Voer personeelsnummer in"
+      private: no
+
+    - name: wachtwoord
+      prompt: "Voer wachtwoord in"
+      private: yes
+      
+    - name: mail_to
+      prompt: "Waar moet de email naartoe"
+      private: no
+
+    - name: hearbeat_url
+      prompt: "Enter heartbeat URL (zonder ?*)"
+      private: no
+    
+    - name: use_email
+      prompt: "Use email (*true*/false)"
+      private: no
+      default: "true"
+      
+    - name: new_shift
+      prompt: "Mail on new shift (*true*/false)"
+      private: no
+      default: "true"
+      
+    - name: update_shift
+      prompt: "Mail on updated shifts (*true*/false)"
+      private: no
+      default: "true"
+      
+    - name: welcome_mail
+      prompt: "Mail on first use (*true*/false)"
+      private: no
+      default: "true"
+      
+    - name: unsecured
+      prompt: "Save ical unsecure? (true/*false*)"
+      private: no
+      default: "false"
+
+  tasks:
+    - name: Create user directory
+      ansible.builtin.file:
+        path: "~/Services/webcom/{{ username }}"
+        state: directory
+
+    - name: Create .env file from template
+      ansible.builtin.template:
+        src: templates/env.j2
+        dest: "~/Services/webcom/{{ username }}/.env"
+
+    - name: Create docker-compose.yml from template
+      ansible.builtin.template:
+        src: templates/docker-compose.j2
+        dest: "~/Services/webcom/{{ username }}/docker-compose.yml"
+
+    - name: Start Docker containers
+      community.docker.docker_compose_v2:
+        project_src: "~/Services/webcom/{{ username }}"

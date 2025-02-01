@@ -46,11 +46,6 @@
       private: no
       default: "true"
 
-    - name: cron_interval
-      prompt: "op welke minuut van het uur moet het programma draaien"
-      private: no
-      default: "0"
-
   tasks:
     - name: Create user directory
       ansible.builtin.file:

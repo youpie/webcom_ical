@@ -7,3 +7,4 @@ ical_domain:
 unsecured_domain:
 ical_username:
 ical_password:
+remote_username:

@@ -1,6 +1,7 @@
 # playbook.yml
 ---
 - name: Create new webcom ical
+  hosts: servers
   vars_files:
       - group_vars/all.yml
   vars_prompt:
@@ -45,22 +46,35 @@
       private: no
       default: "true"
 
+    - name: cron_interval
+      prompt: "op welke minuut van het uur moet het programma draaien"
+      private: no
+      default: "0"
+
   tasks:
     - name: Create user directory
       ansible.builtin.file:
-        path: "~/Services/webcom/{{ personeelsnummer }}"
+        path: "~/Services/Webcom/{{ personeelsnummer }}"
         state: directory
 
     - name: Create .env file from template
       ansible.builtin.template:
         src: templates/env.j2
-        dest: "~/Services/webcom/{{ personeelsnummer }}/.env"
+        dest: "~/Services/Webcom/{{ personeelsnummer }}/.env"
 
     - name: Create docker-compose.yml from template
       ansible.builtin.template:
         src: templates/docker-compose.yml.j2
-        dest: "~/Services/webcom/{{ personeelsnummer }}/docker-compose.yml"
+        dest: "~/Services/Webcom/{{ personeelsnummer }}/docker-compose.yml"
 
-    # - name: Start Docker containers
-    #   community.docker.docker_compose_v2:
-    #     project_src: "~/Services/webcom/{{ personeelsnummer }}"
+    - name: Start Docker containers
+      community.docker.docker_compose_v2:
+        project_src: "~/Services/Webcom/{{ personeelsnummer }}"
+
+    - name: Add cron job to start Docker container every hour
+      ansible.builtin.cron:
+        name: "Start Docker container for {{ personeelsnummer }}"
+        user: "{{remote_user}}"
+        minute: "{{cron_interval}}"
+        hour: "*/1"
+        job: "docker start docker start webcom_{{personeelsnummer}}-webcom_ical-1 >/dev/null 2>&1"

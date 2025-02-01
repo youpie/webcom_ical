@@ -7,4 +7,6 @@ ical_domain:
 unsecured_domain:
 ical_username:
 ical_password:
+save_target:
+save_target_unsecure:
 remote_username:

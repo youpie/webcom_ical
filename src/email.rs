@@ -1,6 +1,5 @@
 use std::{
-    fmt::Display,
-    path::{Path, PathBuf},
+    fmt::Display, path::{Path, PathBuf}
 };
 
 use dotenvy::var;
@@ -157,6 +156,7 @@ fn find_send_shift_mails(
         create_send_new_email(mailer, &updated_shifts, env, true)?;
     }
     let mut removed_shifts: Vec<Shift> = removed_shifts_dict.values().cloned().cloned().collect();
+    removed_shifts.retain(|shift| shift.date >= current_date);
     if !removed_shifts.is_empty() && env.send_mail_updated_shift {
         removed_shifts.retain(|shift| shift.date >= current_date);
         send_removed_shifts_mail(mailer, env, &removed_shifts)?;
@@ -324,8 +324,8 @@ pub fn send_gecko_error_mail<T: std::fmt::Debug>(error: WebDriverResult<T>) -> G
     Ok(())
 }
 
-pub fn send_welcome_mail(path: &PathBuf, username: &str, name: &str) -> GenResult<()> {
-    if path.exists() {
+pub fn send_welcome_mail(path: &PathBuf, username: &str, name: &str, updated_link: bool) -> GenResult<()> {
+    if path.exists() && !updated_link {
         return Ok(());
     }
     let send_welcome_mail =
@@ -341,18 +341,29 @@ pub fn send_welcome_mail(path: &PathBuf, username: &str, name: &str) -> GenResul
     let ical_username = var("ICAL_USER").unwrap_or(ERROR_VALUE.to_string());
     let ical_password = var("ICAL_PASS").unwrap_or(ERROR_VALUE.to_string());
     let ical_url = format!("{}/{}.ics", domain, username);
-    let mut body = format!("Welkom bij Webcom Ical {}!\n\nJe shifts zijn voor het eerst succesvol ingeladen. De link om deze in te laden is: \n{}\nOoit staat hier ook een uitleg om deze link toe te voegen aan je agenda, maar voor nu moet je het zelf uitzoeken :)",name,ical_url);
+    let mut body;
+    if updated_link {
+        body = format!("Hey {}!\n\nDe link om bij je agenda te komen is geüpdate, de oude link zal niet meer geupdate worden.\nDe nieuwe link is: {}",name,ical_url);
+    }
+    else {
+        body = format!("Welkom bij Webcom Ical {}!\n\nJe shifts zijn voor het eerst succesvol ingeladen. De link om deze in je agenda te laden is: \n{}\nOoit staat hier ook een uitleg om deze link toe te voegen aan je agenda, maar voor nu moet je het zelf uitzoeken :)",name,ical_url);
+    }
     if ical_username != "" {
         body.push_str(&format!(
-            "\n\nInloggegevens agenda:\nUsername:{}\nPassword{}\n\nAls je een link wil zonder authenticatie. Stuur een mail naar {}",
+            "\n\nInloggegevens agenda:\nUsername: {}\nPassword: {}\n\nAls je een link wil zonder authenticatie. Stuur een mail naar {}",
             ical_username, ical_password,&env.mail_error_to
         ));
     }
-    println!("welkom mail sturen {ical_username}");
+
+    let subject = match updated_link {
+        true => "Je Webcom Ical agenda link is veranderd",
+        false => &format!("Welkom bij Webcom Ical {}!", name)
+    };
+    println!("welkom mail sturen");
     let email = Message::builder()
         .from(format!("Peter <{}>", &env.mail_from).parse()?)
         .to(format!("{} <{}>", name, &env.mail_to).parse()?)
-        .subject(&format!("Welkom bij Webcom Ical {}!", name))
+        .subject(subject)
         .header(ContentType::TEXT_PLAIN)
         .body(body)?;
     mailer.send(&email)?;

@@ -74,7 +74,8 @@
     - name: Add cron job to start Docker container every hour
       ansible.builtin.cron:
         name: "Start Docker container for {{ personeelsnummer }}"
-        user: "{{remote_user}}"
-        minute: "{{cron_interval}}"
+        user: "{{remote_username}}"
+        minute: "{{59 | random}}"
         hour: "*/1"
-        job: "docker start docker start webcom_{{personeelsnummer}}-webcom_ical-1 >/dev/null 2>&1"
+        job: "docker start webcom_{{personeelsnummer}}-webcom_ical-1 >/dev/null 2>&1"
+      when: remote_username != ""

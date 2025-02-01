@@ -7,3 +7,4 @@ sign_in_failure_count.toml
 *.pdf
 /ansible/group_vars/all.yml
 /ansible/inventory.ini
+previous_domain

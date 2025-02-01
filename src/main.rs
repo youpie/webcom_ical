@@ -4,6 +4,7 @@ use chrono::NaiveTime;
 use dotenvy::dotenv_override;
 use dotenvy::var;
 use email::send_errors;
+use email::send_welcome_mail;
 use gebroken_shifts::navigate_to_subdirectory;
 use gebroken_shifts::wait_for_response;
 use icalendar::Calendar;
@@ -530,6 +531,27 @@ fn save_sign_in_failure_count(path: &Path, counter: &IncorrectCredentialsCount) 
     Ok(())
 }
 
+fn check_domain_update(ical_path: &PathBuf, shift: &Shift, name: &str) {
+    let previous_domain;
+    let path = "./previous_domain";
+    match std::fs::read_to_string(path){
+        Ok(x) => {println!("{}",&x);
+            previous_domain=Some(x)}, 
+        Err(_) => previous_domain = None,
+    }
+    let current_domain = var("DOMAIN").unwrap_or("".to_string());
+    if let Some(previous_domain_unwrap) = previous_domain {
+        if previous_domain_unwrap != current_domain {
+            let _ = send_welcome_mail(ical_path, &name, &shift.name, true);
+        }
+    }
+    match File::create(path){
+        Ok(mut file) => {let _ = write!(file, "{}",current_domain);},
+        Err(_) => ()
+    }
+    
+}
+
 // If returning true, continue execution
 fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>>{
     let resend_error_mail_count: usize = var("SIGNIN_FAIL_MAIL_REPEAT").unwrap_or("24".to_string()).parse().unwrap_or(2);
@@ -617,7 +639,8 @@ async fn main_program(
     let shifts = gebroken_shifts::split_night_shift(&shifts);
     let calendar = create_ical(&shifts);
     let ical_path = PathBuf::from(&format!("{}{}.ics", var("SAVE_TARGET")?, username));
-    email::send_welcome_mail(&ical_path,username, &name)?;
+    email::send_welcome_mail(&ical_path,username, &name,false)?;
+    check_domain_update(&ical_path, &shifts.last().unwrap(), &name);
     let mut output = File::create(&ical_path)?;
     println!("Writing to: {:?}", &ical_path);
     write!(output, "{}", calendar)?;

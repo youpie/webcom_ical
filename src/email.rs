@@ -22,6 +22,10 @@ const TIME_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
 const DATE_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
     format_description!("[day]-[month]-[year]");
 
+const COLOR_BLUE: &str = "#1a5fb4";
+const COLOR_RED: &str = "#a51d2d";
+const COLOR_GREEN: &str = "#26a269";
+
 trait StrikethroughString {
     fn strikethrough(&self) -> String;
 }
@@ -228,7 +232,10 @@ fn create_send_new_email(
         single_plural => email_shift_s.to_string(),
         shift_tables => shift_tables.to_string()
     )?;
-    let email_body_html = strfmt!(&base_html, content => changed_mail_html)?;
+    let email_body_html = strfmt!(&base_html, 
+        content => changed_mail_html,
+        banner_color => COLOR_BLUE
+    )?;
 
     let email = Message::builder()
         .from(format!("Peter <{}>", &env.mail_from).parse()?)
@@ -281,7 +288,10 @@ fn send_removed_shifts_mail(
         single_plural => enkelvoud_meervoud,
         shift_tables
     )?;
-    let email_body_html = strfmt!(&base_html, content => removed_shift_html)?;
+    let email_body_html = strfmt!(&base_html, 
+        content => removed_shift_html,
+        banner_color => COLOR_BLUE
+    )?;
     let email = Message::builder()
         .from(format!("{} <{}>",SENDER_NAME, &env.mail_from).parse()?)
         .to(format!("{} <{}>", &name, &env.mail_to).parse()?)
@@ -385,7 +395,8 @@ pub fn send_welcome_mail(
         auth_credentials => if ical_username.is_empty() {String::new()} else {auth_html}
     )?;
     let email_body_html = strfmt!(&base_html,
-        content => onboarding_html
+        content => onboarding_html,
+        banner_color => COLOR_BLUE
     )?;
 
     let subject = match updated_link {
@@ -439,7 +450,8 @@ pub fn send_failed_signin_mail(
         admin_email => env.mail_error_to.clone()
     )?;
     let email_body_html = strfmt!(&base_html, 
-        content => login_failure_html
+        content => login_failure_html,
+        banner_color => COLOR_RED
     )?;
 
     let email = Message::builder()
@@ -467,7 +479,8 @@ pub fn send_sign_in_succesful(name: &str) -> GenResult<()> {
     let env = EnvMailVariables::new()?;
     let mailer = load_mailer(&env)?;
     let email_body_html = strfmt!(&base_html, 
-        content => login_success_html
+        content => login_success_html,
+        banner_color => COLOR_GREEN
     )?;
     
     let email = Message::builder()

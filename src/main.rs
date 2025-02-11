@@ -215,7 +215,7 @@ fn create_shift_link(shift: &Shift) -> GenResult<String> {
             shift.date.format(date_format)?
         ));
     }
-    let shift_number_bare= shift.number.split("-").nth(0).unwrap();
+    let shift_number_bare= shift.number.split("-").next().unwrap();
     Ok(format!("{domain}{shift_number_bare}"))
 }
 
@@ -223,8 +223,8 @@ fn create_shift_link(shift: &Shift) -> GenResult<String> {
 // Uses A LOT of unwraps, so can easilly fail. :)
 fn get_time(str_time: &str) -> Time {
     let mut time_split = str_time.split(":");
-    let mut hour: u8 = time_split.clone().nth(0).unwrap().parse().unwrap();
-    let min: u8 = time_split.nth(1).unwrap().parse().unwrap();
+    let mut hour: u8 = time_split.clone().next().unwrap().parse().unwrap();
+    let min: u8 = time_split.next().unwrap().parse().unwrap();
     if hour >= 24 {
         hour = hour - 24;
     }
@@ -256,7 +256,7 @@ async fn sign_in_webcom(driver: &WebDriver, user: &str, pass: &str) -> GenResult
     let name = name_text
         .split(",")
         .last()
-        .unwrap().split_whitespace().nth(0).unwrap()
+        .unwrap().split_whitespace().next().unwrap()
         .to_string();
     Ok(name)
 }
@@ -328,7 +328,7 @@ async fn get_elements(
         if !text.is_empty() && text.contains("Dienstduur") {
             // println!("Loading shift: {:?}", &text);
             let dag_text = element.find(By::Tag("strong")).await?.text().await?;
-            let dag_text_split = dag_text.split_whitespace().nth(0).unwrap();
+            let dag_text_split = dag_text.split_whitespace().next().unwrap();
 
             // println!("dag {}", &dag_text);
             let dag: u8 = dag_text_split.parse().unwrap();

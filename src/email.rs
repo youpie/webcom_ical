@@ -16,6 +16,19 @@ use crate::{create_shift_link, IncorrectCredentialsCount, Shift, Shifts, SignInF
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
+trait StrikethroughString {
+    fn strikethrough(&self) -> String;
+}
+
+impl StrikethroughString for String {
+    fn strikethrough(&self) -> String {
+    self
+            .chars()
+            .map(|c| format!("{}{}", c, '\u{0336}'))
+            .collect()
+    }
+}
+
 pub struct EnvMailVariables {
     smtp_server: String,
     smtp_username: String,
@@ -236,6 +249,9 @@ fn send_removed_shifts_mail(
     env: &EnvMailVariables,
     removed_shifts: &Vec<Shift>,
 ) -> GenResult<()> {
+    let base_html = fs::read_to_string("./templates/email_base.html")?;
+    let removed_shift_html = fs::read_to_string("./templates/removed_shift_base.html")?;
+    let shift_table = fs::read_to_string("./templates/shift_table.html")?;
     println!("Sending removed shifts mail");
     let enkelvoud_meervoud = if removed_shifts.len() == 1 {
         "is"
@@ -244,19 +260,27 @@ fn send_removed_shifts_mail(
     };
     let email_shift_s = if removed_shifts.len() == 1 { "" } else { "en" };
     let name = &removed_shifts.last().unwrap().name;
-    let mut body = format!("Beste {},\n\n{} dienst{} {} weggehaald van jouw rooster.\nJe hoeft op deze dag{} niet meer te werken:",name,removed_shifts.len(),email_shift_s, enkelvoud_meervoud,email_shift_s);
+    let mut shift_tables = String::new();
     for shift in removed_shifts {
-        body.push_str(&format!(
-            "\nDienst {}
-Datum: {}
-Begintijd: {}
-Eindtijd: {}\n",
-            strikethrough(&shift.number),
-            strikethrough(shift.date.format(DATE_DESCRIPTION)?),
-            strikethrough(&shift.start.format(TIME_DESCRIPTION)?),
-            strikethrough(&shift.end.format(TIME_DESCRIPTION)?),
-        ));
+        let shift_table_clone = strfmt!(&shift_table,
+            shift_number => shift.number.clone().strikethrough(),
+            shift_date => shift.date.format(DATE_DESCRIPTION)?.to_string().strikethrough(),
+            shift_start => shift.start.format(TIME_DESCRIPTION)?.to_string().strikethrough(),
+            shift_end => shift.end.format(TIME_DESCRIPTION)?.to_string().strikethrough(),
+            shift_duration_hour => shift.duration.whole_hours().to_string().strikethrough(),
+            shift_duration_minute => (shift.duration.whole_minutes() % 60).to_string().strikethrough(),
+            shift_link => create_shift_link(shift)?
+        )?;
+        shift_tables.push_str(&shift_table_clone);
     }
+    let removed_shift_html = strfmt!(&removed_shift_html,
+        name.clone(),
+        shift_changed_ammount => removed_shifts.len().to_string(), 
+        single_plural_en => email_shift_s, 
+        single_plural => enkelvoud_meervoud,
+        shift_tables
+    )?;
+    let email_body_html = strfmt!(&base_html, content => removed_shift_html)?;
     let email = Message::builder()
         .from(format!("Peter <{}>", &env.mail_from).parse()?)
         .to(format!("{} <{}>", &name, &env.mail_to).parse()?)
@@ -266,18 +290,10 @@ Eindtijd: {}\n",
             email_shift_s,
             enkelvoud_meervoud
         ))
-        .header(ContentType::TEXT_PLAIN)
-        .body(body)?;
+        .header(ContentType::TEXT_HTML)
+        .body(email_body_html)?;
     mailer.send(&email)?;
     Ok(())
-}
-
-fn strikethrough<T: Display>(input: T) -> String {
-    let input_str = format!("{input}");
-    input_str
-        .chars()
-        .map(|c| format!("{}{}", c, '\u{0336}'))
-        .collect()
 }
 
 /*

@@ -4,7 +4,6 @@ use lettre::{
     SmtpTransport, Transport,
 };
 use std::{
-    fmt::Display,
     fs,
     path::{Path, PathBuf},
 };
@@ -15,6 +14,13 @@ use time::{macros::format_description, Date};
 use crate::{create_shift_link, IncorrectCredentialsCount, Shift, Shifts, SignInFailure};
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
+
+const ERROR_VALUE: &str = "HIER HOORT WAT ANDERS DAN DEZE TEKST TE STAAN, CONFIGURATIE INCORRECT";
+const SENDER_NAME: &str = "Peter";
+const TIME_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
+    format_description!("[hour]:[minute]");
+const DATE_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
+    format_description!("[day]-[month]-[year]");
 
 trait StrikethroughString {
     fn strikethrough(&self) -> String;
@@ -40,11 +46,6 @@ pub struct EnvMailVariables {
     send_mail_updated_shift: bool,
     send_error_mail: bool,
 }
-const ERROR_VALUE: &str = "HIER HOORT WAT ANDERS DAN DEZE TEKST TE STAAN, CONFIGURATIE INCORRECT";
-const TIME_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
-    format_description!("[hour]:[minute]");
-const DATE_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
-    format_description!("[day]-[month]-[year]");
 
 /*
 Loads all env variables needed for sending mails
@@ -282,7 +283,7 @@ fn send_removed_shifts_mail(
     )?;
     let email_body_html = strfmt!(&base_html, content => removed_shift_html)?;
     let email = Message::builder()
-        .from(format!("Peter <{}>", &env.mail_from).parse()?)
+        .from(format!("{} <{}>",SENDER_NAME, &env.mail_from).parse()?)
         .to(format!("{} <{}>", &name, &env.mail_to).parse()?)
         .subject(&format!(
             "{} dienst{} {} verwijderd",
@@ -363,24 +364,29 @@ pub fn send_welcome_mail(
         return Ok(());
     }
 
+    let base_html = fs::read_to_string("./templates/email_base.html")?;
+    let onboarding_html = fs::read_to_string("./templates/onboarding_base.html")?;
+    let auth_html = fs::read_to_string("./templates/onboarding_auth.html")?;
+
     let env = EnvMailVariables::new()?;
     let mailer = load_mailer(&env)?;
     let domain = var("DOMAIN").unwrap_or(ERROR_VALUE.to_string());
     let ical_username = var("ICAL_USER").unwrap_or(ERROR_VALUE.to_string());
     let ical_password = var("ICAL_PASS").unwrap_or(ERROR_VALUE.to_string());
     let ical_url = format!("{}/{}.ics", domain, username);
-    let mut body;
-    if updated_link {
-        body = format!("Hey {}!\n\nDe link om bij je agenda te komen is geüpdate, de oude link zal niet meer geupdate worden.\nDe nieuwe link is: {}",name,ical_url);
-    } else {
-        body = format!("Welkom bij Webcom Ical {}!\n\nJe shifts zijn voor het eerst succesvol ingeladen. De link om deze in je agenda te laden is: \n{}\nOoit staat hier ook een uitleg om deze link toe te voegen aan je agenda, maar voor nu moet je het zelf uitzoeken :)",name,ical_url);
-    }
-    if ical_username != "" {
-        body.push_str(&format!(
-            "\n\nInloggegevens agenda:\nUsername: {}\nPassword: {}\n\nAls je een link wil zonder authenticatie. Stuur een mail naar {}",
-            ical_username, ical_password,&env.mail_error_to
-        ));
-    }
+
+    let auth_html = strfmt!(&auth_html, 
+        auth_username => ical_username.clone(), 
+        auth_password => ical_password.clone(), 
+        admin_email => env.mail_error_to.clone())?;
+    let onboarding_html = strfmt!(&onboarding_html, 
+        name.to_string(),
+        agenda_url => ical_url,
+        auth_credentials => if ical_username.is_empty() {String::new()} else {auth_html}
+    )?;
+    let email_body_html = strfmt!(&base_html,
+        content => onboarding_html
+    )?;
 
     let subject = match updated_link {
         true => "Je Webcom Ical agenda link is veranderd",
@@ -388,11 +394,11 @@ pub fn send_welcome_mail(
     };
     println!("welkom mail sturen");
     let email = Message::builder()
-        .from(format!("Peter <{}>", &env.mail_from).parse()?)
+        .from(format!("{} <{}>",SENDER_NAME, &env.mail_from).parse()?)
         .to(format!("{} <{}>", name, &env.mail_to).parse()?)
         .subject(subject)
-        .header(ContentType::TEXT_PLAIN)
-        .body(body)?;
+        .header(ContentType::TEXT_HTML)
+        .body(email_body_html)?;
     mailer.send(&email)?;
     Ok(())
 }
@@ -408,29 +414,40 @@ pub fn send_failed_signin_mail(
     if !send_failed_sign_in {
         return Ok(());
     }
+
+    let base_html = fs::read_to_string("./templates/email_base.html")?;
+    let login_failure_html = fs::read_to_string("./templates/failed_signin.html")?;
+
     println!("Sending failed sign in mail");
     let env = EnvMailVariables::new()?;
     let mailer = load_mailer(&env)?;
     let still_not_working_modifier = if first_time { "" } else { "nog steeds " };
-    let mut body = format!("Beste,\n\nWebcom Ical was {}niet in staat in te loggen op webcom, hierdoor is het al {} keer niet gelukt om je shifts in te laden\nDe fout is:\n\n",still_not_working_modifier,error.retry_count);
-    body.push_str(match &error.error {
+
+    let verbose_error = match &error.error {
         None => "Een onbekende fout...",
         Some(SignInFailure::IncorrectCredentials) => {
             "Incorrecte inloggegevens, heb je misschien je wachtwoord veranderd?"
         }
         Some(SignInFailure::TooManyTries) => "Te veel incorrecte inlogpogingen...",
         Some(SignInFailure::Other(fault)) => fault,
-    });
-    body.push_str(&format!(
-        "\n\nNeem contact op met: {} om dit op te lossen",
-        &env.mail_error_to
-    ));
+    };
+
+    let login_failure_html = strfmt!(&login_failure_html, 
+        still_not_working_modifier,
+        retry_counter => error.retry_count,
+        signin_error => verbose_error.to_string(),
+        admin_email => env.mail_error_to.clone()
+    )?;
+    let email_body_html = strfmt!(&base_html, 
+        content => login_failure_html
+    )?;
+
     let email = Message::builder()
         .from(format!("WEBCOM ICAL <{}>", &env.mail_from).parse()?)
         .to(format!("{} <{}>", name, &env.mail_to).parse()?)
         .subject("INLOGGEN WEBCOM NIET GELUKT!")
-        .header(ContentType::TEXT_PLAIN)
-        .body(body)?;
+        .header(ContentType::TEXT_HTML)
+        .body(email_body_html)?;
     mailer.send(&email)?;
     Ok(())
 }
@@ -442,16 +459,23 @@ pub fn send_sign_in_succesful(name: &str) -> GenResult<()> {
     if !send_failed_sign_in {
         return Ok(());
     }
+
+    let base_html = fs::read_to_string("./templates/email_base.html")?;
+    let login_success_html = fs::read_to_string("./templates/signin_succesful.html")?;
+
     println!("Sending succesful sign in mail");
     let env = EnvMailVariables::new()?;
     let mailer = load_mailer(&env)?;
-    let body = "Beste,\n\nGoed nieuws, Webcom Ical was weer in staat in te loggen. Je diensten zullen weer ingeladen worden!".to_string();
+    let email_body_html = strfmt!(&base_html, 
+        content => login_success_html
+    )?;
+    
     let email = Message::builder()
         .from(format!("WEBCOM ICAL <{}>", &env.mail_from).parse()?)
         .to(format!("{} <{}>", name, &env.mail_to).parse()?)
         .subject("Webcom Ical kan weer inloggen!")
-        .header(ContentType::TEXT_PLAIN)
-        .body(body)?;
+        .header(ContentType::TEXT_HTML)
+        .body(email_body_html)?;
     mailer.send(&email)?;
     Ok(())
 }

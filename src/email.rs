@@ -1,12 +1,14 @@
-use std::{
-    fmt::Display, path::{Path, PathBuf}
-};
-
 use dotenvy::var;
 use lettre::{
     message::header::ContentType, transport::smtp::authentication::Credentials, Message,
     SmtpTransport, Transport,
 };
+use std::{
+    fmt::Display,
+    fs,
+    path::{Path, PathBuf},
+};
+use strfmt::strfmt;
 use thirtyfour::error::WebDriverResult;
 use time::{macros::format_description, Date};
 
@@ -26,6 +28,10 @@ pub struct EnvMailVariables {
     send_error_mail: bool,
 }
 const ERROR_VALUE: &str = "HIER HOORT WAT ANDERS DAN DEZE TEKST TE STAAN, CONFIGURATIE INCORRECT";
+const TIME_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
+    format_description!("[hour]:[minute]");
+const DATE_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
+    format_description!("[day]-[month]-[year]");
 
 /*
 Loads all env variables needed for sending mails
@@ -117,7 +123,7 @@ fn find_send_shift_mails(
     let mut new_shifts_list = Vec::new();
     let current_date: Date = Date::parse(
         &chrono::offset::Local::now().format("%d-%m-%Y").to_string(),
-        format_description!("[day]-[month]-[year]"),
+        DATE_DESCRIPTION,
     )?;
 
     // Track shifts by start date
@@ -176,39 +182,40 @@ fn create_send_new_email(
     env: &EnvMailVariables,
     update: bool,
 ) -> GenResult<()> {
+    let base_html = fs::read_to_string("./templates/email_base.html")?;
+    let mut changed_mail_html = fs::read_to_string("./templates/changed_shift.html")?;
+    let shift_table = fs::read_to_string("./templates/shift_table.html")?;
+
     let email_shift_s = if new_shifts.len() != 1 { "en" } else { "" };
-    let date_description = format_description!("[day]-[month]-[year]");
-    let time_description = format_description!("[hour]:[minute]");
     let name = &new_shifts.first().unwrap().name;
     let new_update_text = match update {
         true => "geupdate",
         false => "nieuwe",
     };
-    let mut email_body: String = format!(
-        "Hoi {}!\n\nJe hebt {} {} dienst{}: ",
-        &name,
-        new_update_text,
-        &new_shifts.len(),
-        email_shift_s
-    );
+
+    let mut shift_tables = String::new();
     for shift in new_shifts {
-        email_body.push_str(&format!(
-            "\n\nDienst {}
-Datum: {}
-Begintijd: {}
-Eindtijd: {}
-Duur: {} uur {} minuten
-Link: {}",
-            shift.number,
-            shift.date.format(date_description)?,
-            shift.start.format(time_description)?,
-            shift.end.format(time_description)?,
-            shift.duration.whole_hours(),
-            shift.duration.whole_minutes() % 60,
-            create_shift_link(shift)?
-        ));
+        let shift_table_clone = strfmt!(&shift_table,
+            shift_number => shift.number.clone(),
+            shift_date => shift.date.format(DATE_DESCRIPTION)?.to_string(),
+            shift_start => shift.start.format(TIME_DESCRIPTION)?.to_string(),
+            shift_end => shift.end.format(TIME_DESCRIPTION)?.to_string(),
+            shift_duration_hour => shift.duration.whole_hours().to_string(),
+            shift_duration_minute => (shift.duration.whole_minutes() % 60).to_string(),
+            shift_link => create_shift_link(shift)?
+        )?;
+        shift_tables.push_str(&shift_table_clone);
     }
-    println!("{}", email_body);
+    changed_mail_html = strfmt!(
+        &changed_mail_html,
+        name => name.clone(),
+        shift_changed_ammount => new_shifts.len().to_string(),
+        new_update => new_update_text.to_string(),
+        single_plural => email_shift_s.to_string(),
+        shift_tables => shift_tables.to_string()
+    )?;
+    let email_body_html = strfmt!(&base_html, content => changed_mail_html)?;
+
     let email = Message::builder()
         .from(format!("Peter <{}>", &env.mail_from).parse()?)
         .to(format!("{} <{}>", &name, &env.mail_to).parse()?)
@@ -218,8 +225,8 @@ Link: {}",
             new_update_text,
             email_shift_s
         ))
-        .header(ContentType::TEXT_PLAIN)
-        .body(email_body)?;
+        .header(ContentType::TEXT_HTML)
+        .body(email_body_html)?;
     mailer.send(&email)?;
     Ok(())
 }
@@ -229,8 +236,6 @@ fn send_removed_shifts_mail(
     env: &EnvMailVariables,
     removed_shifts: &Vec<Shift>,
 ) -> GenResult<()> {
-    let date_description = format_description!("[day]-[month]-[year]");
-    let time_description = format_description!("[hour]:[minute]");
     println!("Sending removed shifts mail");
     let enkelvoud_meervoud = if removed_shifts.len() == 1 {
         "is"
@@ -247,9 +252,9 @@ Datum: {}
 Begintijd: {}
 Eindtijd: {}\n",
             strikethrough(&shift.number),
-            strikethrough(shift.date.format(date_description)?),
-            strikethrough(&shift.start.format(time_description)?),
-            strikethrough(&shift.end.format(time_description)?),
+            strikethrough(shift.date.format(DATE_DESCRIPTION)?),
+            strikethrough(&shift.start.format(TIME_DESCRIPTION)?),
+            strikethrough(&shift.end.format(TIME_DESCRIPTION)?),
         ));
     }
     let email = Message::builder()
@@ -326,7 +331,12 @@ pub fn send_gecko_error_mail<T: std::fmt::Debug>(error: WebDriverResult<T>) -> G
     Ok(())
 }
 
-pub fn send_welcome_mail(path: &PathBuf, username: &str, name: &str, updated_link: bool) -> GenResult<()> {
+pub fn send_welcome_mail(
+    path: &PathBuf,
+    username: &str,
+    name: &str,
+    updated_link: bool,
+) -> GenResult<()> {
     if path.exists() && !updated_link {
         return Ok(());
     }
@@ -346,8 +356,7 @@ pub fn send_welcome_mail(path: &PathBuf, username: &str, name: &str, updated_lin
     let mut body;
     if updated_link {
         body = format!("Hey {}!\n\nDe link om bij je agenda te komen is geüpdate, de oude link zal niet meer geupdate worden.\nDe nieuwe link is: {}",name,ical_url);
-    }
-    else {
+    } else {
         body = format!("Welkom bij Webcom Ical {}!\n\nJe shifts zijn voor het eerst succesvol ingeladen. De link om deze in je agenda te laden is: \n{}\nOoit staat hier ook een uitleg om deze link toe te voegen aan je agenda, maar voor nu moet je het zelf uitzoeken :)",name,ical_url);
     }
     if ical_username != "" {
@@ -359,7 +368,7 @@ pub fn send_welcome_mail(path: &PathBuf, username: &str, name: &str, updated_lin
 
     let subject = match updated_link {
         true => "Je Webcom Ical agenda link is veranderd",
-        false => &format!("Welkom bij Webcom Ical {}!", name)
+        false => &format!("Welkom bij Webcom Ical {}!", name),
     };
     println!("welkom mail sturen");
     let email = Message::builder()

@@ -1544,6 +1544,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "strfmt"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a8348af2d9fc3258c8733b8d9d8db2e56f54b2363a4b5b81585c7875ed65e65"
+
+[[package]]
 name = "stringmatch"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2117,6 +2123,7 @@ dependencies = [
  "lettre",
  "reqwest",
  "serde",
+ "strfmt",
  "thirtyfour",
  "thiserror 2.0.9",
  "time",

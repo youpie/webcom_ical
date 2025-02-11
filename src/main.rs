@@ -206,6 +206,19 @@ impl Shifts {
     }
 }
 
+fn create_shift_link(shift: &Shift) -> GenResult<String> {
+    let domain = var("PDF_SHIFT_DOMAIN").unwrap_or("https://emphisia.nl/shift/".to_string());
+    if domain.is_empty() {
+        let date_format = format_description!("[year]-[month]-[day]");
+        return Ok(format!(
+            "https://dmz-wbc-web01.connexxion.nl/WebComm/shiprint.aspx?{}",
+            shift.date.format(date_format)?
+        ));
+    }
+    let shift_number_bare= shift.number.split("-").nth(0).unwrap();
+    Ok(format!("{domain}{shift_number_bare}"))
+}
+
 // Creates and returns a Time::time from a given string of time eg: 12:34
 // Uses A LOT of unwraps, so can easilly fail. :)
 fn get_time(str_time: &str) -> Time {
@@ -338,11 +351,7 @@ fn create_ical(shifts: &Vec<Shift>) -> String {
         .append_property(("METHOD","PUBLISH")).timezone("Europe/Amsterdam")
         .done();
     for shift in shifts {
-        let date_format = format_description!("[year]-[month]-[day]");
-        let shift_link = format!(
-            "https://dmz-wbc-web01.connexxion.nl/WebComm/shiprint.aspx?{}",
-            shift.date.format(date_format).unwrap()
-        );
+        let shift_link = create_shift_link(shift).unwrap();
         calendar.push(
             Event::new()
                 .summary(&format!("Shift - {}", shift.number))
@@ -641,7 +650,7 @@ async fn main_program(
     let ical_path = PathBuf::from(&format!("{}{}.ics", var("SAVE_TARGET")?, username));
     email::send_welcome_mail(&ical_path,username, &name,false)?;
     check_domain_update(&ical_path, &shifts.last().unwrap(), &name);
-    let mut output = File::create(&ical_path)?;
+    let mut output = File::create(&ical_path).unwrap();
     println!("Writing to: {:?}", &ical_path);
     write!(output, "{}", calendar)?;
     

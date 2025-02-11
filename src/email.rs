@@ -10,7 +10,7 @@ use lettre::{
 use thirtyfour::error::WebDriverResult;
 use time::{macros::format_description, Date};
 
-use crate::{IncorrectCredentialsCount, Shift, Shifts, SignInFailure};
+use crate::{create_shift_link, IncorrectCredentialsCount, Shift, Shifts, SignInFailure};
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -197,13 +197,15 @@ fn create_send_new_email(
 Datum: {}
 Begintijd: {}
 Eindtijd: {}
-Duur: {} uur {} minuten",
+Duur: {} uur {} minuten
+Link: {}",
             shift.number,
             shift.date.format(date_description)?,
             shift.start.format(time_description)?,
             shift.end.format(time_description)?,
             shift.duration.whole_hours(),
-            shift.duration.whole_minutes() % 60
+            shift.duration.whole_minutes() % 60,
+            create_shift_link(shift)?
         ));
     }
     println!("{}", email_body);

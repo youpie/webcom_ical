@@ -224,7 +224,7 @@ fn create_shift_link(shift: &Shift) -> GenResult<String> {
 fn get_time(str_time: &str) -> Time {
     let mut time_split = str_time.split(":");
     let mut hour: u8 = time_split.clone().next().unwrap().parse().unwrap();
-    let min: u8 = time_split.next().unwrap().parse().unwrap();
+    let min: u8 = time_split.nth(1).unwrap().parse().unwrap();
     if hour >= 24 {
         hour = hour - 24;
     }
@@ -639,12 +639,12 @@ async fn main_program(
     let name = load_calendar(&driver, &username, &password).await?;
     wait_until_loaded(&driver).await?;
     let mut shifts = load_current_month_shifts(&driver, name.clone()).await?;
-    shifts.append(&mut load_previous_month_shifts(&driver, name.clone()).await?);
-    shifts.append(&mut load_next_month_shifts(&driver, name.clone()).await?);
+    //shifts.append(&mut load_previous_month_shifts(&driver, name.clone()).await?);
+    //shifts.append(&mut load_next_month_shifts(&driver, name.clone()).await?);
     println!("Found {} shifts", shifts.len());
     email::send_emails(&shifts)?;
     save_shifts_on_disk(&shifts, Path::new("./previous_shifts.toml"))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
-    let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
+    //let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
     let shifts = gebroken_shifts::split_night_shift(&shifts);
     let calendar = create_ical(&shifts);
     let ical_path = PathBuf::from(&format!("{}{}.ics", var("SAVE_TARGET")?, username));

@@ -729,7 +729,7 @@ async fn main() -> WebDriverResult<()> {
                     }
                     else{
                         retry_count = max_retry_count;
-                        sign_in_failed_update(&username,true, Some(y.clone())).unwrap();
+                        println!("{:?}",sign_in_failed_update(&username,true, Some(y.clone())));
                         error_reason = FailureType::SignInFailed(y.to_owned());
                         println!("Inloggen niet succesvol, fout: {:?}",y)
                     }

@@ -14,7 +14,6 @@ use icalendar::Event;
 use icalendar::EventLike;
 use reqwest;
 use serde::{Deserialize, Serialize};
-use std::env;
 use std::fs::File;
 use std::hash::DefaultHasher;
 use std::hash::Hash;
@@ -677,7 +676,6 @@ Loads the main logic, and retries if it fails
 #[tokio::main]
 async fn main() -> WebDriverResult<()> {
     dotenv_override().ok();
-    println!("files in current DIR: {:#?}",env::current_dir().unwrap());
     let version= var("CARGO_PKG_VERSION").unwrap_or("onbekend".to_string());
     println!("Starting Webcom Ical version {version}");
     let mut error_reason = FailureType::OK;

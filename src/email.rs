@@ -390,7 +390,7 @@ pub fn send_welcome_mail(
         auth_password => ical_password.clone(), 
         admin_email => env.mail_error_to.clone())?;
     let onboarding_html = strfmt!(&onboarding_html, 
-        name.to_string(),
+        name => name.to_string(),
         agenda_url => ical_url,
         auth_credentials => if ical_username.is_empty() {String::new()} else {auth_html}
     )?;

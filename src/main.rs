@@ -687,6 +687,7 @@ Loads the main logic, and retries if it fails
 #[tokio::main]
 async fn main() -> WebDriverResult<()> {
     dotenv_override().ok();
+    println!("files in current DIR: {:#?}",std::fs::read_dir("./").unwrap());
     let version= var("CARGO_PKG_VERSION").unwrap_or("onbekend".to_string());
     println!("Starting Webcom Ical version {version}");
     let mut error_reason = FailureType::OK;

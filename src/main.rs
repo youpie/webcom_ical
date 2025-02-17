@@ -619,14 +619,14 @@ fn sign_in_failed_update(username: &str, failed: bool, failure_type: Option<Sign
         failure_counter.error = failure_type;
         if failure_counter.retry_count == 0{
             failure_counter.retry_count += 1;
-            email::send_failed_signin_mail(username, &failure_counter, true)?;
+            email::send_failed_signin_mail(username, &failure_counter, true).unwrap();
         }
     }
     // if failed == false, reset counter
     else if failed == false{
         if failure_counter.error.is_some() {
             println!("Sign in succesful again!");
-            email::send_sign_in_succesful(username)?;
+            email::send_sign_in_succesful(username).unwrap();
         }
         failure_counter.retry_count = 0;
         failure_counter.error = None;
@@ -729,7 +729,7 @@ async fn main() -> WebDriverResult<()> {
                     }
                     else{
                         retry_count = max_retry_count;
-                        println!("{:?}",sign_in_failed_update(&username,true, Some(y.clone())));
+                        sign_in_failed_update(&username,true, Some(y.clone())).unwrap();
                         error_reason = FailureType::SignInFailed(y.to_owned());
                         println!("Inloggen niet succesvol, fout: {:?}",y)
                     }

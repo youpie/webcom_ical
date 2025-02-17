@@ -528,29 +528,33 @@ async fn heartbeat(reason: FailureType, url: Option<String>) -> GenResult<()> {
     Ok(())
 }
 
+// Loads the sign in failure counter. Creates it if it does not exist
 fn load_sign_in_failure_count(path: &Path) -> GenResult<IncorrectCredentialsCount> {
     let failure_count_toml = match std::fs::read_to_string(path) {
         Ok(file_string) => file_string,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             println!("Failure counter not found, creating file..");
-            let mut newfile = File::create(path)?;
+            let mut newfile = File::create(path).unwrap();
             let new_counter = toml::to_string(&IncorrectCredentialsCount::new())?;
-            write!(&mut newfile,"{}",&new_counter)?;
+            write!(&mut newfile,"{}",&new_counter).unwrap();
             new_counter
         }
-        Err(error) => return Err(Box::new(error))
+        Err(_error) => return Err(Box::new(WebDriverError::FatalError("kon bestand niet laden".to_string())))
     };
     let failure_counter: IncorrectCredentialsCount = toml::from_str(&failure_count_toml)?;
     Ok(failure_counter)
 }
 
+// Save the sign in faulure count file
 fn save_sign_in_failure_count(path: &Path, counter: &IncorrectCredentialsCount) -> GenResult<()> {
     let failure_counter_serialised = toml::to_string(counter)?;
-    let mut output = File::create(path)?;
+    let mut output = File::create(path).unwrap();
     write!(output, "{}", failure_counter_serialised)?;
     Ok(())
 }
 
+// This is a pretty useless function. It checks if the DOMAIN env variable was changed since last time the program was run
+// It is just to send a new welcome mail
 fn check_domain_update(ical_path: &PathBuf, shift: &Shift, name: &str) {
     let previous_domain;
     let path = "./previous_domain";
@@ -577,6 +581,7 @@ fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>>{
     let resend_error_mail_count: usize = var("SIGNIN_FAIL_MAIL_REPEAT").unwrap_or("24".to_string()).parse().unwrap_or(2);
     let sign_in_attempt_reduce: usize = var("SIGNIN_FAILED_REDUCE").unwrap_or("2".to_string()).parse().unwrap_or(1);
     let path = Path::new("./sign_in_failure_count.toml");
+    // Load the existing counter, create a new one if one doesnt exist yet
     let mut failure_counter = match load_sign_in_failure_count(path){
         Ok(value) => value,
         Err(_) => {

@@ -530,17 +530,7 @@ async fn heartbeat(reason: FailureType, url: Option<String>) -> GenResult<()> {
 
 // Loads the sign in failure counter. Creates it if it does not exist
 fn load_sign_in_failure_count(path: &Path) -> GenResult<IncorrectCredentialsCount> {
-    let failure_count_toml = match std::fs::read_to_string(path) {
-        Ok(file_string) => file_string,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            println!("Failure counter not found, creating file..");
-            let mut newfile = File::create(path).unwrap();
-            let new_counter = toml::to_string(&IncorrectCredentialsCount::new())?;
-            write!(&mut newfile,"{}",&new_counter).unwrap();
-            new_counter
-        }
-        Err(_error) => return Err(Box::new(WebDriverError::FatalError("kon bestand niet laden".to_string())))
-    };
+    let failure_count_toml = std::fs::read_to_string(path)?;
     let failure_counter: IncorrectCredentialsCount = toml::from_str(&failure_count_toml)?;
     Ok(failure_counter)
 }
@@ -613,25 +603,25 @@ fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>>{
 
 fn sign_in_failed_update(username: &str, failed: bool, failure_type: Option<SignInFailure>) -> GenResult<()>{
     let path = Path::new("./sign_in_failure_count.toml");
-    let mut failure_counter = load_sign_in_failure_count(path).unwrap();
+    let mut failure_counter = load_sign_in_failure_count(path)?;
     // if failed == true, set increment counter and set error
     if failed == true{
         failure_counter.error = failure_type;
         if failure_counter.retry_count == 0{
             failure_counter.retry_count += 1;
-            email::send_failed_signin_mail(username, &failure_counter, true).unwrap();
+            email::send_failed_signin_mail(username, &failure_counter, true)?;
         }
     }
     // if failed == false, reset counter
     else if failed == false{
         if failure_counter.error.is_some() {
             println!("Sign in succesful again!");
-            email::send_sign_in_succesful(username).unwrap();
+            email::send_sign_in_succesful(username)?;
         }
         failure_counter.retry_count = 0;
         failure_counter.error = None;
     }
-    save_sign_in_failure_count(path, &failure_counter).unwrap();
+    save_sign_in_failure_count(path, &failure_counter)?;
     Ok(())
 }
 

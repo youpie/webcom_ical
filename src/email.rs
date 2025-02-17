@@ -200,9 +200,9 @@ fn create_send_new_email(
     env: &EnvMailVariables,
     update: bool,
 ) -> GenResult<()> {
-    let base_html = fs::read_to_string("./templates/email_base.html")?;
-    let mut changed_mail_html = fs::read_to_string("./templates/changed_shift.html")?;
-    let shift_table = fs::read_to_string("./templates/shift_table.html")?;
+    let base_html = fs::read_to_string("./templates/email_base.html").unwrap();
+    let mut changed_mail_html = fs::read_to_string("./templates/changed_shift.html").unwrap();
+    let shift_table = fs::read_to_string("./templates/shift_table.html").unwrap();
 
     let email_shift_s = if new_shifts.len() != 1 { "en" } else { "" };
     let name = &new_shifts.first().unwrap().name;
@@ -257,9 +257,9 @@ fn send_removed_shifts_mail(
     env: &EnvMailVariables,
     removed_shifts: &Vec<Shift>,
 ) -> GenResult<()> {
-    let base_html = fs::read_to_string("./templates/email_base.html")?;
-    let removed_shift_html = fs::read_to_string("./templates/removed_shift_base.html")?;
-    let shift_table = fs::read_to_string("./templates/shift_table.html")?;
+    let base_html = fs::read_to_string("./templates/email_base.html").unwrap();
+    let removed_shift_html = fs::read_to_string("./templates/removed_shift_base.html").unwrap();
+    let shift_table = fs::read_to_string("./templates/shift_table.html").unwrap();
     println!("Sending removed shifts mail");
     let enkelvoud_meervoud = if removed_shifts.len() == 1 {
         "is"
@@ -374,9 +374,9 @@ pub fn send_welcome_mail(
         return Ok(());
     }
 
-    let base_html = fs::read_to_string("./templates/email_base.html")?;
-    let onboarding_html = fs::read_to_string("./templates/onboarding_base.html")?;
-    let auth_html = fs::read_to_string("./templates/onboarding_auth.html")?;
+    let base_html = fs::read_to_string("./templates/email_base.html").unwrap();
+    let onboarding_html = fs::read_to_string("./templates/onboarding_base.html").unwrap();
+    let auth_html = fs::read_to_string("./templates/onboarding_auth.html").unwrap();
 
     let env = EnvMailVariables::new()?;
     let mailer = load_mailer(&env)?;
@@ -426,8 +426,8 @@ pub fn send_failed_signin_mail(
         return Ok(());
     }
 
-    let base_html = fs::read_to_string("./templates/email_base.html")?;
-    let login_failure_html = fs::read_to_string("./templates/failed_signin.html")?;
+    let base_html = fs::read_to_string("./templates/email_base.html").unwrap();
+    let login_failure_html = fs::read_to_string("./templates/failed_signin.html").unwrap();
 
     println!("Sending failed sign in mail");
     let env = EnvMailVariables::new()?;
@@ -472,8 +472,8 @@ pub fn send_sign_in_succesful(name: &str) -> GenResult<()> {
         return Ok(());
     }
 
-    let base_html = fs::read_to_string("./templates/email_base.html")?;
-    let login_success_html = fs::read_to_string("./templates/signin_succesful.html")?;
+    let base_html = fs::read_to_string("./templates/email_base.html").unwrap();
+    let login_success_html = fs::read_to_string("./templates/signin_succesful.html").unwrap();
 
     println!("Sending succesful sign in mail");
     let env = EnvMailVariables::new()?;

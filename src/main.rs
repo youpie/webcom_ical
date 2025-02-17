@@ -613,7 +613,7 @@ fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>>{
 
 fn sign_in_failed_update(username: &str, failed: bool, failure_type: Option<SignInFailure>) -> GenResult<()>{
     let path = Path::new("./sign_in_failure_count.toml");
-    let mut failure_counter = load_sign_in_failure_count(path)?;
+    let mut failure_counter = load_sign_in_failure_count(path).unwrap();
     // if failed == true, set increment counter and set error
     if failed == true{
         failure_counter.error = failure_type;
@@ -631,7 +631,7 @@ fn sign_in_failed_update(username: &str, failed: bool, failure_type: Option<Sign
         failure_counter.retry_count = 0;
         failure_counter.error = None;
     }
-    save_sign_in_failure_count(path, &failure_counter)?;
+    save_sign_in_failure_count(path, &failure_counter).unwrap();
     Ok(())
 }
 

@@ -14,6 +14,7 @@ use icalendar::Event;
 use icalendar::EventLike;
 use reqwest;
 use serde::{Deserialize, Serialize};
+use tokio::io;
 use std::fs::File;
 use std::hash::DefaultHasher;
 use std::hash::Hash;
@@ -456,9 +457,9 @@ Needs to create a struct with a Vec<Shift> because otherwise it wouldn't seriali
 */
 fn save_shifts_on_disk(shifts: &Vec<Shift>, path: &Path) -> GenResult<()> {
     let shifts_struct = Shifts::new(shifts.clone());
-    let shifts_serialised = toml::to_string(&shifts_struct).unwrap();
-    let mut output = File::create(path).unwrap();
-    write!(output, "{}", shifts_serialised).unwrap();
+    let shifts_serialised = toml::to_string(&shifts_struct)?;
+    let mut output = File::create(path)?;
+    write!(output, "{}", shifts_serialised)?;
     Ok(())
 }
 
@@ -528,7 +529,17 @@ async fn heartbeat(reason: FailureType, url: Option<String>) -> GenResult<()> {
 }
 
 fn load_sign_in_failure_count(path: &Path) -> GenResult<IncorrectCredentialsCount> {
-    let failure_count_toml = std::fs::read_to_string(path)?;
+    let failure_count_toml = match std::fs::read_to_string(path) {
+        Ok(file_string) => file_string,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            println!("Failure counter not found, creating file..");
+            let mut newfile = File::create(path)?;
+            let new_counter = toml::to_string(&IncorrectCredentialsCount::new())?;
+            write!(&mut newfile,"{}",&new_counter)?;
+            new_counter
+        }
+        Err(error) => return Err(Box::new(error))
+    };
     let failure_counter: IncorrectCredentialsCount = toml::from_str(&failure_count_toml)?;
     Ok(failure_counter)
 }
@@ -650,7 +661,7 @@ async fn main_program(
     let ical_path = PathBuf::from(&format!("{}{}.ics", var("SAVE_TARGET")?, username));
     email::send_welcome_mail(&ical_path,username, &name,false)?;
     check_domain_update(&ical_path, &shifts.last().unwrap(), &name);
-    let mut output = File::create(&ical_path).unwrap();
+    let mut output = File::create(&ical_path)?;
     println!("Writing to: {:?}", &ical_path);
     write!(output, "{}", calendar)?;
     

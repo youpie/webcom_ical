@@ -731,8 +731,10 @@ async fn main() -> WebDriverResult<()> {
         .unwrap_or("3".to_string())
         .parse()
         .unwrap_or(3);
-    let url: Url = var("KUMA_URL").unwrap().parse().unwrap();
-    kuma::first_run(url, "25348").await.unwrap();
+    
+    if let Some(url_unwrap) = kuma_url.clone() {
+        kuma::first_run(&url_unwrap, "25348").await.unwrap();
+    }
     let start_main: Option<SignInFailure> = sign_in_failed_check(&username).unwrap();
     if let Some(failure) = start_main {
         retry_count = max_retry_count;

@@ -38,12 +38,13 @@ impl KumaData {
     }
 }
 
-pub async fn first_run(url: Url, personeelsnummer: &str) -> GenResult<()> {
+pub async fn first_run(url: &str, personeelsnummer: &str) -> GenResult<()> {
     // If kuma preferences already exists, skip
     let data_pathbuf = PathBuf::from(KUMA_DATA_PATH);
     if data_pathbuf.exists() {
         return Ok(());
     }
+    let url: Url = url.parse().unwrap();
     println!("Kuma ID not found on disk");
     let username = var("KUMA_USERNAME")?;
     let password = var("KUMA_PASSWORD")?;

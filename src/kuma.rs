@@ -42,6 +42,7 @@ pub async fn first_run(url: &str, personeelsnummer: &str) -> GenResult<()> {
     // If kuma preferences already exists, skip
     let data_pathbuf = PathBuf::from(KUMA_DATA_PATH);
     if data_pathbuf.exists() {
+        println!("Kuma ID found on disk");
         return Ok(());
     }
     let url: Url = url.parse().unwrap();

@@ -40,11 +40,11 @@ impl StrikethroughString for String {
 }
 
 pub struct EnvMailVariables {
-    smtp_server: String,
-    smtp_username: String,
-    smtp_password: String,
-    mail_from: String,
-    mail_to: String,
+    pub smtp_server: String,
+    pub smtp_username: String,
+    pub smtp_password: String,
+    pub mail_from: String,
+    pub mail_to: String,
     mail_error_to: String,
     send_email_new_shift: bool,
     send_mail_updated_shift: bool,
@@ -56,11 +56,11 @@ Loads all env variables needed for sending mails
 Does not load defaults if they are not found and will just error
 */
 impl EnvMailVariables {
-    pub fn new() -> GenResult<Self> {
-        let smtp_server = var("SMTP_SERVER")?;
-        let smtp_username = var("SMTP_USERNAME")?;
-        let smtp_password = var("SMTP_PASSWORD")?;
-        let mail_from = var("MAIL_FROM")?;
+    pub fn new(kuma: bool) -> GenResult<Self> {
+        let smtp_server = var(format!("{}SMTP_SERVER",if kuma {"KUMA_"} else {""}))?;
+        let smtp_username = var(format!("{}SMTP_USERNAME",if kuma {"KUMA_"} else {""}))?;
+        let smtp_password = var(format!("{}SMTP_PASSWORD",if kuma {"KUMA_"} else {""}))?;
+        let mail_from = var(format!("{}MAIL_FROM",if kuma {"KUMA_"} else {""}))?;
         let mail_to = var("MAIL_TO")?;
         let mail_error_to = var("MAIL_ERROR_TO")?;
         let send_email_new_shift = Self::str_to_bool(&var("SEND_EMAIL_NEW_SHIFT")?);
@@ -95,7 +95,7 @@ If loading previous shifts fails for whatever it will not error but just do an e
 Because if the previous shifts file is not, it will just not send mails that time
 */
 pub fn send_emails(current_shifts: &Vec<Shift>) -> GenResult<()> {
-    let env = EnvMailVariables::new()?;
+    let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
     let previous_shifts = match load_previous_shifts() {
         Ok(x) => x,
@@ -312,7 +312,7 @@ Composes and sends email of found errors, in plaintext
 List of errors can be as long as possible, but for now is always 3
 */
 pub fn send_errors(errors: Vec<Box<dyn std::error::Error>>, name: &str) -> GenResult<()> {
-    let env = EnvMailVariables::new()?;
+    let env = EnvMailVariables::new(false)?;
     if !env.send_error_mail {
         println!("tried to send error mail, but is disabled");
         return Ok(());
@@ -337,7 +337,7 @@ pub fn send_errors(errors: Vec<Box<dyn std::error::Error>>, name: &str) -> GenRe
 }
 
 pub fn send_gecko_error_mail<T: std::fmt::Debug>(error: WebDriverResult<T>) -> GenResult<()> {
-    let env = EnvMailVariables::new()?;
+    let env = EnvMailVariables::new(false)?;
     if !env.send_error_mail {
         println!("tried to send error mail, but is disabled");
         return Ok(());
@@ -378,7 +378,7 @@ pub fn send_welcome_mail(
     let onboarding_html = fs::read_to_string("./templates/onboarding_base.html").unwrap();
     let auth_html = fs::read_to_string("./templates/onboarding_auth.html").unwrap();
 
-    let env = EnvMailVariables::new()?;
+    let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
     let domain = var("DOMAIN").unwrap_or(ERROR_VALUE.to_string());
     let ical_username = var("ICAL_USER").unwrap_or(ERROR_VALUE.to_string());
@@ -430,7 +430,7 @@ pub fn send_failed_signin_mail(
     let login_failure_html = fs::read_to_string("./templates/failed_signin.html").unwrap();
 
     println!("Sending failed sign in mail");
-    let env = EnvMailVariables::new()?;
+    let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
     let still_not_working_modifier = if first_time { "" } else { "nog steeds " };
 
@@ -476,7 +476,7 @@ pub fn send_sign_in_succesful(name: &str) -> GenResult<()> {
     let login_success_html = fs::read_to_string("./templates/signin_succesful.html").unwrap();
 
     println!("Sending succesful sign in mail");
-    let env = EnvMailVariables::new()?;
+    let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
     let email_body_html = strfmt!(&base_html, 
         content => login_success_html,

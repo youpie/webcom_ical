@@ -8,3 +8,4 @@ sign_in_failure_count.toml
 /ansible/group_vars/all.yml
 /ansible/inventory.ini
 previous_domain
+kuma_data.toml

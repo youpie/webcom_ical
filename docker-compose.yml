@@ -5,6 +5,7 @@ services:
     volumes:
       - .env:/usr/src/webcom_ical/.env
       - {% if unsecured == "false" %}{{save_target}}{% else %}{{save_target_unsecure}}{% endif %}:/usr/src/webcom_ical/calendar/
+      - kuma_data.toml:/usr/src/webcom_ical/kuma_data.toml
     depends_on:
       - gecko_driver
   gecko_driver:

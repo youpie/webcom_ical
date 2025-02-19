@@ -14,6 +14,7 @@ use icalendar::Event;
 use icalendar::EventLike;
 use reqwest;
 use serde::{Deserialize, Serialize};
+use url::Url;
 use std::fs::File;
 use std::hash::DefaultHasher;
 use std::hash::Hash;
@@ -33,6 +34,7 @@ use time::Time;
 
 pub mod email;
 pub mod gebroken_shifts;
+pub mod kuma;
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -698,8 +700,9 @@ async fn main() -> WebDriverResult<()> {
         .unwrap_or("3".to_string())
         .parse()
         .unwrap_or(3);
-
-    let start_main = sign_in_failed_check(&username).unwrap();
+    let url: Url = var("KUMA_URL").unwrap().parse().unwrap();
+    kuma::first_run("./kuma_data.toml".into(),url,"25348").await.unwrap();
+    let start_main: Option<SignInFailure> = sign_in_failed_check(&username).unwrap();
     if let Some(failure) = start_main {
         retry_count = max_retry_count;
         error_reason = FailureType::SignInFailed(failure);

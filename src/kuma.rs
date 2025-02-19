@@ -1,5 +1,5 @@
 use dotenvy::var;
-use kuma_client::monitor::{Monitor, MonitorGroup};
+use kuma_client::monitor::{Monitor, MonitorGroup, MonitorType};
 use kuma_client::{monitor, Client, notification};
 use serde::{Deserialize, Serialize};
 use strfmt::strfmt;
@@ -44,10 +44,15 @@ pub async fn first_run(url: Url, personeelsnummer: &str) -> GenResult<()> {
     if data_pathbuf.exists() {
         return Ok(());
     }
-    println!("Kuma ID not found");
+    println!("Kuma ID not found on disk");
     let username = var("KUMA_USERNAME")?;
     let password = var("KUMA_PASSWORD")?;
     let kuma_client = connect_to_kuma(&url, username, password).await?;
+    if let Some(monitor_id) = get_monitor_type_id(&kuma_client, personeelsnummer, MonitorType::Push, false).await?{
+        println!("id found in kuma, saving to disk. ID: {monitor_id}");
+        KumaData{monitor_id}.save(PathBuf::from(KUMA_DATA_PATH))?;
+        return Ok(())
+    }
     let notification_id = create_notification(&kuma_client, personeelsnummer,&url).await?;
     let monitor_id = create_monitor(&kuma_client, personeelsnummer,notification_id).await?;
     KumaData{monitor_id}.save(PathBuf::from(KUMA_DATA_PATH))?;
@@ -67,7 +72,7 @@ async fn connect_to_kuma(url: &Url, username: String, password: String) -> GenRe
 async fn create_monitor(kuma_client: &Client, personeelsnummer: &str, notification_id: i32) -> GenResult<i32> {
     let heartbeat_interval: i32 = var("KUMA_HEARTBEAT_INTERVAL")?.parse()?;
     let heartbeat_retry: i32 = var("KUMA_HEARTBEAT_RETRY")?.parse()?;
-    let group_id: i32 = get_monitor_group_id(kuma_client, "group_name").await?;
+    let group_id: i32 = get_monitor_type_id(kuma_client, "group_name", MonitorType::Group,true).await?.unwrap();
     let monitor = monitor::MonitorPush {
         name: Some(personeelsnummer.to_string()),
         interval: Some(heartbeat_interval),
@@ -149,22 +154,25 @@ Webcom Ical weer online
     Ok(notification_response.id.unwrap())
 }
 
-async fn get_monitor_group_id(kuma_client: &Client, group_name: &str) -> GenResult<i32> {
+async fn get_monitor_type_id(kuma_client: &Client, group_name: &str, monitor_type: MonitorType, create_new: bool) -> GenResult<Option<i32>> {
     let current_monitors = kuma_client.get_monitors().await?;
     // Check if a group with the same name of "group_name" exists
     for (_id, monitor) in current_monitors.into_iter(){
-        if let Monitor::Group {value}= monitor {
-            if value.name == Some(group_name.to_string()) {
+        if monitor.monitor_type() == monitor_type{
+            if monitor.common().name() == &Some(group_name.to_string()) {
                 println!("Existing monitor group has been found");
-                return Ok(value.id.unwrap());
+                return Ok(Some(monitor.common().id().unwrap()));
             }
         }
     }
     // otherwise create a new one
-    println!("Monitor group has not been found, creating new one");
-    let new_monitor = kuma_client.add_monitor(MonitorGroup{
-        name: Some(group_name.to_string()),
-        ..Default::default()
-    }).await?;
-    Ok(new_monitor.common().id().unwrap())
+    if create_new {
+        println!("Monitor group has not been found, creating new one");
+        let new_monitor = kuma_client.add_monitor(MonitorGroup{
+            name: Some(group_name.to_string()),
+            ..Default::default()
+        }).await?;
+        return Ok(Some(new_monitor.common().id().unwrap()));
+    }
+    Ok(None)
 }

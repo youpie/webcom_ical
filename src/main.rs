@@ -14,7 +14,6 @@ use icalendar::Event;
 use icalendar::EventLike;
 use reqwest;
 use serde::{Deserialize, Serialize};
-use url::Url;
 use std::fs::File;
 use std::hash::DefaultHasher;
 use std::hash::Hash;
@@ -24,10 +23,11 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::Split;
 use thirtyfour::prelude::*;
+use thiserror::Error;
 use time::macros::format_description;
 use time::Duration;
 use time::Month;
-use thiserror::Error;
+use url::Url;
 
 use time::Date;
 use time::Time;
@@ -38,26 +38,29 @@ pub mod kuma;
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
-#[derive(Debug, Serialize, Deserialize,Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct IncorrectCredentialsCount {
     retry_count: usize,
     error: Option<SignInFailure>,
 }
 
-impl IncorrectCredentialsCount{
-    fn new() -> Self{
-        Self{retry_count: 0, error: None}
+impl IncorrectCredentialsCount {
+    fn new() -> Self {
+        Self {
+            retry_count: 0,
+            error: None,
+        }
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 enum SignInFailure {
     TooManyTries,
     IncorrectCredentials,
-    Other(String)
+    Other(String),
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error,PartialEq)]
 enum FailureType {
     TriesExceeded,
     GeckoEngine,
@@ -67,7 +70,7 @@ enum FailureType {
 
 impl std::fmt::Display for FailureType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,"{:?}",self)
+        write!(f, "{:?}", self)
     }
 }
 
@@ -114,11 +117,14 @@ impl Shift {
         let _day_of_week: String = parts_list[5].nth(1).unwrap_or("").to_string();
         let kind: String = parts_list[6].nth(1).unwrap_or("").to_string();
         let mut location = "Onbekend".to_string();
-        if parts_list[7].nth(0).unwrap_or("") == "Startplaats"{
+        if parts_list[7].nth(0).unwrap_or("") == "Startplaats" {
             location_modifier = 0;
             location = parts_list[7].nth(1).unwrap_or("").to_string();
         }
-        let description: String = parts_list[8-location_modifier].nth(1).unwrap_or("").to_string();
+        let description: String = parts_list[8 - location_modifier]
+            .nth(1)
+            .unwrap_or("")
+            .to_string();
         let start_time_str = time.split_whitespace().nth(0).unwrap();
         let end_time_str = time.split_whitespace().nth(2).unwrap();
         let start = get_time(start_time_str);
@@ -217,7 +223,7 @@ fn create_shift_link(shift: &Shift) -> GenResult<String> {
             shift.date.format(date_format)?
         ));
     }
-    let shift_number_bare= shift.number.split("-").next().unwrap();
+    let shift_number_bare = shift.number.split("-").next().unwrap();
     Ok(format!("{domain}{shift_number_bare}"))
 }
 
@@ -251,28 +257,39 @@ async fn sign_in_webcom(driver: &WebDriver, user: &str, pass: &str) -> GenResult
     //wait_until_loaded(&driver).await?;
     let _ = wait_for_response(&driver, By::Tag("h3"), false).await;
     println!("loaded");
-    let name_text = match driver.find(By::Tag("h3")).await{
+    let name_text = match driver.find(By::Tag("h3")).await {
         Ok(element) => element.text().await?,
-        Err(_) => {return Err(Box::new(check_sign_in_error(driver).await?));},
+        Err(_) => {
+            return Err(Box::new(check_sign_in_error(driver).await?));
+        }
     };
     let name = name_text
         .split(",")
         .last()
-        .unwrap().split_whitespace().next().unwrap()
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap()
         .to_string();
     Ok(name)
 }
 
-async fn check_sign_in_error(driver: &WebDriver) -> GenResult<FailureType>{
+async fn check_sign_in_error(driver: &WebDriver) -> GenResult<FailureType> {
     println!("Sign in failed");
     match driver.find(By::Id("ctl00_lblMessage")).await {
-        Ok(element) => {let element_text = element.text().await?;
+        Ok(element) => {
+            let element_text = element.text().await?;
             let sign_in_error_type = get_sign_in_error_type(&element_text);
-            println!("Found error banner: {:?}",&sign_in_error_type);
-            return Ok(FailureType::SignInFailed(sign_in_error_type));}
-        Err(_) => {println!("Geen fount banner gevonden")}
+            println!("Found error banner: {:?}", &sign_in_error_type);
+            return Ok(FailureType::SignInFailed(sign_in_error_type));
+        }
+        Err(_) => {
+            println!("Geen fount banner gevonden")
+        }
     };
-    Ok(FailureType::SignInFailed(SignInFailure::Other("Geen idee waarom er niet ingelogd kon worden".to_string())))
+    Ok(FailureType::SignInFailed(SignInFailure::Other(
+        "Geen idee waarom er niet ingelogd kon worden".to_string(),
+    )))
 }
 
 fn get_sign_in_error_type(text: &str) -> SignInFailure {
@@ -281,7 +298,6 @@ fn get_sign_in_error_type(text: &str) -> SignInFailure {
         "Te veel verkeerde aanmeldpogingen" => SignInFailure::TooManyTries,
         _ => SignInFailure::Other(text.to_string())
     }
-
 }
 
 /*
@@ -292,8 +308,7 @@ async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> GenResult<
     println!("Logging in..");
     let name = sign_in_webcom(driver, user, pass).await?;
     //wait_until_loaded(&driver).await?;
-    
-    
+
     //println!("{}", name_text);
     // let rooster_knop = driver.query(By::LinkText("Rooster")).first().await?;
     // rooster_knop.wait_until().displayed().await?;
@@ -350,7 +365,8 @@ fn create_ical(shifts: &Vec<Shift>) -> String {
     println!("Creating calendar file...");
     let mut calendar = Calendar::new()
         .name("Hermes rooster")
-        .append_property(("METHOD","PUBLISH")).timezone("Europe/Amsterdam")
+        .append_property(("METHOD", "PUBLISH"))
+        .timezone("Europe/Amsterdam")
         .done();
     for shift in shifts {
         let shift_link = create_shift_link(shift).unwrap();
@@ -495,18 +511,21 @@ async fn wait_untill_redirect(driver: &WebDriver) -> GenResult<()> {
 
     tokio::time::timeout(timeout, async {
         loop {
-        let new_url = driver.current_url().await.unwrap();
-        if new_url != current_url {
-            current_url = new_url;
-            break;
+            let new_url = driver.current_url().await.unwrap();
+            if new_url != current_url {
+                current_url = new_url;
+                break;
+            }
+            tokio::task::yield_now().await;
         }
-        tokio::task::yield_now().await;
-    }
-    }).await?;
+    })
+    .await?;
 
     if current_url == initial_url {
         println!("Timeout waiting for redirect.");
-        return Err(Box::new(WebDriverError::Timeout("Redirect did not occur".into())));
+        return Err(Box::new(WebDriverError::Timeout(
+            "Redirect did not occur".into(),
+        )));
     }
 
     println!("Redirected to: {}", current_url);
@@ -515,17 +534,22 @@ async fn wait_untill_redirect(driver: &WebDriver) -> GenResult<()> {
 }
 
 async fn heartbeat(reason: FailureType, url: Option<String>) -> GenResult<()> {
-    if url.is_none(){println!("no heartbeat URL");return Ok(());}
-    reqwest::get(format!(
-        "{}?status={}&msg={:?}&ping=",url.unwrap(),
+    if url.is_none() || reason == FailureType::TriesExceeded {
+        println!("no heartbeat URL");
+        return Ok(());
+    }
+    let mut request_url: Url = url.clone().unwrap().parse().unwrap();
+    request_url.set_path("/api/push");
+    request_url.set_query(Some(&format!(
+        "status={}&msg={:?}&ping=",
         match reason {
             FailureType::GeckoEngine => "down",
             FailureType::SignInFailed(_) => "down",
             _ => "up",
         },
         reason
-    ))
-    .await?;
+    )));
+    reqwest::get(request_url).await?;
     Ok(())
 }
 
@@ -549,9 +573,11 @@ fn save_sign_in_failure_count(path: &Path, counter: &IncorrectCredentialsCount) 
 fn check_domain_update(ical_path: &PathBuf, shift: &Shift, name: &str) {
     let previous_domain;
     let path = "./previous_domain";
-    match std::fs::read_to_string(path){
-        Ok(x) => {println!("{}",&x);
-            previous_domain=Some(x)}, 
+    match std::fs::read_to_string(path) {
+        Ok(x) => {
+            println!("{}", &x);
+            previous_domain = Some(x)
+        }
         Err(_) => previous_domain = None,
     }
     let current_domain = var("DOMAIN").unwrap_or("".to_string());
@@ -560,61 +586,72 @@ fn check_domain_update(ical_path: &PathBuf, shift: &Shift, name: &str) {
             let _ = send_welcome_mail(ical_path, &name, &shift.name, true);
         }
     }
-    match File::create(path){
-        Ok(mut file) => {let _ = write!(file, "{}",current_domain);},
-        Err(_) => ()
+    match File::create(path) {
+        Ok(mut file) => {
+            let _ = write!(file, "{}", current_domain);
+        }
+        Err(_) => (),
     }
-    
 }
 
 // If returning true, continue execution
-fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>>{
-    let resend_error_mail_count: usize = var("SIGNIN_FAIL_MAIL_REPEAT").unwrap_or("24".to_string()).parse().unwrap_or(2);
-    let sign_in_attempt_reduce: usize = var("SIGNIN_FAILED_REDUCE").unwrap_or("2".to_string()).parse().unwrap_or(1);
+fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>> {
+    let resend_error_mail_count: usize = var("SIGNIN_FAIL_MAIL_REPEAT")
+        .unwrap_or("24".to_string())
+        .parse()
+        .unwrap_or(2);
+    let sign_in_attempt_reduce: usize = var("SIGNIN_FAILED_REDUCE")
+        .unwrap_or("2".to_string())
+        .parse()
+        .unwrap_or(1);
     let path = Path::new("./sign_in_failure_count.toml");
     // Load the existing counter, create a new one if one doesnt exist yet
-    let mut failure_counter = match load_sign_in_failure_count(path){
+    let mut failure_counter = match load_sign_in_failure_count(path) {
         Ok(value) => value,
         Err(_) => {
             let new = IncorrectCredentialsCount::new();
             save_sign_in_failure_count(path, &new)?;
-            new}
+            new
+        }
     };
     let return_value: Option<SignInFailure>;
     // else check if retry counter == reduce_ammount, if not, stop running
     if failure_counter.retry_count == 0 {
         return_value = None;
-    }
-    else if failure_counter.retry_count % sign_in_attempt_reduce == 0 {
+    } else if failure_counter.retry_count % sign_in_attempt_reduce == 0 {
         println!("Continuing execution with sign in error, reduce val: {sign_in_attempt_reduce}, current count {}",failure_counter.retry_count);
         failure_counter.retry_count += 1;
-        return_value = None;           
-    }
-    else{
+        return_value = None;
+    } else {
         println!("Skipped execution due to previous sign in error");
         failure_counter.retry_count += 1;
         return_value = Some(failure_counter.error.clone().unwrap());
     }
-    if failure_counter.retry_count % resend_error_mail_count == 0 && failure_counter.error.is_some(){
-        email::send_failed_signin_mail(username, &failure_counter,false)?;
+    if failure_counter.retry_count % resend_error_mail_count == 0 && failure_counter.error.is_some()
+    {
+        email::send_failed_signin_mail(username, &failure_counter, false)?;
     }
     save_sign_in_failure_count(path, &failure_counter)?;
     Ok(return_value)
 }
 
-fn sign_in_failed_update(username: &str, failed: bool, failure_type: Option<SignInFailure>) -> GenResult<()>{
+fn sign_in_failed_update(
+    username: &str,
+    failed: bool,
+    failure_type: Option<SignInFailure>,
+) -> GenResult<()> {
     let path = Path::new("./sign_in_failure_count.toml");
     let mut failure_counter = load_sign_in_failure_count(path)?;
     // if failed == true, set increment counter and set error
-    if failed == true{
+    if failed == true {
         failure_counter.error = failure_type;
-        if failure_counter.retry_count == 0{
+        if failure_counter.retry_count == 0 {
             failure_counter.retry_count += 1;
             email::send_failed_signin_mail(username, &failure_counter, true)?;
         }
     }
     // if failed == false, reset counter
-    else if failed == false{
+    else if failed == false {
         if failure_counter.error.is_some() {
             println!("Sign in succesful again!");
             email::send_sign_in_succesful(username)?;
@@ -627,21 +664,15 @@ fn sign_in_failed_update(username: &str, failed: bool, failure_type: Option<Sign
 }
 
 // Main program logic that has to run, if it fails it will all be reran.
-async fn main_program(
-    driver: &WebDriver,
-    username: &str,
-    password: &str,
-) -> GenResult<()> {
+async fn main_program(driver: &WebDriver, username: &str, password: &str) -> GenResult<()> {
     driver.delete_all_cookies().await?;
     // let main_url = format!(
     //     "https://dmz-wbc-web0{}.connexxion.nl/WebComm/default.aspx",
     //     (retry_count % 2) + 1
     // );
     let main_url = format!("webcom.connexxion.nl");
-    println!("Loading site: {}..",main_url);
-    driver
-        .goto(main_url)
-        .await?;
+    println!("Loading site: {}..", main_url);
+    driver.goto(main_url).await?;
     wait_untill_redirect(&driver).await?;
     let name = load_calendar(&driver, &username, &password).await?;
     wait_until_loaded(&driver).await?;
@@ -655,12 +686,12 @@ async fn main_program(
     let shifts = gebroken_shifts::split_night_shift(&shifts);
     let calendar = create_ical(&shifts);
     let ical_path = PathBuf::from(&format!("{}{}.ics", var("SAVE_TARGET")?, username));
-    email::send_welcome_mail(&ical_path,username, &name,false)?;
+    email::send_welcome_mail(&ical_path, username, &name, false)?;
     check_domain_update(&ical_path, &shifts.last().unwrap(), &name);
     let mut output = File::create(&ical_path)?;
     println!("Writing to: {:?}", &ical_path);
     write!(output, "{}", calendar)?;
-    
+
     Ok(())
 }
 
@@ -678,17 +709,17 @@ Loads the main logic, and retries if it fails
 #[tokio::main]
 async fn main() -> WebDriverResult<()> {
     dotenv_override().ok();
-    let version= var("CARGO_PKG_VERSION").unwrap_or("onbekend".to_string());
+    let version = var("CARGO_PKG_VERSION").unwrap_or("onbekend".to_string());
     println!("Starting Webcom Ical version {version}");
     let mut error_reason = FailureType::OK;
-    let heartbeat_url = var("HEARTBEAT_URL").ok();
+    let kuma_url = var("KUMA_URL").ok();
     let driver = match initiate_webdriver().await {
         Ok(driver) => driver,
         Err(error) => {
             println!("Kon driver niet opstarten: {:?}", &error);
             send_errors(vec![error], "flats").unwrap();
             error_reason = FailureType::GeckoEngine;
-            heartbeat(error_reason,heartbeat_url).await.unwrap();
+            heartbeat(error_reason, kuma_url).await.unwrap();
             return Err(WebDriverError::FatalError("driver fout".to_string()));
         }
     };
@@ -701,7 +732,7 @@ async fn main() -> WebDriverResult<()> {
         .parse()
         .unwrap_or(3);
     let url: Url = var("KUMA_URL").unwrap().parse().unwrap();
-    kuma::first_run(url,"25348").await.unwrap();
+    kuma::first_run(url, "25348").await.unwrap();
     let start_main: Option<SignInFailure> = sign_in_failed_check(&username).unwrap();
     if let Some(failure) = start_main {
         retry_count = max_retry_count;
@@ -709,30 +740,35 @@ async fn main() -> WebDriverResult<()> {
     }
     while retry_count <= max_retry_count - 1 {
         match main_program(&driver, &username, &password).await {
-            Ok(_) => {sign_in_failed_update(&username,false, None).unwrap();
+            Ok(_) => {
+                sign_in_failed_update(&username, false, None).unwrap();
                 retry_count = max_retry_count;
-                },
-            Err(x) => {
-                match x.downcast_ref::<FailureType>(){
-                Some(FailureType::SignInFailed(y)) => {
-                    // Do not stop webcom if the sign in failure reason is unknown
-                    if let SignInFailure::Other(x) = y{
-                        println!("Kon niet inloggen, maar een onbekende fout: {}. Probeert opnieuw",x)
-                    }
-                    else{
-                        retry_count = max_retry_count;
-                        sign_in_failed_update(&username,true, Some(y.clone())).unwrap();
-                        error_reason = FailureType::SignInFailed(y.to_owned());
-                        println!("Inloggen niet succesvol, fout: {:?}",y)
-                    }
-                },
-                _ => {println!(
-                    "Fout tijdens shift laden, opnieuw proberen, poging: {}. Fout: {}",
-                    retry_count + 1,
-                    &x.to_string()
-                );
-                running_errors.push(x);}
             }
+            Err(x) => {
+                match x.downcast_ref::<FailureType>() {
+                    Some(FailureType::SignInFailed(y)) => {
+                        // Do not stop webcom if the sign in failure reason is unknown
+                        if let SignInFailure::Other(x) = y {
+                            println!(
+                                "Kon niet inloggen, maar een onbekende fout: {}. Probeert opnieuw",
+                                x
+                            )
+                        } else {
+                            retry_count = max_retry_count;
+                            sign_in_failed_update(&username, true, Some(y.clone())).unwrap();
+                            error_reason = FailureType::SignInFailed(y.to_owned());
+                            println!("Inloggen niet succesvol, fout: {:?}", y)
+                        }
+                    }
+                    _ => {
+                        println!(
+                            "Fout tijdens shift laden, opnieuw proberen, poging: {}. Fout: {}",
+                            retry_count + 1,
+                            &x.to_string()
+                        );
+                        running_errors.push(x);
+                    }
+                }
             }
         };
         retry_count += 1;
@@ -748,7 +784,7 @@ async fn main() -> WebDriverResult<()> {
             Err(x) => println!("failed to send error email, ironic: {:?}", x),
         }
     }
-    heartbeat(error_reason,heartbeat_url).await.unwrap();
+    heartbeat(error_reason, kuma_url).await.unwrap();
     driver.quit().await?;
     Ok(())
 }

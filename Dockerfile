@@ -5,6 +5,7 @@ COPY ./src ./src
 COPY Cargo.lock ./
 COPY Cargo.toml ./
 COPY ./templates templates
+COPY ./kuma kuma
 
 RUN cargo install --path .
 

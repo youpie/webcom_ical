@@ -10,3 +10,11 @@ ical_password:
 save_target:
 save_target_unsecure:
 remote_username:
+kuma_username:
+kuma_password:
+kuma_mail_server:
+kuma_mail_username:
+kuma_mail_pass:
+kuma_mail_from:
+kuma_mail_to:
+kuma_url:

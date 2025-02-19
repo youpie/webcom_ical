@@ -17,10 +17,6 @@
       prompt: "Waar moet de email naartoe"
       private: no
 
-    - name: hearbeat_url
-      prompt: "Enter heartbeat URL (zonder ?*)"
-      private: no
-
     - name: unsecured
       prompt: "Save ical unsecure? (true/false)"
       private: no

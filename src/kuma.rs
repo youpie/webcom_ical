@@ -128,10 +128,14 @@ De fout is: {{{{msg}}}}
 {{% endif %}}");
 
     let email_env = email::EnvMailVariables::new(true)?;
-
+    let port = var("KUMA_MAIL_PORT")?;
+    let secure = match var("KUMA_MAUL_SECURE")?.as_str(){
+        "true" => true,
+        _ => false
+    };
     let config = serde_json::json!({
         "smtpHost": email_env.smtp_server,
-        "smtpPort": 465,
+        "smtpPort": port,
         "smtpUsername": email_env.smtp_username,
         "smtpPassword": email_env.smtp_password,
         "smtpTo": email_env.mail_to,
@@ -143,7 +147,7 @@ Webcom Ical weer online
 !! Webcom Ical OFFline !!
 {% endif %}",
         "type": "smtp",
-        "smtpSecure": true
+        "smtpSecure": secure
 
     });
     let notification = notification::Notification{

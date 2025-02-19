@@ -73,7 +73,7 @@ async fn connect_to_kuma(url: &Url, username: String, password: String) -> GenRe
 async fn create_monitor(kuma_client: &Client, personeelsnummer: &str, notification_id: i32) -> GenResult<i32> {
     let heartbeat_interval: i32 = var("KUMA_HEARTBEAT_INTERVAL")?.parse()?;
     let heartbeat_retry: i32 = var("KUMA_HEARTBEAT_RETRY")?.parse()?;
-    let group_id: i32 = get_monitor_type_id(kuma_client, "group_name", MonitorType::Group,true).await?.unwrap();
+    let group_id: i32 = get_monitor_type_id(kuma_client, "Webcom Ical", MonitorType::Group,true).await?.unwrap();
     let monitor = monitor::MonitorPush {
         name: Some(personeelsnummer.to_string()),
         interval: Some(heartbeat_interval),
@@ -139,7 +139,7 @@ De fout is: {{{{msg}}}}
         "smtpUsername": email_env.smtp_username,
         "smtpPassword": email_env.smtp_password,
         "smtpTo": email_env.mail_to,
-        "smtpFrom": "Uptime <shifts@emphisia.nl>",
+        "smtpFrom": email_env.mail_from,
         "customBody": body,
         "customSubject": "{% if status contains \"Up\" %}
 Webcom Ical weer online

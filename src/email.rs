@@ -43,7 +43,7 @@ pub struct EnvMailVariables {
     pub smtp_server: String,
     pub smtp_username: String,
     pub smtp_password: String,
-    mail_from: String,
+    pub mail_from: String,
     pub mail_to: String,
     mail_error_to: String,
     send_email_new_shift: bool,

@@ -533,13 +533,13 @@ async fn wait_untill_redirect(driver: &WebDriver) -> GenResult<()> {
     Ok(())
 }
 
-async fn heartbeat(reason: FailureType, url: Option<String>) -> GenResult<()> {
+async fn heartbeat(reason: FailureType, url: Option<String>, personeelsnummer: &str) -> GenResult<()> {
     if url.is_none() || reason == FailureType::TriesExceeded {
         println!("no heartbeat URL");
         return Ok(());
     }
     let mut request_url: Url = url.clone().unwrap().parse().unwrap();
-    request_url.set_path("/api/push");
+    request_url.set_path(&format!("/api/push/{personeelsnummer}"));
     request_url.set_query(Some(&format!(
         "status={}&msg={:?}&ping=",
         match reason {
@@ -677,12 +677,12 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     let name = load_calendar(&driver, &username, &password).await?;
     wait_until_loaded(&driver).await?;
     let mut shifts = load_current_month_shifts(&driver, name.clone()).await?;
-    shifts.append(&mut load_previous_month_shifts(&driver, name.clone()).await?);
-    shifts.append(&mut load_next_month_shifts(&driver, name.clone()).await?);
+    //shifts.append(&mut load_previous_month_shifts(&driver, name.clone()).await?);
+    //shifts.append(&mut load_next_month_shifts(&driver, name.clone()).await?);
     println!("Found {} shifts", shifts.len());
     email::send_emails(&shifts)?;
     save_shifts_on_disk(&shifts, Path::new("./previous_shifts.toml"))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
-    let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
+    //let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
     let shifts = gebroken_shifts::split_night_shift(&shifts);
     let calendar = create_ical(&shifts);
     let ical_path = PathBuf::from(&format!("{}{}.ics", var("SAVE_TARGET")?, username));
@@ -713,18 +713,18 @@ async fn main() -> WebDriverResult<()> {
     println!("Starting Webcom Ical version {version}");
     let mut error_reason = FailureType::OK;
     let kuma_url = var("KUMA_URL").ok();
+    let username = var("USERNAME").unwrap();
+    let password = var("PASSWORD").unwrap();
     let driver = match initiate_webdriver().await {
         Ok(driver) => driver,
         Err(error) => {
             println!("Kon driver niet opstarten: {:?}", &error);
             send_errors(vec![error], "flats").unwrap();
             error_reason = FailureType::GeckoEngine;
-            heartbeat(error_reason, kuma_url).await.unwrap();
+            heartbeat(error_reason, kuma_url, &username).await.unwrap();
             return Err(WebDriverError::FatalError("driver fout".to_string()));
         }
     };
-    let username = var("USERNAME").unwrap();
-    let password = var("PASSWORD").unwrap();
     let mut retry_count: usize = 0;
     let mut running_errors: Vec<Box<dyn std::error::Error>> = vec![];
     let max_retry_count: usize = var("RETRY_COUNT")
@@ -786,7 +786,7 @@ async fn main() -> WebDriverResult<()> {
             Err(x) => println!("failed to send error email, ironic: {:?}", x),
         }
     }
-    heartbeat(error_reason, kuma_url).await.unwrap();
+    heartbeat(error_reason, kuma_url,&username).await.unwrap();
     driver.quit().await?;
     Ok(())
 }

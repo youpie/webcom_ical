@@ -127,7 +127,7 @@ Bekijk de actuele status op: {kuma_url_string}
 De fout is: {{{{msg}}}}
 {{% endif %}}");
 
-    let email_env = email::EnvMailVariables::new(false)?;
+    let email_env = email::EnvMailVariables::new(true)?;
 
     let config = serde_json::json!({
         "smtpHost": email_env.smtp_server,

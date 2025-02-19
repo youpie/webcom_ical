@@ -1,5 +1,5 @@
 use dotenvy::var;
-use kuma_client::monitor::{Monitor, MonitorGroup, MonitorType};
+use kuma_client::monitor::{MonitorGroup, MonitorType};
 use kuma_client::{monitor, Client, notification};
 use serde::{Deserialize, Serialize};
 use strfmt::strfmt;
@@ -49,7 +49,7 @@ pub async fn first_run(url: Url, personeelsnummer: &str) -> GenResult<()> {
     let password = var("KUMA_PASSWORD")?;
     let kuma_client = connect_to_kuma(&url, username, password).await?;
     if let Some(monitor_id) = get_monitor_type_id(&kuma_client, personeelsnummer, MonitorType::Push, false).await?{
-        println!("id found in kuma, saving to disk. ID: {monitor_id}");
+        println!("id found in kuma online, saving to disk. ID: {monitor_id}");
         KumaData{monitor_id}.save(PathBuf::from(KUMA_DATA_PATH))?;
         return Ok(())
     }
@@ -150,8 +150,11 @@ Webcom Ical weer online
         config: Some(config),
         ..Default::default()
     };
+    
     let notification_response = kuma_client.add_notification(notification.clone()).await?;
-    Ok(notification_response.id.unwrap())
+    let id = notification_response.id.unwrap();
+    println!("Created notification with id {id}");
+    Ok(id)
 }
 
 async fn get_monitor_type_id(kuma_client: &Client, group_name: &str, monitor_type: MonitorType, create_new: bool) -> GenResult<Option<i32>> {
@@ -165,14 +168,18 @@ async fn get_monitor_type_id(kuma_client: &Client, group_name: &str, monitor_typ
             }
         }
     }
+    print!("Monitor group has not been found");
     // otherwise create a new one
     if create_new {
-        println!("Monitor group has not been found, creating new one");
+        
         let new_monitor = kuma_client.add_monitor(MonitorGroup{
             name: Some(group_name.to_string()),
             ..Default::default()
         }).await?;
+        let id = new_monitor.common().id().unwrap();
+        println!(", created new one with id {id}");
         return Ok(Some(new_monitor.common().id().unwrap()));
     }
+    println!(", not creating new one");
     Ok(None)
 }

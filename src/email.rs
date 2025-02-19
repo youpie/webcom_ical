@@ -61,7 +61,7 @@ impl EnvMailVariables {
         let smtp_username = var(format!("{}SMTP_USERNAME",if kuma {"KUMA_"} else {""}))?;
         let smtp_password = var(format!("{}SMTP_PASSWORD",if kuma {"KUMA_"} else {""}))?;
         let mail_from = var(format!("{}MAIL_FROM",if kuma {"KUMA_"} else {""}))?;
-        let mail_to = var(format!("{}MAIL_TO",if kuma {"KUMA_"} else {""}))?;
+        let mail_to = var("MAIL_TO")?;
         let mail_error_to = var("MAIL_ERROR_TO")?;
         let send_email_new_shift = Self::str_to_bool(&var("SEND_EMAIL_NEW_SHIFT")?);
         let send_mail_updated_shift = Self::str_to_bool(&var("SEND_MAIL_UPDATED_SHIFT")?);

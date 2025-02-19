@@ -735,7 +735,7 @@ async fn main() -> WebDriverResult<()> {
     if let Some(url_unwrap) = kuma_url.clone() {
         if !url_unwrap.is_empty(){
             println!("Checking if kuma needs to be created");
-            kuma::first_run(&url_unwrap, "25348").await.unwrap();
+            kuma::first_run(&url_unwrap, &username).await.unwrap();
         }
     }
     let start_main: Option<SignInFailure> = sign_in_failed_check(&username).unwrap();

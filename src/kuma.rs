@@ -1,21 +1,27 @@
-use std::path::PathBuf;
-use std::str::FromStr;
-use kuma_client::{monitor, tag, Client};
-use serde::{Deserialize, Serialize};
-use url::Url;
-use std::fs::File;
-use std::io::Write;
 use dotenvy::var;
+use kuma_client::{monitor, Client, notification};
+use serde::{Deserialize, Serialize};
+use strfmt::strfmt;
+use std::collections::HashMap;
+use std::fs::{File,read_to_string};
+use std::io::Write;
+use std::path::PathBuf;
+use url::Url;
+
+use crate::email;
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
-#[derive(Debug,Serialize,Deserialize)]
-struct KumaData{
-    push_url: Url
+const COLOR_RED: &str = "#a51d2d";
+const COLOR_GREEN: &str = "#26a269";
+
+#[derive(Debug, Serialize, Deserialize)]
+struct KumaData {
+    push_url: Url,
 }
 
-impl KumaData{
-    fn save(&self ,path: PathBuf) -> GenResult<()>{
+impl KumaData {
+    fn save(&self, path: PathBuf) -> GenResult<()> {
         let failure_counter_serialised = toml::to_string(self)?;
         let mut output = File::create(path).unwrap();
         write!(output, "{}", failure_counter_serialised)?;
@@ -29,7 +35,7 @@ impl KumaData{
     }
 }
 
-pub async fn first_run(path: PathBuf, url: Url, personeelsnummer: &str) -> GenResult<()>{
+pub async fn first_run(path: PathBuf, url: Url, personeelsnummer: &str) -> GenResult<()> {
     // If kuma preferences already exists, skip
     if path.exists() {
         return Ok(());
@@ -37,31 +43,87 @@ pub async fn first_run(path: PathBuf, url: Url, personeelsnummer: &str) -> GenRe
 
     let username = var("KUMA_USERNAME")?;
     let password = var("KUMA_PASSWORD")?;
-    let kuma_client = connect_to_kuma(url, username, password).await?;
-    create_monitor(kuma_client, personeelsnummer).await?;
+    let kuma_client = connect_to_kuma(&url, username, password).await?;
+    let notification_id = create_notification(&kuma_client, personeelsnummer,&url).await?;
+    create_monitor(&kuma_client, personeelsnummer,notification_id).await?;
     Ok(())
 }
 
-async fn connect_to_kuma(url: Url, username: String, password: String) -> GenResult<Client> {
-    Ok(Client::connect(kuma_client::Config { url: url, username: Some(username), password: Some(password),..Default::default()}).await?)
+async fn connect_to_kuma(url: &Url, username: String, password: String) -> GenResult<Client> {
+    Ok(Client::connect(kuma_client::Config {
+        url: url.to_owned(),
+        username: Some(username),
+        password: Some(password),
+        ..Default::default()
+    })
+    .await?)
 }
 
-async fn create_monitor(kuma_client: Client, personeelsnummer: &str) -> GenResult<Url> {
+async fn create_monitor(kuma_client: &Client, personeelsnummer: &str, notification_id: i32) -> GenResult<()> {
     let heartbeat_interval: i32 = var("KUMA_HEARTBEAT_INTERVAL")?.parse()?;
     let heartbeat_retry: i32 = var("KUMA_HEARTBEAT_RETRY")?.parse()?;
-    let tag = tag::Tag{
-        name: Some("Webcom Ical".to_string()),
-        ..Default::default()
-    };
-    let monitor = monitor::MonitorPush{
+
+    let monitor = monitor::MonitorPush {
         name: Some(personeelsnummer.to_string()),
         interval: Some(heartbeat_interval),
         max_retries: Some(heartbeat_retry),
-        tags: vec![tag],
         push_token: Some(personeelsnummer.to_string()),
+        notification_id_list: Some(HashMap::from([(notification_id.to_string(),true)])),
         ..Default::default()
     };
     let monitor_response = kuma_client.add_monitor(monitor).await?;
-    println!("Monitor response: {:?}",monitor_response);
-    Ok(Url::from_str("https://google.com").unwrap())
+    println!("Monitor response: {:?}", monitor_response);
+    Ok(())
+}
+
+async fn create_notification(kuma_client: &Client, personeelsnummer: &str, kuma_url: &Url) -> GenResult<i32> {
+    let base_html = read_to_string("./templates/email_base.html").unwrap();
+    let offline_html = read_to_string("./templates/kuma_offline.html").unwrap();
+    let online_html = read_to_string("./templates/kuma_online.html").unwrap();
+
+    let body_online = strfmt!(&base_html,
+        content => strfmt!(&online_html,
+            kuma_url => kuma_url.to_string()
+        )?,
+        banner_color => COLOR_GREEN 
+    )?;
+    let body_offline = strfmt!(&base_html,
+        content => strfmt!(&offline_html,
+            kuma_url => kuma_url.to_string(),
+            msg => "{{msg}}"
+        )?,
+        banner_color => COLOR_RED 
+    )?;
+    let body = format!("{{% if status contains \"Up\" %}}
+{body_online}
+{{% else %}}
+{body_offline}
+{{% endif %}}");
+
+    let email_env = email::EnvMailVariables::new()?;
+
+    let config = serde_json::json!({
+        "smtpHost": email_env.smtp_server,
+        "smtpPort": 465,
+        "smtpUsername": email_env.smtp_username,
+        "smtpPassword": email_env.smtp_password,
+        "smtpTo": email_env.mail_to,
+        "smtpFrom": "Uptime <shifts@emphisia.nl>",
+        "customBody": body,
+        "customSubject": "{% if status contains \"Up\" %}
+Webcom Ical weer online
+{% else %}
+!! Webcom Ical offline !!
+{% endif %}",
+        "type": "smtp",
+        "smtpSecure": true
+
+    });
+    let notification = notification::Notification{
+        name: Some(format!("{}_mail",personeelsnummer.to_string())),
+        config: Some(config),
+        ..Default::default()
+    };
+    let notification_response = kuma_client.add_notification(notification.clone()).await?;
+    Ok(notification_response.id.unwrap())
 }

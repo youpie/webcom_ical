@@ -3,7 +3,6 @@ use kuma_client::monitor::{Monitor, MonitorGroup};
 use kuma_client::{monitor, Client, notification};
 use serde::{Deserialize, Serialize};
 use strfmt::strfmt;
-use std::any::Any;
 use std::collections::HashMap;
 use std::fs::{File,read_to_string};
 use std::io::Write;
@@ -17,9 +16,11 @@ type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 const COLOR_RED: &str = "#a51d2d";
 const COLOR_GREEN: &str = "#26a269";
 
+const KUMA_DATA_PATH: &str = "./kuma_data.toml";
+
 #[derive(Debug, Serialize, Deserialize)]
 struct KumaData {
-    push_url: Url,
+    monitor_id: i32,
 }
 
 impl KumaData {
@@ -30,25 +31,26 @@ impl KumaData {
         Ok(())
     }
 
-    fn load(&self, path: PathBuf) -> GenResult<Self> {
+    fn _load(&self, path: PathBuf) -> GenResult<Self> {
         let self_toml = std::fs::read_to_string(path)?;
         let self_struct: Self = toml::from_str(&self_toml)?;
         Ok(self_struct)
     }
 }
 
-pub async fn first_run(path: PathBuf, url: Url, personeelsnummer: &str) -> GenResult<()> {
+pub async fn first_run(url: Url, personeelsnummer: &str) -> GenResult<()> {
     // If kuma preferences already exists, skip
-    if path.exists() {
+    let data_pathbuf = PathBuf::from(KUMA_DATA_PATH);
+    if data_pathbuf.exists() {
         return Ok(());
     }
-
+    println!("Kuma ID not found");
     let username = var("KUMA_USERNAME")?;
     let password = var("KUMA_PASSWORD")?;
     let kuma_client = connect_to_kuma(&url, username, password).await?;
-    get_monitor_group_id(&kuma_client, "group_name").await?;
     let notification_id = create_notification(&kuma_client, personeelsnummer,&url).await?;
-    create_monitor(&kuma_client, personeelsnummer,notification_id).await?;
+    let monitor_id = create_monitor(&kuma_client, personeelsnummer,notification_id).await?;
+    KumaData{monitor_id}.save(PathBuf::from(KUMA_DATA_PATH))?;
     Ok(())
 }
 
@@ -62,22 +64,23 @@ async fn connect_to_kuma(url: &Url, username: String, password: String) -> GenRe
     .await?)
 }
 
-async fn create_monitor(kuma_client: &Client, personeelsnummer: &str, notification_id: i32) -> GenResult<()> {
+async fn create_monitor(kuma_client: &Client, personeelsnummer: &str, notification_id: i32) -> GenResult<i32> {
     let heartbeat_interval: i32 = var("KUMA_HEARTBEAT_INTERVAL")?.parse()?;
     let heartbeat_retry: i32 = var("KUMA_HEARTBEAT_RETRY")?.parse()?;
-    //let group_id: i32 = var("KUMA_GROUP_ID")?.parse()?;
+    let group_id: i32 = get_monitor_group_id(kuma_client, "group_name").await?;
     let monitor = monitor::MonitorPush {
         name: Some(personeelsnummer.to_string()),
         interval: Some(heartbeat_interval),
         max_retries: Some(heartbeat_retry),
         push_token: Some(personeelsnummer.to_string()),
         notification_id_list: Some(HashMap::from([(notification_id.to_string(),true)])),
-        //parent: Some(group_id),
+        parent: Some(group_id),
         ..Default::default()
     };
     let monitor_response = kuma_client.add_monitor(monitor).await?;
-    println!("Monitor response: {:?}", monitor_response);
-    Ok(())
+    let monitor_id = monitor_response.common().id().unwrap();
+    println!("Monitor has been created, id: {monitor_id}");
+    Ok(monitor_id)
 }
 
 async fn create_notification(kuma_client: &Client, personeelsnummer: &str, kuma_url: &Url) -> GenResult<i32> {
@@ -148,7 +151,6 @@ Webcom Ical weer online
 
 async fn get_monitor_group_id(kuma_client: &Client, group_name: &str) -> GenResult<i32> {
     let current_monitors = kuma_client.get_monitors().await?;
-    println!("monitors {:#?}",current_monitors);
     // Check if a group with the same name of "group_name" exists
     for (_id, monitor) in current_monitors.into_iter(){
         if let Monitor::Group {value}= monitor {

@@ -16,7 +16,7 @@ type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 const COLOR_RED: &str = "#a51d2d";
 const COLOR_GREEN: &str = "#26a269";
 
-const KUMA_DATA_PATH: &str = "./kuma_data.toml";
+const KUMA_DATA_PATH: &str = "./kuma/kuma_data.toml";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct KumaData {

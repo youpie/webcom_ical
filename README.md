@@ -1,3 +1,4 @@
+[https://stats.emphisia.nl/api/badge/18/status?style=plastic]
 # Webcom Ical
 ---
 

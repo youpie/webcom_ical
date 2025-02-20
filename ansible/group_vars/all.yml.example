@@ -1,19 +1,31 @@
-mail_server:
-mail_username:
-mail_pass:
-mail_from:
-error_mail:
-ical_domain:
-unsecured_domain:
-ical_username:
-ical_password:
-save_target:
-save_target_unsecure:
-remote_username:
-kuma_username:
-kuma_password:
-kuma_mail_server:
-kuma_mail_username:
-kuma_mail_pass:
-kuma_mail_from:
-kuma_url:
+# Email Settings
+mail_server: ""
+mail_username: ""
+mail_pass: ""
+mail_from: ""
+error_mail: ""
+
+# If you want to host the ical link, you can specify in what directory it's listed
+ical_domain: ""
+# Below is optional
+unsecured_domain: ""
+ical_username: ""
+ical_password: ""
+
+
+save_target: ""
+
+# Below is optional
+save_target_unsecure: ""
+
+# System username, needed for cron. Can't leave empty
+remote_username: ""
+
+# Only if you want to use Kuma, leave URL empty if you don't need it
+kuma_username: ""
+kuma_password: ""
+kuma_mail_server: ""
+kuma_mail_username: ""
+kuma_mail_pass: ""
+kuma_mail_from: ""
+kuma_url: ""

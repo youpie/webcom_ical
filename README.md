@@ -1,3 +1,6 @@
+# Webcom Ical
+---
+
 Webcom is een frustrerende, trage website. Met dit programma kan je een mailtje krijgen als je een nieuwe shift hebt, en kan je al je shifts automatisch toevoegen aan je agenda.
 
 > [!CAUTION]
@@ -12,10 +15,38 @@ Om dit programma te gebruiken is enige technische kennis wel vereisd. Waarschijn
 - Container software (Ik ga uit van [docker](https://www.docker.com/) voor deze uitleg)
 - Een terminal/command prompt
 - (optioneel) Een manier om regelmatig een command uit te voeren
+- (optioneel) [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html)
 
 > [!NOTE]
 > Voor windows moet je waarschijnlijk het [windows subsystem for linux](https://learn.microsoft.com/en-us/windows/wsl/install) instellen, daar ga ik je niet mee helpen ;P
 
+# Met behulp van ansible
+> [!NOTE]
+> Voor deze methode is cron verplicht, op Linux is dit meestal al geinstalleerd
+
+## 1. Deze repo downloaden
+``` bash
+git clone https://github.com/youpie/webcom_ical.git
+cd webcom_ical/ansible
+```
+
+## 2. Hernoem en vul all.yml in
+Hernoem het bestand `all.yml.example` naar `all.yml`
+``` bash
+mv all.yml.example all.yml
+```
+
+## 3. Voer het playboek uit
+Voer de ansible playboek uit, als je het wil installeren op je huidige computer voer je het volgende uit:
+``` bash
+ansible-playbook ./playbook.yml -c local -i localhost
+```
+
+## 4. Klaar
+✅
+
+
+# Handmatig
 ## 1. Deze repo downloaden
 ``` bash
 git clone https://github.com/youpie/webcom_ical.git
@@ -59,6 +90,9 @@ Je kan hier ook de gegevens van je email server invullen, als je niet weet wat d
 > [!TIP]
 > Bij de `Preferences` zijn de opties `true` of `false`
 
+> [!TIP]
+> Bij veel variabelen staat '{{xzy}}', dit kan je in dit geval gewoon weghalen
+
 ## 7. Start de container
 Start nu de gegenereerde container met
 ``` bash
@@ -79,3 +113,5 @@ voeg dan deze lijn toe
 ``` Bash
 10 */1 * * * docker start docker start webcom_ical >/dev/null 2>&1
 ```
+
+Als het je echt niet lukt met deze uitleg (en je hebt je best gedaan om het te begrijpen) voel je vrij om contact met me op te nemen! 😄

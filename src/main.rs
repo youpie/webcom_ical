@@ -789,7 +789,9 @@ async fn main() -> WebDriverResult<()> {
             Err(x) => println!("failed to send error email, ironic: {:?}", x),
         }
     }
-    heartbeat(error_reason, kuma_url,&username).await.unwrap();
+    if error_reason != FailureType::TriesExceeded {
+        heartbeat(error_reason, kuma_url,&username).await.unwrap();
+    }
     driver.quit().await?;
     Ok(())
 }

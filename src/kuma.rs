@@ -79,6 +79,7 @@ async fn create_monitor(kuma_client: &Client, personeelsnummer: &str, notificati
         name: Some(personeelsnummer.to_string()),
         interval: Some(heartbeat_interval),
         max_retries: Some(heartbeat_retry),
+        retry_interval: Some(heartbeat_interval),
         push_token: Some(personeelsnummer.to_string()),
         notification_id_list: Some(HashMap::from([(notification_id.to_string(),true)])),
         parent: Some(group_id),

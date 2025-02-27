@@ -4,7 +4,7 @@ use kuma_client::{monitor, Client, notification};
 use serde::{Deserialize, Serialize};
 use strfmt::strfmt;
 use std::collections::HashMap;
-use std::fs::{File,read_to_string};
+use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use url::Url;
@@ -130,7 +130,7 @@ De fout is: {{{{msg}}}}
 
     let email_env = email::EnvMailVariables::new(true)?;
     let port = var("KUMA_MAIL_PORT")?;
-    let secure = match var("KUMA_MAUL_SECURE")?.as_str(){
+    let secure = match var("KUMA_MAIL_SECURE").unwrap_or(var("KUMA_MAUL_SECURE")?).as_str(){
         "true" => true,
         _ => false
     };

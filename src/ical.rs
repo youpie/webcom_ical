@@ -30,6 +30,7 @@ Shift sheet • {}",
                     shift_link
                 ))
                 .location(&shift.location)
+                .append_property(icalendar::Property::new("X-BUSSIE-METADATA",&serde_json::to_string(shift).unwrap()))
                 .starts(create_dateperhapstime(shift.date, shift.start))
                 .ends(create_dateperhapstime(shift.end_date, shift.end))
                 .done(),
@@ -50,7 +51,7 @@ fn create_dateperhapstime(date: Date, time: Time) -> CalendarDateTime {
     let time_min = time.minute();
     let naive_time = NaiveTime::from_hms_opt(time_hrs as u32, time_min as u32, 0).unwrap();
     let naive_date =
-        NaiveDate::from_ymd_opt(date_year as i32, date_month as u32, date_day as u32).unwrap();
+        NaiveDate::from_ymd_opt(date_year , date_month as u32, date_day as u32).unwrap();
     let naive_date_time = NaiveDateTime::new(naive_date, naive_time);
     CalendarDateTime::WithTimezone {
         date_time: naive_date_time,

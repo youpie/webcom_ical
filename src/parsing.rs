@@ -36,7 +36,7 @@ async fn get_elements(
 
             // println!("dag {}", &dag_text);
             let dag: u8 = dag_text_split.parse().unwrap();
-            let date = Date::from_calendar_date(year as i32, month, dag).unwrap();
+            let date = Date::from_calendar_date(year, month, dag).unwrap();
             let new_shift = Shift::new(text, date, &name);
             temp_emlements.push(new_shift.clone());
             println!("Found Shift {}", &new_shift.number);

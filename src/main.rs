@@ -1,16 +1,8 @@
-use chrono::NaiveDate;
-use chrono::NaiveDateTime;
-use chrono::NaiveTime;
 use dotenvy::dotenv_override;
 use dotenvy::var;
 use email::send_errors;
 use email::send_welcome_mail;
-use gebroken_shifts::navigate_to_subdirectory;
-use gebroken_shifts::wait_for_response;
-use icalendar::Calendar;
-use icalendar::CalendarDateTime;
 use icalendar::Component;
-use icalendar::Event;
 use icalendar::EventLike;
 use reqwest;
 use serde::{Deserialize, Serialize};
@@ -26,8 +18,10 @@ use thirtyfour::prelude::*;
 use thiserror::Error;
 use time::macros::format_description;
 use time::Duration;
-use time::Month;
 use url::Url;
+
+use crate::parsing::*;
+use crate::ical::*;
 
 use time::Date;
 use time::Time;
@@ -35,6 +29,8 @@ use time::Time;
 pub mod email;
 pub mod gebroken_shifts;
 pub mod kuma;
+mod ical;
+mod parsing;
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -106,9 +102,9 @@ impl Shift {
                 y
             })
             .collect();
+        println!("{parts_clean:?}");
         let mut parts_list: Vec<Split<'_, &str>> =
             parts_clean.iter().map(|x| x.split(": ")).collect();
-
         let number: String = parts_list[0].nth(1).unwrap().to_string();
         let _date: String = parts_list[1].nth(1).unwrap().to_string();
         let time: String = parts_list[2].nth(1).unwrap_or("").to_string();
@@ -117,9 +113,9 @@ impl Shift {
         let _day_of_week: String = parts_list[5].nth(1).unwrap_or("").to_string();
         let kind: String = parts_list[6].nth(1).unwrap_or("").to_string();
         let mut location = "Onbekend".to_string();
-        if parts_list[7].nth(0).unwrap_or("") == "Startplaats" {
+        if parts_list[7].next().unwrap_or("") == "Startplaats" {
             location_modifier = 0;
-            location = parts_list[7].nth(1).unwrap_or("").to_string();
+            location = parts_list[7].next().unwrap_or("").to_string();
         }
         let description: String = parts_list[8 - location_modifier]
             .nth(1)
@@ -158,7 +154,7 @@ impl Shift {
         let duration = duration_hours + duration_minutes;
         let mut end_date = date;
         if end < start {
-            end_date = date + time::Duration::days(1);
+            end_date = date + Duration::days(1);
         }
         Self {
             date,
@@ -215,16 +211,17 @@ impl Shifts {
 }
 
 fn create_shift_link(shift: &Shift) -> GenResult<String> {
+    let date_format = format_description!("[year]-[month]-[day]");
+    let formatted_date = shift.date.format(date_format)?;
     let domain = var("PDF_SHIFT_DOMAIN").unwrap_or("https://emphisia.nl/shift/".to_string());
     if domain.is_empty() {
-        let date_format = format_description!("[year]-[month]-[day]");
         return Ok(format!(
             "https://dmz-wbc-web01.connexxion.nl/WebComm/shiprint.aspx?{}",
-            shift.date.format(date_format)?
+            &formatted_date
         ));
     }
     let shift_number_bare = shift.number.split("-").next().unwrap();
-    Ok(format!("{domain}{shift_number_bare}"))
+    Ok(format!("{domain}{shift_number_bare}?date={}",&formatted_date))
 }
 
 // Creates and returns a Time::time from a given string of time eg: 12:34
@@ -239,40 +236,6 @@ fn get_time(str_time: &str) -> Time {
     Time::from_hms(hour, min, 0).unwrap()
 }
 
-async fn sign_in_webcom(driver: &WebDriver, user: &str, pass: &str) -> GenResult<String> {
-    let username_field = driver
-        .find(By::Id("ctl00_cntMainBody_lgnView_lgnLogin_UserName"))
-        .await?;
-    username_field.send_keys(user).await?;
-    let password_field = driver
-        .find(By::Id("ctl00_cntMainBody_lgnView_lgnLogin_Password"))
-        .await?;
-    password_field.send_keys(pass).await?;
-    driver
-        .find(By::Id("ctl00_cntMainBody_lgnView_lgnLogin_LoginButton"))
-        .await?
-        .click()
-        .await?;
-    println!("waiting until loaded");
-    //wait_until_loaded(&driver).await?;
-    let _ = wait_for_response(&driver, By::Tag("h3"), false).await;
-    println!("loaded");
-    let name_text = match driver.find(By::Tag("h3")).await {
-        Ok(element) => element.text().await?,
-        Err(_) => {
-            return Err(Box::new(check_sign_in_error(driver).await?));
-        }
-    };
-    let name = name_text
-        .split(",")
-        .last()
-        .unwrap()
-        .split_whitespace()
-        .next()
-        .unwrap()
-        .to_string();
-    Ok(name)
-}
 
 async fn check_sign_in_error(driver: &WebDriver) -> GenResult<FailureType> {
     println!("Sign in failed");
@@ -300,172 +263,6 @@ fn get_sign_in_error_type(text: &str) -> SignInFailure {
     }
 }
 
-/*
-Logs into webcom, has no logic for when the login fails.
-It will also find and return the first name of the user, this will fail if the login is unsuccesful
-*/
-async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> GenResult<String> {
-    println!("Logging in..");
-    let name = sign_in_webcom(driver, user, pass).await?;
-    //wait_until_loaded(&driver).await?;
-
-    //println!("{}", name_text);
-    // let rooster_knop = driver.query(By::LinkText("Rooster")).first().await?;
-    // rooster_knop.wait_until().displayed().await?;
-    // rooster_knop.click().await?;
-    println!("Loading rooster..");
-    navigate_to_subdirectory(driver, "roster.aspx").await?;
-    Ok(name)
-}
-
-/*
-Checks all supplied WebElements, it checks if the day contains the text "Dienstuur"  and if so, adds it to a Vec of valid shifts in the calendar
-Does not search itself for elements
-*/
-async fn get_elements(
-    driver: &WebDriver,
-    month: Month,
-    year: i32,
-    name: String,
-) -> WebDriverResult<Vec<Shift>> {
-    let mut temp_emlements: Vec<Shift> = vec![];
-    let elements = driver
-        .query(By::ClassName("calDay"))
-        .all_from_selector()
-        .await?;
-    for element in elements {
-        let text = match element.attr("data-original-title").await? {
-            Some(x) => x,
-            None => {
-                return Err(WebDriverError::FatalError(
-                    "no elements in rooster".to_string(),
-                ));
-            }
-        };
-        if !text.is_empty() && text.contains("Dienstduur") {
-            // println!("Loading shift: {:?}", &text);
-            let dag_text = element.find(By::Tag("strong")).await?.text().await?;
-            let dag_text_split = dag_text.split_whitespace().next().unwrap();
-
-            // println!("dag {}", &dag_text);
-            let dag: u8 = dag_text_split.parse().unwrap();
-            let date = Date::from_calendar_date(year as i32, month, dag).unwrap();
-            let new_shift = Shift::new(text, date, &name);
-            temp_emlements.push(new_shift.clone());
-            println!("Found Shift {}", &new_shift.number);
-        }
-    }
-    Ok(temp_emlements)
-}
-
-/*
-Creates the ICAL file to add to the calendar
-*/
-fn create_ical(shifts: &Vec<Shift>) -> String {
-    println!("Creating calendar file...");
-    let mut calendar = Calendar::new()
-        .name("Hermes rooster")
-        .append_property(("METHOD", "PUBLISH"))
-        .timezone("Europe/Amsterdam")
-        .done();
-    for shift in shifts {
-        let shift_link = create_shift_link(shift).unwrap();
-        calendar.push(
-            Event::new()
-                .summary(&format!("Shift - {}", shift.number))
-                .description(&format!(
-                    "Dienstsoort • {}
-Duur • {} uur {} minuten
-Omschrijving • {}
-Shift sheet • {}",
-                    shift.kind,
-                    shift.duration.whole_hours(),
-                    shift.duration.whole_minutes() % 60,
-                    shift.description,
-                    shift_link
-                ))
-                .location(&shift.location)
-                .starts(create_dateperhapstime(shift.date, shift.start))
-                .ends(create_dateperhapstime(shift.end_date, shift.end))
-                .done(),
-        );
-    }
-    //println!("{}", calendar);
-    String::from(calendar.to_string())
-}
-
-/*
-I use the create Time to keep track of dates and time. But the crate used for creating the ICAL file uses chrono to keep time.
-*/
-fn create_dateperhapstime(date: Date, time: Time) -> CalendarDateTime {
-    let date_day = date.day();
-    let date_month = date.month() as u8;
-    let date_year = date.year();
-    let time_hrs = time.hour();
-    let time_min = time.minute();
-    let naive_time = NaiveTime::from_hms_opt(time_hrs as u32, time_min as u32, 0).unwrap();
-    let naive_date =
-        NaiveDate::from_ymd_opt(date_year as i32, date_month as u32, date_day as u32).unwrap();
-    let naive_date_time = NaiveDateTime::new(naive_date, naive_time);
-    CalendarDateTime::WithTimezone {
-        date_time: naive_date_time,
-        tzid: "Europe/Amsterdam".to_string(),
-    }
-}
-
-/*
-Just presses the previous button in webcom to load the previous month
-*/
-async fn load_previous_month_shifts(
-    driver: &WebDriver,
-    name: String,
-) -> WebDriverResult<Vec<Shift>> {
-    println!("Loading Previous Month..");
-    let now = time::OffsetDateTime::now_utc();
-    let today = now.date();
-    let new_month = today.month().previous();
-    let new_year = if new_month == Month::December {
-        today.year() - 1
-    } else {
-        today.year()
-    };
-    navigate_to_subdirectory(
-        &driver,
-        &format!("roster.aspx?{}-{}-01", new_year, new_month as u8),
-    )
-    .await?;
-    wait_until_loaded(&driver).await.unwrap();
-    Ok(get_elements(&driver, new_month, new_year, name).await?)
-}
-
-/*
-Just presses the next button in webcom twice to load the next month.
-Only works correctly if the previous month function has been ran before
-*/
-async fn load_next_month_shifts(driver: &WebDriver, name: String) -> WebDriverResult<Vec<Shift>> {
-    println!("Loading Next Month..");
-    let now = time::OffsetDateTime::now_utc();
-    let today = now.date();
-    let new_month = today.month().next();
-    let new_year = if new_month == Month::January {
-        today.year() + 1
-    } else {
-        today.year()
-    };
-    navigate_to_subdirectory(
-        &driver,
-        &format!("roster.aspx?{}-{}-01", new_year, new_month as u8),
-    )
-    .await?;
-    wait_until_loaded(&driver).await.unwrap();
-    Ok(get_elements(&driver, new_month, new_year, name).await?)
-}
-
-async fn load_current_month_shifts(driver: &WebDriver, name: String) -> GenResult<Vec<Shift>> {
-    let now = time::OffsetDateTime::now_utc();
-    let today = now.date();
-    Ok(get_elements(&driver, today.month(), today.year(), name).await?)
-}
 
 /*
 Serialise the shifts to be saved to disk.
@@ -605,7 +402,7 @@ fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>> {
         .parse()
         .unwrap_or(1);
     let path = Path::new("./sign_in_failure_count.toml");
-    // Load the existing counter, create a new one if one doesnt exist yet
+    // Load the existing counter, create a new one if one doesn't exist yet
     let mut failure_counter = match load_sign_in_failure_count(path) {
         Ok(value) => value,
         Err(_) => {
@@ -670,7 +467,7 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     //     "https://dmz-wbc-web0{}.connexxion.nl/WebComm/default.aspx",
     //     (retry_count % 2) + 1
     // );
-    let main_url = format!("webcom.connexxion.nl");
+    let main_url = "webcom.connexxion.nl";
     println!("Loading site: {}..", main_url);
     driver.goto(main_url).await?;
     wait_untill_redirect(&driver).await?;
@@ -686,12 +483,11 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     let shifts = gebroken_shifts::split_night_shift(&shifts);
     let calendar = create_ical(&shifts);
     let ical_path = PathBuf::from(&format!("{}{}.ics", var("SAVE_TARGET")?, username));
-    email::send_welcome_mail(&ical_path, username, &name, false)?;
+    send_welcome_mail(&ical_path, username, &name, false)?;
     check_domain_update(&ical_path, &shifts.last().unwrap(), &name);
     let mut output = File::create(&ical_path)?;
     println!("Writing to: {:?}", &ical_path);
     write!(output, "{}", calendar)?;
-
     Ok(())
 }
 

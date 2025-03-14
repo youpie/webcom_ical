@@ -9,3 +9,4 @@ sign_in_failure_count.toml
 /ansible/inventory.ini
 previous_domain
 kuma_data.toml
+.env.old

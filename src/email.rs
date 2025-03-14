@@ -282,7 +282,7 @@ fn send_removed_shifts_mail(
         shift_tables.push_str(&shift_table_clone);
     }
     let removed_shift_html = strfmt!(&removed_shift_html,
-        name.clone(),
+        name => name.clone(),
         shift_changed_ammount => removed_shifts.len().to_string(), 
         single_plural_en => email_shift_s, 
         single_plural => enkelvoud_meervoud,

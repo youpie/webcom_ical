@@ -2,8 +2,6 @@ use dotenvy::dotenv_override;
 use dotenvy::var;
 use email::send_errors;
 use email::send_welcome_mail;
-use icalendar::Component;
-use icalendar::EventLike;
 use reqwest;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
@@ -211,7 +209,7 @@ impl Shifts {
 }
 
 fn create_shift_link(shift: &Shift) -> GenResult<String> {
-    let date_format = format_description!("[year]-[month]-[day]");
+    let date_format = format_description!("[day]-[month]-[year]");
     let formatted_date = shift.date.format(date_format)?;
     let domain = var("PDF_SHIFT_DOMAIN").unwrap_or("https://emphisia.nl/shift/".to_string());
     if domain.is_empty() {

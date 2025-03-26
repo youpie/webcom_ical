@@ -131,7 +131,7 @@ De fout is: {{{{msg}}}}
 
     let email_env = email::EnvMailVariables::new(true)?;
     let port = var("KUMA_MAIL_PORT")?;
-    let secure = match var("KUMA_MAIL_SECURE").unwrap_or(var("KUMA_MAUL_SECURE")?).as_str(){
+    let secure = match var("KUMA_MAIL_SECURE").unwrap_or(var("KUMA_MAUL_SECURE").unwrap_or("true".into())).as_str(){
         "true" => true,
         _ => false
     };

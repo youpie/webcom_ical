@@ -203,7 +203,6 @@ fn create_send_new_email(
     let base_html = fs::read_to_string("./templates/email_base.html").unwrap();
     let mut changed_mail_html = fs::read_to_string("./templates/changed_shift.html").unwrap();
     let shift_table = fs::read_to_string("./templates/shift_table.html").unwrap();
-
     let email_shift_s = if new_shifts.len() != 1 { "en" } else { "" };
     let name = &new_shifts.first().unwrap().name;
     let new_update_text = match update {
@@ -234,7 +233,8 @@ fn create_send_new_email(
     )?;
     let email_body_html = strfmt!(&base_html, 
         content => changed_mail_html,
-        banner_color => COLOR_BLUE
+        banner_color => COLOR_BLUE,
+        footer => create_footer(false)
     )?;
 
     let email = Message::builder()
@@ -250,6 +250,27 @@ fn create_send_new_email(
         .body(email_body_html)?;
     mailer.send(&email)?;
     Ok(())
+}
+
+fn create_footer(only_url:bool) -> String {
+    let footer_text = r#"<tr>
+      <td style="background-color:#FFFFFF; text-align:center; padding-top:20px;font-size:12px;">
+        <a style="color:#9a9996;">{footer_text}
+      </td>
+      <tr>
+      <td style="background-color:#FFFFFF; text-align:center;font-size:12px;padding:0px;">
+        <a href="{footer_url}" style="color:#9a9996;">{footer_url}</a>
+      </td>
+      </tr>"#;
+    let domain = var("DOMAIN").unwrap_or(ERROR_VALUE.to_string());
+    let username = var("USERNAME").unwrap();
+    let url = format!("{}/{}.ics", domain, username);
+    match only_url {
+        true => url,
+        false => strfmt!(footer_text,
+    footer_text => "Je agenda link:",
+    footer_url => url).unwrap_or("".to_owned())
+        }
 }
 
 fn send_removed_shifts_mail(
@@ -290,7 +311,8 @@ fn send_removed_shifts_mail(
     )?;
     let email_body_html = strfmt!(&base_html, 
         content => removed_shift_html,
-        banner_color => COLOR_BLUE
+        banner_color => COLOR_BLUE,
+        footer => create_footer(false)
     )?;
     let email = Message::builder()
         .from(format!("{} <{}>",SENDER_NAME, &env.mail_from).parse()?)
@@ -380,10 +402,8 @@ pub fn send_welcome_mail(
 
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
-    let domain = var("DOMAIN").unwrap_or(ERROR_VALUE.to_string());
     let ical_username = var("ICAL_USER").unwrap_or(ERROR_VALUE.to_string());
     let ical_password = var("ICAL_PASS").unwrap_or(ERROR_VALUE.to_string());
-    let ical_url = format!("{}/{}.ics", domain, username);
 
     let auth_html = strfmt!(&auth_html, 
         auth_username => ical_username.clone(), 
@@ -391,12 +411,13 @@ pub fn send_welcome_mail(
         admin_email => env.mail_error_to.clone())?;
     let onboarding_html = strfmt!(&onboarding_html, 
         name => name.to_string(),
-        agenda_url => ical_url,
+        agenda_url => create_footer(true),
         auth_credentials => if ical_username.is_empty() {String::new()} else {auth_html}
     )?;
     let email_body_html = strfmt!(&base_html,
         content => onboarding_html,
-        banner_color => COLOR_BLUE
+        banner_color => COLOR_BLUE,
+        footer => "".to_owned()
     )?;
 
     let subject = match updated_link {
@@ -452,7 +473,8 @@ pub fn send_failed_signin_mail(
     )?;
     let email_body_html = strfmt!(&base_html, 
         content => login_failure_html,
-        banner_color => COLOR_RED
+        banner_color => COLOR_RED,
+        footer => create_footer(false)
     )?;
 
     let email = Message::builder()
@@ -481,7 +503,8 @@ pub fn send_sign_in_succesful(name: &str) -> GenResult<()> {
     let mailer = load_mailer(&env)?;
     let email_body_html = strfmt!(&base_html, 
         content => login_success_html,
-        banner_color => COLOR_GREEN
+        banner_color => COLOR_GREEN,
+        footer => create_footer(false)
     )?;
     
     let email = Message::builder()

@@ -3,7 +3,7 @@ use thirtyfour::{By, WebDriver};
 use time::{Date, Month};
 use thirtyfour::prelude::ElementQueryable;
 use crate::gebroken_shifts::{navigate_to_subdirectory, wait_for_response};
-use crate::{check_sign_in_error, wait_until_loaded, GenResult, Shift};
+use crate::{check_if_webcom_unavailable, check_sign_in_error, wait_until_loaded, FailureType, GenResult, Shift};
 
 /*
 Checks all supplied WebElements, it checks if the day contains the text "Dienstuur"  and if so, adds it to a Vec of valid shifts in the calendar
@@ -117,10 +117,21 @@ pub async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> GenRes
     Ok(name)
 }
 
+
+
 async fn sign_in_webcom(driver: &WebDriver, user: &str, pass: &str) -> GenResult<String> {
+    let possible_error = match driver.find(By::Id("h3")).await{
+        Ok(element) => Some(element.text().await.unwrap_or("GEEN TEKST".to_owned())),
+        Err(_) => None
+    };
     let username_field = driver
         .find(By::Id("ctl00_cntMainBody_lgnView_lgnLogin_UserName"))
-        .await?;
+        .await.map_err(|error| {
+            match check_if_webcom_unavailable(possible_error){
+                true => Box::new(FailureType::SignInFailed(crate::SignInFailure::WebcomDown)),
+                false => Box::new(FailureType::Other(error.to_string()))
+            }
+        })?;
     username_field.send_keys(user).await?;
     let password_field = driver
         .find(By::Id("ctl00_cntMainBody_lgnView_lgnLogin_Password"))

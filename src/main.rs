@@ -51,6 +51,7 @@ impl IncorrectCredentialsCount {
 enum SignInFailure {
     TooManyTries,
     IncorrectCredentials,
+    WebcomDown,
     Other(String),
 }
 
@@ -59,6 +60,7 @@ enum FailureType {
     TriesExceeded,
     GeckoEngine,
     SignInFailed(SignInFailure),
+    Other(String),
     OK,
 }
 
@@ -245,12 +247,25 @@ async fn check_sign_in_error(driver: &WebDriver) -> GenResult<FailureType> {
             return Ok(FailureType::SignInFailed(sign_in_error_type));
         }
         Err(_) => {
-            println!("Geen fount banner gevonden")
+            println!("Geen fount banner gevonden");
         }
     };
     Ok(FailureType::SignInFailed(SignInFailure::Other(
         "Geen idee waarom er niet ingelogd kon worden".to_string(),
     )))
+}
+
+// See if there is a text which indicated webcom is offline
+fn check_if_webcom_unavailable(h3_text: Option<String>) -> bool {
+    match h3_text {
+        Some (text) => {
+            if text == "De servertoepassing is niet beschikbaar.".to_owned() {
+                return true;
+            }
+        }
+        None => ()
+    };
+    false
 }
 
 fn get_sign_in_error_type(text: &str) -> SignInFailure {

@@ -263,7 +263,7 @@ fn create_footer(only_url:bool) -> String {
       </td>
       </tr>"#;
     let domain = var("DOMAIN").unwrap_or(ERROR_VALUE.to_string());
-    let url = format!("{}/{}.ics", domain, create_ical_filename().unwrap_or(ERROR_VALUE.to_owned()));
+    let url = format!("{}/{}", domain, create_ical_filename().unwrap_or(ERROR_VALUE.to_owned()));
     match only_url {
         true => url,
         false => strfmt!(footer_text,

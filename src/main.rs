@@ -503,7 +503,7 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
     let shifts = gebroken_shifts::split_night_shift(&shifts);
     let calendar = create_ical(&shifts);
-    let ical_path = PathBuf::from(&format!("{}{}.ics", var("SAVE_TARGET")?, create_ical_filename()?));
+    let ical_path = PathBuf::from(&format!("{}{}", var("SAVE_TARGET")?, create_ical_filename()?));
     send_welcome_mail(&ical_path, &name, false)?;
     check_domain_update(&ical_path, &shifts.last().unwrap());
     let mut output = File::create(&ical_path)?;

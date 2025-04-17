@@ -1,4 +1,4 @@
-FROM rust:1.81
+FROM rust:slim
 
 WORKDIR /usr/src/webcom_ical
 COPY ./src ./src

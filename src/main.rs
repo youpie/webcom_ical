@@ -2,7 +2,6 @@ use dotenvy::dotenv_override;
 use dotenvy::var;
 use email::send_errors;
 use email::send_welcome_mail;
-use md5::{Md5,Digest};
 use reqwest;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
@@ -280,18 +279,10 @@ fn get_sign_in_error_type(text: &str) -> SignInFailure {
 fn create_ical_filename() -> GenResult<String> {
     let username = var("USERNAME").unwrap();
     match var("RANDOM_FILENAME").ok(){
-        Some(value) if value == "false".to_owned() => return Ok(format!("{}.ics",username)),
-        None => return Ok(format!("{}.ics",username)),
-        _ => ()
-    };
-    let randomness = var("RANDOM_FILENAME")?;
-    let mut total = username.clone();
-    total.push_str(&randomness);
-
-    let mut hasher = Md5::new();
-    hasher.update(total);
-    let hash = String::from_utf8(hasher.finalize().to_ascii_uppercase())?;
-    Ok(format!("{}.ics",hash))
+        Some(value) if value == "false".to_owned() => Ok(format!("{}.ics",username)),
+        None => Ok(format!("{}.ics",username)),
+        _ => Ok(format!("{}.ics",var("RANDOM_FILENAME")?))
+    }
 }
 
 /*

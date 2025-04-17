@@ -40,11 +40,11 @@
   tasks:
     - name: Generate a UUID
       set_fact:
-        my_uuid: "{{ lookup('community.general.random_string', length=36, special=false, upper=false, digits=true, lower=true) }}"
+        my_uuid: "{{ lookup('community.general.random_string', length=12, special=false, upper=false, digits=true, lower=true) }}"
 
     - name: Set environment variable
       set_fact:
-        my_env_var: "{{ my_uuid }}"
+        random_filename: "{{ my_uuid }}"
 
     - name: Create user directory
       ansible.builtin.file:

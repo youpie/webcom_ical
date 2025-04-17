@@ -2,6 +2,7 @@ use dotenvy::dotenv_override;
 use dotenvy::var;
 use email::send_errors;
 use email::send_welcome_mail;
+use md5::{Md5,Digest};
 use reqwest;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
@@ -276,6 +277,22 @@ fn get_sign_in_error_type(text: &str) -> SignInFailure {
     }
 }
 
+fn create_ical_filename() -> GenResult<String> {
+    let username = var("USERNAME").unwrap();
+    match var("RANDOM_FILENAME").ok(){
+        Some(value) if value == "false".to_owned() => return Ok(format!("{}.ics",username)),
+        None => return Ok(format!("{}.ics",username)),
+        _ => ()
+    };
+    let randomness = var("RANDOM_FILENAME")?;
+    let mut total = username.clone();
+    total.push_str(&randomness);
+
+    let mut hasher = Md5::new();
+    hasher.update(total);
+    let hash = String::from_utf8(hasher.finalize().to_ascii_uppercase())?;
+    Ok(format!("{}.ics",hash))
+}
 
 /*
 Serialise the shifts to be saved to disk.
@@ -380,7 +397,7 @@ fn save_sign_in_failure_count(path: &Path, counter: &IncorrectCredentialsCount) 
 
 // This is a pretty useless function. It checks if the DOMAIN env variable was changed since last time the program was run
 // It is just to send a new welcome mail
-fn check_domain_update(ical_path: &PathBuf, shift: &Shift, name: &str) {
+fn check_domain_update(ical_path: &PathBuf, shift: &Shift) {
     let previous_domain;
     let path = "./previous_domain";
     match std::fs::read_to_string(path) {
@@ -393,7 +410,7 @@ fn check_domain_update(ical_path: &PathBuf, shift: &Shift, name: &str) {
     let current_domain = var("DOMAIN").unwrap_or("".to_string());
     if let Some(previous_domain_unwrap) = previous_domain {
         if previous_domain_unwrap != current_domain {
-            let _ = send_welcome_mail(ical_path, &name, &shift.name, true);
+            let _ = send_welcome_mail(ical_path, &shift.name, true);
         }
     }
     match File::create(path) {
@@ -495,9 +512,9 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
     let shifts = gebroken_shifts::split_night_shift(&shifts);
     let calendar = create_ical(&shifts);
-    let ical_path = PathBuf::from(&format!("{}{}.ics", var("SAVE_TARGET")?, username));
-    send_welcome_mail(&ical_path, username, &name, false)?;
-    check_domain_update(&ical_path, &shifts.last().unwrap(), &name);
+    let ical_path = PathBuf::from(&format!("{}{}.ics", var("SAVE_TARGET")?, create_ical_filename()?));
+    send_welcome_mail(&ical_path, &name, false)?;
+    check_domain_update(&ical_path, &shifts.last().unwrap());
     let mut output = File::create(&ical_path)?;
     println!("Writing to: {:?}", &ical_path);
     write!(output, "{}", calendar)?;

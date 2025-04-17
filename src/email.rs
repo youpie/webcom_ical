@@ -11,7 +11,7 @@ use strfmt::strfmt;
 use thirtyfour::error::WebDriverResult;
 use time::{macros::format_description, Date};
 
-use crate::{create_shift_link, IncorrectCredentialsCount, Shift, Shifts, SignInFailure};
+use crate::{create_ical_filename, create_shift_link, IncorrectCredentialsCount, Shift, Shifts, SignInFailure};
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -263,8 +263,7 @@ fn create_footer(only_url:bool) -> String {
       </td>
       </tr>"#;
     let domain = var("DOMAIN").unwrap_or(ERROR_VALUE.to_string());
-    let username = var("USERNAME").unwrap();
-    let url = format!("{}/{}.ics", domain, username);
+    let url = format!("{}/{}.ics", domain, create_ical_filename().unwrap_or(ERROR_VALUE.to_owned()));
     match only_url {
         true => url,
         false => strfmt!(footer_text,
@@ -382,7 +381,6 @@ pub fn send_gecko_error_mail<T: std::fmt::Debug>(error: WebDriverResult<T>) -> G
 
 pub fn send_welcome_mail(
     path: &PathBuf,
-    username: &str,
     name: &str,
     updated_link: bool,
 ) -> GenResult<()> {

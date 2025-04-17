@@ -16,11 +16,6 @@
     - name: mail_to
       prompt: "Waar moet de email naartoe"
       private: no
-
-    - name: unsecured
-      prompt: "Save ical unsecure? (true/false)"
-      private: no
-      default: "false"
     
     - name: use_email
       prompt: "Use email (true/false)"
@@ -43,6 +38,14 @@
       default: "true"
 
   tasks:
+    - name: Generate a UUID
+      set_fact:
+        my_uuid: "{{ lookup('community.general.random_string', length=36, special=false, upper=false, digits=true, lower=true) }}"
+
+    - name: Set environment variable
+      set_fact:
+        my_env_var: "{{ my_uuid }}"
+
     - name: Create user directory
       ansible.builtin.file:
         path: "~/Services/Webcom/{{ personeelsnummer }}"

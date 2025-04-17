@@ -7,16 +7,8 @@ error_mail: ""
 
 # If you want to host the ical link, you can specify in what directory it's listed
 ical_domain: ""
-# Below is optional
-unsecured_domain: ""
-ical_username: ""
-ical_password: ""
-
 
 save_target: ""
-
-# Below is optional
-save_target_unsecure: ""
 
 # System username, needed for cron. Can't leave empty
 remote_username: ""

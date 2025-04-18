@@ -258,7 +258,7 @@ fn create_footer(only_url:bool) -> String {
         <a style="color:#9a9996;">{footer_text}
       </td>
       <tr>
-      <td style="background-color:#FFFFFF; text-align:center;font-size:12px;padding_bottom:10px;">
+      <td style="background-color:#FFFFFF; text-align:center;font-size:12px;padding-bottom:10px;">
         <a href="{footer_url}" style="color:#9a9996;">{footer_url}</a>
       </td>
       </tr>"#;

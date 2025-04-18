@@ -424,7 +424,7 @@ fn check_domain_update(ical_path: &PathBuf) {
 }
 
 fn set_get_name(new_name_option: Option<String>) -> String {
-    let path = "name/name";
+    let path = "./kuma/name";
     // Just return constant name if already set
     if let Ok(const_name) = NAME.read() {
         println!("Name already set");

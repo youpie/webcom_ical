@@ -7,9 +7,11 @@ use crate::{create_shift_link, set_get_name, Shift};
 Creates the ICAL file to add to the calendar
 */
 pub fn create_ical(shifts: &Vec<Shift>) -> String {
+    let name = set_get_name(None);
     println!("Creating calendar file...");
     let mut calendar = Calendar::new()
-        .name(&format!("Hermes rooster - {}", set_get_name(None)))
+        .name(&format!("Hermes rooster - {}", name))
+        .append_property(("X-USER-NAME", name.as_str()))
         .append_property(("METHOD", "PUBLISH"))
         .timezone("Europe/Amsterdam")
         .done();

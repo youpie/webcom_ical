@@ -424,27 +424,30 @@ fn check_domain_update(ical_path: &PathBuf) {
 }
 
 fn set_get_name(new_name_option: Option<String>) -> String {
-    let path = "./name/name";
+    let path = "name/name";
     // Just return constant name if already set
     if let Ok(const_name) = NAME.read() {
+        println!("Name already set");
         if new_name_option.is_none() && const_name.is_some() {
             return const_name.clone().unwrap();
         }
     }
-    let name = std::fs::read_to_string(path)
+    let mut name = std::fs::read_to_string(path)
         .ok()
-        .or_else(|| new_name_option.clone())
         .unwrap_or("FOUT BIJ LADEN VAN NAAM".to_owned());
 
     if let Ok(mut const_name) = NAME.write() {
         *const_name = Some(name.clone());
+        println!("Setting name");
     }
     // Write new name if previous name is different (deadname protection lmao)
     if let Some(new_name) = new_name_option {
+        println!("Saving name");
         if new_name != name {
             if let Err(error) = write(path, &new_name) {
-                eprintln!("Fout tijdens opslaan van naam: {}", error.to_string());
+                println!("Fout tijdens opslaan van naam: {}", error.to_string());
             }
+            name = new_name;
         }
     }
     name

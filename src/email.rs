@@ -254,11 +254,11 @@ fn create_send_new_email(
 
 fn create_footer(only_url:bool) -> String {
     let footer_text = r#"<tr>
-      <td style="background-color:#FFFFFF; text-align:center; padding-top:20px;font-size:12px;">
+      <td style="background-color:#FFFFFF; text-align:center; padding-top:0px;font-size:12px;">
         <a style="color:#9a9996;">{footer_text}
       </td>
       <tr>
-      <td style="background-color:#FFFFFF; text-align:center;font-size:12px;padding:0px;">
+      <td style="background-color:#FFFFFF; text-align:center;font-size:12px;padding_bottom:10px;">
         <a href="{footer_url}" style="color:#9a9996;">{footer_url}</a>
       </td>
       </tr>"#;

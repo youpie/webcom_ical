@@ -1,7 +1,7 @@
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use icalendar::{Calendar, CalendarDateTime, Event, Component, EventLike};
 use time::{Date, Time};
-use crate::{create_shift_link, Shift};
+use crate::{create_shift_link, set_get_name, Shift};
 
 /*
 Creates the ICAL file to add to the calendar
@@ -9,7 +9,7 @@ Creates the ICAL file to add to the calendar
 pub fn create_ical(shifts: &Vec<Shift>) -> String {
     println!("Creating calendar file...");
     let mut calendar = Calendar::new()
-        .name("Hermes rooster")
+        .name(&format!("Hermes rooster - {}", set_get_name(None)))
         .append_property(("METHOD", "PUBLISH"))
         .timezone("Europe/Amsterdam")
         .done();

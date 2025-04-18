@@ -1,0 +1,7 @@
+function f
+	set -l tmpfile (mktemp)
+	set -l result (bash -c "source ./find_name.sh \"$argv\" >$tmpfile; printf 'cd %q\n' \"\$PWD\"")
+	cat $tmpfile
+        rm $tmpfile
+        eval $result
+end

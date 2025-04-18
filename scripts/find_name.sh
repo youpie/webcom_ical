@@ -7,7 +7,7 @@
 #   source kuma-find.sh "some name"
 
 #!/usr/bin/env bash
-
+BASE_DIR="$HOME/Services/Webcom"
 # ─── ensure we're being sourced so that `cd` persists ─────────────────────────
 # if [ "$0" = "${BASH_SOURCE[0]}" ]; then
 #   echo "⚠️  Please source this script so the 'cd' sticks:"
@@ -34,7 +34,7 @@ while IFS= read -r -d '' file; do
   folder="$(dirname "$(dirname "$file")")"
   name="$(<"$file")"
   folder_name_map["$folder"]="$name"
-done < <(find . -maxdepth 3 -type f -path '*/kuma/name' -print0)
+done < <(find "$BASE_DIR" -maxdepth 3 -type f -path '*/kuma/name' -print0)
 
 # ─── find exact (case‐insensitive) matches ────────────────────────────────────
 matches=()

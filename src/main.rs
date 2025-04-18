@@ -5,6 +5,7 @@ use email::send_welcome_mail;
 use reqwest;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
+use std::fs::write;
 use std::hash::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -12,25 +13,29 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Split;
+use std::sync::LazyLock;
+use std::sync::RwLock;
 use thirtyfour::prelude::*;
 use thiserror::Error;
-use time::macros::format_description;
 use time::Duration;
+use time::macros::format_description;
 use url::Url;
 
-use crate::parsing::*;
 use crate::ical::*;
+use crate::parsing::*;
 
 use time::Date;
 use time::Time;
 
 pub mod email;
 pub mod gebroken_shifts;
-pub mod kuma;
 mod ical;
+pub mod kuma;
 mod parsing;
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
+
+static NAME: LazyLock<RwLock<Option<String>>> = LazyLock::new(|| RwLock::new(None));
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct IncorrectCredentialsCount {
@@ -55,7 +60,7 @@ enum SignInFailure {
     Other(String),
 }
 
-#[derive(Debug, Error,PartialEq)]
+#[derive(Debug, Error, PartialEq)]
 enum FailureType {
     TriesExceeded,
     GeckoEngine,
@@ -83,7 +88,6 @@ pub struct Shift {
     description: String,
     is_broken: bool,
     magic_number: i64,
-    name: String,
 }
 
 impl Shift {
@@ -92,7 +96,7 @@ impl Shift {
     Also hashes the string to see if it has been updated
     Looks intimidating, bus is mostly boilerplate + a bit of logic for correctly parsing the duration
     */
-    fn new(text: String, date: Date, name: &str) -> Self {
+    fn new(text: String, date: Date) -> Self {
         let text_clone = text.clone();
         let parts = text_clone.split("\u{a0}• \u{a0}• ");
         let mut location_modifier = 1;
@@ -168,7 +172,6 @@ impl Shift {
             description,
             is_broken,
             magic_number,
-            name: name.to_string(),
         }
     }
 
@@ -221,7 +224,10 @@ fn create_shift_link(shift: &Shift) -> GenResult<String> {
         ));
     }
     let shift_number_bare = shift.number.split("-").next().unwrap();
-    Ok(format!("{domain}{shift_number_bare}?date={}",&formatted_date))
+    Ok(format!(
+        "{domain}{shift_number_bare}?date={}",
+        &formatted_date
+    ))
 }
 
 // Creates and returns a Time::time from a given string of time eg: 12:34
@@ -235,7 +241,6 @@ fn get_time(str_time: &str) -> Time {
     }
     Time::from_hms(hour, min, 0).unwrap()
 }
-
 
 async fn check_sign_in_error(driver: &WebDriver) -> GenResult<FailureType> {
     println!("Sign in failed");
@@ -258,30 +263,32 @@ async fn check_sign_in_error(driver: &WebDriver) -> GenResult<FailureType> {
 // See if there is a text which indicated webcom is offline
 fn check_if_webcom_unavailable(h3_text: Option<String>) -> bool {
     match h3_text {
-        Some (text) => {
+        Some(text) => {
             if text == "De servertoepassing is niet beschikbaar.".to_owned() {
                 return true;
             }
         }
-        None => ()
+        None => (),
     };
     false
 }
 
 fn get_sign_in_error_type(text: &str) -> SignInFailure {
     match text {
-        "Uw aanmelding was niet succesvol. Voer a.u.b. het personeelsnummer of 'naam, voornaam' in" => SignInFailure::IncorrectCredentials,
+        "Uw aanmelding was niet succesvol. Voer a.u.b. het personeelsnummer of 'naam, voornaam' in" => {
+            SignInFailure::IncorrectCredentials
+        }
         "Te veel verkeerde aanmeldpogingen" => SignInFailure::TooManyTries,
-        _ => SignInFailure::Other(text.to_string())
+        _ => SignInFailure::Other(text.to_string()),
     }
 }
 
 fn create_ical_filename() -> GenResult<String> {
     let username = var("USERNAME").unwrap();
-    match var("RANDOM_FILENAME").ok(){
-        Some(value) if value == "false".to_owned() => Ok(format!("{}.ics",username)),
-        None => Ok(format!("{}.ics",username)),
-        _ => Ok(format!("{}.ics",var("RANDOM_FILENAME")?))
+    match var("RANDOM_FILENAME").ok() {
+        Some(value) if value == "false".to_owned() => Ok(format!("{}.ics", username)),
+        None => Ok(format!("{}.ics", username)),
+        _ => Ok(format!("{}.ics", var("RANDOM_FILENAME")?)),
     }
 }
 
@@ -351,7 +358,11 @@ async fn wait_untill_redirect(driver: &WebDriver) -> GenResult<()> {
     Ok(())
 }
 
-async fn heartbeat(reason: FailureType, url: Option<String>, personeelsnummer: &str) -> GenResult<()> {
+async fn heartbeat(
+    reason: FailureType,
+    url: Option<String>,
+    personeelsnummer: &str,
+) -> GenResult<()> {
     if url.is_none() || reason == FailureType::TriesExceeded {
         println!("no heartbeat URL");
         return Ok(());
@@ -388,7 +399,7 @@ fn save_sign_in_failure_count(path: &Path, counter: &IncorrectCredentialsCount) 
 
 // This is a pretty useless function. It checks if the DOMAIN env variable was changed since last time the program was run
 // It is just to send a new welcome mail
-fn check_domain_update(ical_path: &PathBuf, shift: &Shift) {
+fn check_domain_update(ical_path: &PathBuf) {
     let previous_domain;
     let path = "./previous_domain";
     match std::fs::read_to_string(path) {
@@ -401,7 +412,7 @@ fn check_domain_update(ical_path: &PathBuf, shift: &Shift) {
     let current_domain = var("DOMAIN").unwrap_or("".to_string());
     if let Some(previous_domain_unwrap) = previous_domain {
         if previous_domain_unwrap != current_domain {
-            let _ = send_welcome_mail(ical_path, &shift.name, true);
+            let _ = send_welcome_mail(ical_path, true);
         }
     }
     match File::create(path) {
@@ -410,6 +421,33 @@ fn check_domain_update(ical_path: &PathBuf, shift: &Shift) {
         }
         Err(_) => (),
     }
+}
+
+fn set_get_name(new_name_option: Option<String>) -> String {
+    let path = "./name";
+    // Just return constant name if already set
+    if let Ok(const_name) = NAME.read() {
+        if new_name_option.is_none() && const_name.is_some() {
+            return const_name.clone().unwrap();
+        }
+    }
+    let name = std::fs::read_to_string(path)
+        .ok()
+        .or_else(|| new_name_option.clone())
+        .unwrap_or("FOUT BIJ LADEN VAN NAAM".to_owned());
+
+    if let Ok(mut const_name) = NAME.write() {
+        *const_name = Some(name.clone());
+    }
+    // Write new name if previous name is different (deadname protection lmao)
+    if let Some(new_name) = new_name_option {
+        if new_name != name {
+            if let Err(error) = write(path, &new_name) {
+                eprintln!("Fout tijdens opslaan van naam: {}", error.to_string());
+            }
+        }
+    }
+    name
 }
 
 // If returning true, continue execution
@@ -437,7 +475,10 @@ fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>> {
     if failure_counter.retry_count == 0 {
         return_value = None;
     } else if failure_counter.retry_count % sign_in_attempt_reduce == 0 {
-        println!("Continuing execution with sign in error, reduce val: {sign_in_attempt_reduce}, current count {}",failure_counter.retry_count);
+        println!(
+            "Continuing execution with sign in error, reduce val: {sign_in_attempt_reduce}, current count {}",
+            failure_counter.retry_count
+        );
         failure_counter.retry_count += 1;
         return_value = None;
     } else {
@@ -492,20 +533,24 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     println!("Loading site: {}..", main_url);
     driver.goto(main_url).await?;
     wait_untill_redirect(&driver).await?;
-    let name = load_calendar(&driver, &username, &password).await?;
+    load_calendar(&driver, &username, &password).await?;
     wait_until_loaded(&driver).await?;
-    let mut shifts = load_current_month_shifts(&driver, name.clone()).await?;
-    shifts.append(&mut load_previous_month_shifts(&driver, name.clone()).await?);
-    shifts.append(&mut load_next_month_shifts(&driver, name.clone()).await?);
+    let mut shifts = load_current_month_shifts(&driver).await?;
+    shifts.append(&mut load_previous_month_shifts(&driver,).await?);
+    shifts.append(&mut load_next_month_shifts(&driver).await?);
     println!("Found {} shifts", shifts.len());
     email::send_emails(&shifts)?;
     save_shifts_on_disk(&shifts, Path::new("./previous_shifts.toml"))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
     let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
     let shifts = gebroken_shifts::split_night_shift(&shifts);
     let calendar = create_ical(&shifts);
-    let ical_path = PathBuf::from(&format!("{}{}", var("SAVE_TARGET")?, create_ical_filename()?));
-    send_welcome_mail(&ical_path, &name, false)?;
-    check_domain_update(&ical_path, &shifts.last().unwrap());
+    let ical_path = PathBuf::from(&format!(
+        "{}{}",
+        var("SAVE_TARGET")?,
+        create_ical_filename()?
+    ));
+    send_welcome_mail(&ical_path, false)?;
+    check_domain_update(&ical_path);
     let mut output = File::create(&ical_path)?;
     println!("Writing to: {:?}", &ical_path);
     write!(output, "{}", calendar)?;
@@ -548,9 +593,9 @@ async fn main() -> WebDriverResult<()> {
         .unwrap_or("3".to_string())
         .parse()
         .unwrap_or(3);
-    
+
     if let Some(url_unwrap) = kuma_url.clone() {
-        if !url_unwrap.is_empty(){
+        if !url_unwrap.is_empty() {
             println!("Checking if kuma needs to be created");
             kuma::first_run(&url_unwrap, &username).await.unwrap();
         }
@@ -607,7 +652,7 @@ async fn main() -> WebDriverResult<()> {
         }
     }
     if error_reason != FailureType::TriesExceeded {
-        heartbeat(error_reason, kuma_url,&username).await.unwrap();
+        heartbeat(error_reason, kuma_url, &username).await.unwrap();
     }
     driver.quit().await?;
     Ok(())

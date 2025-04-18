@@ -3,7 +3,7 @@ use thirtyfour::{By, WebDriver};
 use time::{Date, Month};
 use thirtyfour::prelude::ElementQueryable;
 use crate::gebroken_shifts::{navigate_to_subdirectory, wait_for_response};
-use crate::{check_if_webcom_unavailable, check_sign_in_error, wait_until_loaded, FailureType, GenResult, Shift};
+use crate::{check_if_webcom_unavailable, check_sign_in_error, set_get_name, wait_until_loaded, FailureType, GenResult, Shift};
 
 /*
 Checks all supplied WebElements, it checks if the day contains the text "Dienstuur"  and if so, adds it to a Vec of valid shifts in the calendar
@@ -13,7 +13,6 @@ async fn get_elements(
     driver: &WebDriver,
     month: Month,
     year: i32,
-    name: String,
 ) -> WebDriverResult<Vec<Shift>> {
     let mut temp_emlements: Vec<Shift> = vec![];
     let elements = driver
@@ -37,7 +36,7 @@ async fn get_elements(
             // println!("dag {}", &dag_text);
             let dag: u8 = dag_text_split.parse().unwrap();
             let date = Date::from_calendar_date(year, month, dag).unwrap();
-            let new_shift = Shift::new(text, date, &name);
+            let new_shift = Shift::new(text, date);
             temp_emlements.push(new_shift.clone());
             println!("Found Shift {}", &new_shift.number);
         }
@@ -50,7 +49,6 @@ Just presses the previous button in webcom to load the previous month
 */
 pub async fn load_previous_month_shifts(
     driver: &WebDriver,
-    name: String,
 ) -> WebDriverResult<Vec<Shift>> {
     println!("Loading Previous Month..");
     let now = time::OffsetDateTime::now_utc();
@@ -67,14 +65,14 @@ pub async fn load_previous_month_shifts(
     )
         .await?;
     wait_until_loaded(&driver).await.unwrap();
-    Ok(get_elements(&driver, new_month, new_year, name).await?)
+    Ok(get_elements(&driver, new_month, new_year).await?)
 }
 
 /*
 Just presses the next button in webcom twice to load the next month.
 Only works correctly if the previous month function has been ran before
 */
-pub async fn load_next_month_shifts(driver: &WebDriver, name: String) -> WebDriverResult<Vec<Shift>> {
+pub async fn load_next_month_shifts(driver: &WebDriver) -> WebDriverResult<Vec<Shift>> {
     println!("Loading Next Month..");
     let now = time::OffsetDateTime::now_utc();
     let today = now.date();
@@ -90,22 +88,22 @@ pub async fn load_next_month_shifts(driver: &WebDriver, name: String) -> WebDriv
     )
         .await?;
     wait_until_loaded(&driver).await.unwrap();
-    Ok(get_elements(&driver, new_month, new_year, name).await?)
+    Ok(get_elements(&driver, new_month, new_year).await?)
 }
 
-pub async fn load_current_month_shifts(driver: &WebDriver, name: String) -> GenResult<Vec<Shift>> {
+pub async fn load_current_month_shifts(driver: &WebDriver) -> GenResult<Vec<Shift>> {
     let now = time::OffsetDateTime::now_utc();
     let today = now.date();
-    Ok(get_elements(&driver, today.month(), today.year(), name).await?)
+    Ok(get_elements(&driver, today.month(), today.year()).await?)
 }
 
 /*
 Logs into webcom, has no logic for when the login fails.
 It will also find and return the first name of the user, this will fail if the login is unsuccesful
 */
-pub async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> GenResult<String> {
+pub async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> GenResult<()> {
     println!("Logging in..");
-    let name = sign_in_webcom(driver, user, pass).await?;
+    sign_in_webcom(driver, user, pass).await?;
     //wait_until_loaded(&driver).await?;
 
     //println!("{}", name_text);
@@ -114,12 +112,12 @@ pub async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> GenRes
     // rooster_knop.click().await?;
     println!("Loading rooster..");
     navigate_to_subdirectory(driver, "roster.aspx").await?;
-    Ok(name)
+    Ok(())
 }
 
 
 
-async fn sign_in_webcom(driver: &WebDriver, user: &str, pass: &str) -> GenResult<String> {
+async fn sign_in_webcom(driver: &WebDriver, user: &str, pass: &str) -> GenResult<()> {
     let possible_error = match driver.find(By::Id("h3")).await{
         Ok(element) => Some(element.text().await.unwrap_or("GEEN TEKST".to_owned())),
         Err(_) => None
@@ -160,5 +158,6 @@ async fn sign_in_webcom(driver: &WebDriver, user: &str, pass: &str) -> GenResult
         .next()
         .unwrap()
         .to_string();
-    Ok(name)
+    set_get_name(Some(name));
+    Ok(())
 }

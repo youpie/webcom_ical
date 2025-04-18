@@ -11,7 +11,7 @@ use strfmt::strfmt;
 use thirtyfour::error::WebDriverResult;
 use time::{macros::format_description, Date};
 
-use crate::{create_ical_filename, create_shift_link, IncorrectCredentialsCount, Shift, Shifts, SignInFailure};
+use crate::{create_ical_filename, create_shift_link, set_get_name, IncorrectCredentialsCount, Shift, Shifts, SignInFailure};
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -204,7 +204,7 @@ fn create_send_new_email(
     let mut changed_mail_html = fs::read_to_string("./templates/changed_shift.html").unwrap();
     let shift_table = fs::read_to_string("./templates/shift_table.html").unwrap();
     let email_shift_s = if new_shifts.len() != 1 { "en" } else { "" };
-    let name = &new_shifts.first().unwrap().name;
+    let name = set_get_name(None);
     let new_update_text = match update {
         true => "geupdate",
         false => "nieuwe",
@@ -287,7 +287,7 @@ fn send_removed_shifts_mail(
         "zijn"
     };
     let email_shift_s = if removed_shifts.len() == 1 { "" } else { "en" };
-    let name = &removed_shifts.last().unwrap().name;
+    let name = set_get_name(None);
     let mut shift_tables = String::new();
     for shift in removed_shifts {
         let shift_table_clone = strfmt!(&shift_table,
@@ -381,7 +381,6 @@ pub fn send_gecko_error_mail<T: std::fmt::Debug>(error: WebDriverResult<T>) -> G
 
 pub fn send_welcome_mail(
     path: &PathBuf,
-    name: &str,
     updated_link: bool,
 ) -> GenResult<()> {
     if path.exists() && !updated_link {
@@ -403,12 +402,14 @@ pub fn send_welcome_mail(
     let ical_username = var("ICAL_USER").unwrap_or(ERROR_VALUE.to_string());
     let ical_password = var("ICAL_PASS").unwrap_or(ERROR_VALUE.to_string());
 
+    let name = set_get_name(None);
+
     let auth_html = strfmt!(&auth_html, 
         auth_username => ical_username.clone(), 
         auth_password => ical_password.clone(), 
         admin_email => env.mail_error_to.clone())?;
     let onboarding_html = strfmt!(&onboarding_html, 
-        name => name.to_string(),
+        name => name.clone(),
         agenda_url => create_footer(true),
         auth_credentials => if ical_username.is_empty() {String::new()} else {auth_html}
     )?;
@@ -420,7 +421,7 @@ pub fn send_welcome_mail(
 
     let subject = match updated_link {
         true => "Je Webcom Ical agenda link is veranderd",
-        false => &format!("Welkom bij Webcom Ical {}!", name),
+        false => &format!("Welkom bij Webcom Ical {}!", &name),
     };
     println!("welkom mail sturen");
     let email = Message::builder()

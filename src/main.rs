@@ -35,6 +35,7 @@ mod parsing;
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
+const BASE_DIRECTORY: &str = "kuma/";
 static NAME: LazyLock<RwLock<Option<String>>> = LazyLock::new(|| RwLock::new(None));
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -401,7 +402,7 @@ fn save_sign_in_failure_count(path: &Path, counter: &IncorrectCredentialsCount) 
 // It is just to send a new welcome mail
 fn check_domain_update(ical_path: &PathBuf) {
     let previous_domain;
-    let path = "./previous_domain";
+    let path = &format!("./{BASE_DIRECTORY}previous_domain");
     match std::fs::read_to_string(path) {
         Ok(x) => {
             println!("{}", &x);
@@ -540,7 +541,7 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     shifts.append(&mut load_next_month_shifts(&driver).await?);
     println!("Found {} shifts", shifts.len());
     email::send_emails(&shifts)?;
-    save_shifts_on_disk(&shifts, Path::new("./previous_shifts.toml"))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
+    save_shifts_on_disk(&shifts, Path::new(&format!(".{BASE_DIRECTORY}previous_shifts.toml")))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
     let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
     let shifts = gebroken_shifts::split_night_shift(&shifts);
     let calendar = create_ical(&shifts);

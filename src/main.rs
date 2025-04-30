@@ -436,9 +436,6 @@ fn set_get_name(new_name_option: Option<String>) -> String {
         .ok()
         .unwrap_or("FOUT BIJ LADEN VAN NAAM".to_owned());
 
-    if let Ok(mut const_name) = NAME.write() {
-        *const_name = Some(name.clone());
-    }
     // Write new name if previous name is different (deadname protection lmao)
     if let Some(new_name) = new_name_option {
         if new_name != name {
@@ -447,6 +444,9 @@ fn set_get_name(new_name_option: Option<String>) -> String {
             }
             name = new_name;
         }
+    }
+    if let Ok(mut const_name) = NAME.write() {
+        *const_name = Some(name.clone());
     }
     name
 }

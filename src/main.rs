@@ -541,7 +541,7 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     shifts.append(&mut load_next_month_shifts(&driver).await?);
     println!("Found {} shifts", shifts.len());
     email::send_emails(&shifts)?;
-    save_shifts_on_disk(&shifts, Path::new(&format!(".{BASE_DIRECTORY}previous_shifts.toml")))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
+    save_shifts_on_disk(&shifts, Path::new(&format!("./{BASE_DIRECTORY}previous_shifts.toml")))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
     let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
     let shifts = gebroken_shifts::split_night_shift(&shifts);
     let calendar = create_ical(&shifts);

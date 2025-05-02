@@ -107,7 +107,6 @@ impl Shift {
                 y
             })
             .collect();
-        println!("{parts_clean:?}");
         let mut parts_list: Vec<Split<'_, &str>> =
             parts_clean.iter().map(|x| x.split(": ")).collect();
         let number: String = parts_list[0].nth(1).unwrap().to_string();
@@ -405,7 +404,7 @@ fn check_domain_update(ical_path: &PathBuf) {
     let path = &format!("./{BASE_DIRECTORY}previous_domain");
     match std::fs::read_to_string(path) {
         Ok(x) => {
-            println!("{}", &x);
+            // println!("{}", &x);
             previous_domain = Some(x)
         }
         Err(_) => previous_domain = None,

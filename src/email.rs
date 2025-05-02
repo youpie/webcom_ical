@@ -10,6 +10,7 @@ use std::{
 use strfmt::strfmt;
 use thirtyfour::error::WebDriverResult;
 use time::{macros::format_description, Date};
+use crate::BASE_DIRECTORY;
 
 use crate::{create_ical_filename, create_shift_link, set_get_name, IncorrectCredentialsCount, Shift, Shifts, SignInFailure};
 
@@ -100,7 +101,7 @@ pub fn send_emails(current_shifts: &Vec<Shift>) -> GenResult<()> {
     let previous_shifts = match load_previous_shifts() {
         Ok(x) => x,
         _ => {
-            println!("loading_shifts_failed");
+            println!("ERROR LOADING PREVIOUS SHIFTS HAS FAILED!!!");
             return Ok(());
         } //If there is any error loading previous shifts, just do an early return..
     };
@@ -119,7 +120,8 @@ fn load_mailer(env: &EnvMailVariables) -> GenResult<SmtpTransport> {
 
 // Loads shifts from last time this program was run
 fn load_previous_shifts() -> GenResult<Vec<Shift>> {
-    let path = Path::new("./previous_shifts.toml");
+    let path_str = format!("./{BASE_DIRECTORY}previous_shifts.toml");
+    let path = Path::new(&path_str);
     let shifts_toml = std::fs::read_to_string(path)?;
     let shifts: Shifts = toml::from_str(&shifts_toml)?;
     Ok(shifts.shifts)
@@ -173,15 +175,18 @@ fn find_send_shift_mails(
     }
 
     if !new_shifts_list.is_empty() && env.send_email_new_shift {
+        println!("Found {} new shifts, sending email", new_shifts_list.len());
         create_send_new_email(mailer, &new_shifts_list, env, false)?;
     }
 
     if !updated_shifts.is_empty() && env.send_mail_updated_shift {
+        println!("Found {} updated shifts, sending email", updated_shifts.len());
         create_send_new_email(mailer, &updated_shifts, env, true)?;
     }
     let mut removed_shifts: Vec<Shift> = removed_shifts_dict.values().cloned().cloned().collect();
     removed_shifts.retain(|shift| shift.date >= current_date);
     if !removed_shifts.is_empty() && env.send_mail_updated_shift {
+        println!("Removing {} shifts", removed_shifts.len());
         removed_shifts.retain(|shift| shift.date >= current_date);
         send_removed_shifts_mail(mailer, env, &removed_shifts)?;
     }

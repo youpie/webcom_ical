@@ -1,7 +1,11 @@
+extern crate pretty_env_logger;
+#[macro_use] extern crate log;
+
 use dotenvy::dotenv_override;
 use dotenvy::var;
 use email::send_errors;
 use email::send_welcome_mail;
+use email::PreviousShiftsError;
 use reqwest;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
@@ -223,7 +227,10 @@ fn create_shift_link(shift: &Shift) -> GenResult<String> {
             &formatted_date
         ));
     }
-    let shift_number_bare = shift.number.split("-").next().unwrap();
+    let shift_number_bare = match shift.number.split("-").next(){
+        Some(shift_number) => shift_number,
+        None => return Err("Could not get shift number".into())
+    };
     Ok(format!(
         "{domain}{shift_number_bare}?date={}",
         &formatted_date
@@ -243,16 +250,16 @@ fn get_time(str_time: &str) -> Time {
 }
 
 async fn check_sign_in_error(driver: &WebDriver) -> GenResult<FailureType> {
-    println!("Sign in failed");
+    error!("Sign in failed");
     match driver.find(By::Id("ctl00_lblMessage")).await {
         Ok(element) => {
             let element_text = element.text().await?;
             let sign_in_error_type = get_sign_in_error_type(&element_text);
-            println!("Found error banner: {:?}", &sign_in_error_type);
+            info!("Found error banner: {:?}", &sign_in_error_type);
             return Ok(FailureType::SignInFailed(sign_in_error_type));
         }
         Err(_) => {
-            println!("Geen fount banner gevonden");
+            info!("Geen fount banner gevonden");
         }
     };
     Ok(FailureType::SignInFailed(SignInFailure::Other(
@@ -347,13 +354,13 @@ async fn wait_untill_redirect(driver: &WebDriver) -> GenResult<()> {
     .await?;
 
     if current_url == initial_url {
-        println!("Timeout waiting for redirect.");
+        warn!("Timeout waiting for redirect.");
         return Err(Box::new(WebDriverError::Timeout(
             "Redirect did not occur".into(),
         )));
     }
 
-    println!("Redirected to: {}", current_url);
+    debug!("Redirected to: {}", current_url);
     wait_until_loaded(driver).await?;
     Ok(())
 }
@@ -364,7 +371,7 @@ async fn heartbeat(
     personeelsnummer: &str,
 ) -> GenResult<()> {
     if url.is_none() || reason == FailureType::TriesExceeded {
-        println!("no heartbeat URL");
+        info!("no heartbeat URL");
         return Ok(());
     }
     let mut request_url: Url = url.clone().unwrap().parse().unwrap();
@@ -439,7 +446,7 @@ fn set_get_name(new_name_option: Option<String>) -> String {
     if let Some(new_name) = new_name_option {
         if new_name != name {
             if let Err(error) = write(path, &new_name) {
-                println!("Fout tijdens opslaan van naam: {}", error.to_string());
+                error!("Fout tijdens opslaan van naam: {}", error.to_string());
             }
             name = new_name;
         }
@@ -461,7 +468,7 @@ fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>> {
         .parse()
         .unwrap_or(1);
     let path = Path::new("./sign_in_failure_count.toml");
-    // Load the existing counter, create a new one if one doesn't exist yet
+    // Load the existing failure counter, create a new one if one doesn't exist yet
     let mut failure_counter = match load_sign_in_failure_count(path) {
         Ok(value) => value,
         Err(_) => {
@@ -475,14 +482,14 @@ fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>> {
     if failure_counter.retry_count == 0 {
         return_value = None;
     } else if failure_counter.retry_count % sign_in_attempt_reduce == 0 {
-        println!(
+        warn!(
             "Continuing execution with sign in error, reduce val: {sign_in_attempt_reduce}, current count {}",
             failure_counter.retry_count
         );
         failure_counter.retry_count += 1;
         return_value = None;
     } else {
-        println!("Skipped execution due to previous sign in error");
+        warn!("Skipped execution due to previous sign in error");
         failure_counter.retry_count += 1;
         return_value = Some(failure_counter.error.clone().unwrap());
     }
@@ -512,7 +519,7 @@ fn sign_in_failed_update(
     // if failed == false, reset counter
     else if failed == false {
         if failure_counter.error.is_some() {
-            println!("Sign in succesful again!");
+            info!("Sign in succesful again!");
             email::send_sign_in_succesful(username)?;
         }
         failure_counter.retry_count = 0;
@@ -530,7 +537,7 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     //     (retry_count % 2) + 1
     // );
     let main_url = "webcom.connexxion.nl";
-    println!("Loading site: {}..", main_url);
+    info!("Loading site: {}..", main_url);
     driver.goto(main_url).await?;
     wait_untill_redirect(&driver).await?;
     load_calendar(&driver, &username, &password).await?;
@@ -538,10 +545,17 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     let mut shifts = load_current_month_shifts(&driver).await?;
     shifts.append(&mut load_previous_month_shifts(&driver,).await?);
     shifts.append(&mut load_next_month_shifts(&driver).await?);
-    println!("Found {} shifts", shifts.len());
-    email::send_emails(&shifts)?;
+    info!("Found {} shifts", shifts.len());
+
+    // The main send email function will return the broken shifts that are new or have changed.
+    // This is because the send email functions uses the previous shifts and scanns for new shifts
+    let shifts_to_check_broken = match email::send_emails(&shifts) {
+        Ok(changed_shifts) => changed_shifts,
+        Err(err) if err.downcast_ref::<PreviousShiftsError>().is_some() => shifts.clone(),
+        Err(err) => return Err(err),
+    };
     save_shifts_on_disk(&shifts, Path::new(&format!("./{BASE_DIRECTORY}previous_shifts.toml")))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
-    let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
+    let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts_to_check_broken).await?; // Replace the shifts with the newly created list of broken shifts
     let shifts = gebroken_shifts::split_night_shift(&shifts);
     let calendar = create_ical(&shifts);
     let ical_path = PathBuf::from(&format!(
@@ -552,7 +566,7 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     send_welcome_mail(&ical_path, false)?;
     check_domain_update(&ical_path);
     let mut output = File::create(&ical_path)?;
-    println!("Writing to: {:?}", &ical_path);
+    info!("Writing to: {:?}", &ical_path);
     write!(output, "{}", calendar)?;
     Ok(())
 }
@@ -571,17 +585,19 @@ Loads the main logic, and retries if it fails
 #[tokio::main]
 async fn main() -> WebDriverResult<()> {
     dotenv_override().ok();
+    pretty_env_logger::init();
     let version = var("CARGO_PKG_VERSION").unwrap_or("onbekend".to_string());
-    println!("Starting Webcom Ical version {version}");
+    warn!("Starting Webcom Ical version {version}");
     let mut error_reason = FailureType::OK;
+    let name = set_get_name(None);
     let kuma_url = var("KUMA_URL").ok();
     let username = var("USERNAME").unwrap();
     let password = var("PASSWORD").unwrap();
     let driver = match initiate_webdriver().await {
         Ok(driver) => driver,
         Err(error) => {
-            println!("Kon driver niet opstarten: {:?}", &error);
-            send_errors(vec![error], "flats").unwrap();
+            error!("Kon driver niet opstarten: {:?}", &error);
+            send_errors(vec![error], &name).unwrap();
             error_reason = FailureType::GeckoEngine;
             heartbeat(error_reason, kuma_url, &username).await.unwrap();
             return Err(WebDriverError::FatalError("driver fout".to_string()));
@@ -596,19 +612,20 @@ async fn main() -> WebDriverResult<()> {
 
     if let Some(url_unwrap) = kuma_url.clone() {
         if !url_unwrap.is_empty() {
-            println!("Checking if kuma needs to be created");
+            debug!("Checking if kuma needs to be created");
             kuma::first_run(&url_unwrap, &username).await.unwrap();
         }
     }
-    let start_main: Option<SignInFailure> = sign_in_failed_check(&username).unwrap();
-    if let Some(failure) = start_main {
+    // Check if the program is allowed to run, or not due to failed sign-in
+    let sign_in_check: Option<SignInFailure> = sign_in_failed_check(&name).unwrap();
+    if let Some(failure) = sign_in_check {
         retry_count = max_retry_count;
         error_reason = FailureType::SignInFailed(failure);
     }
     while retry_count <= max_retry_count - 1 {
         match main_program(&driver, &username, &password).await {
             Ok(_) => {
-                sign_in_failed_update(&username, false, None).unwrap();
+                sign_in_failed_update(&name, false, None).unwrap();
                 retry_count = max_retry_count;
             }
             Err(x) => {
@@ -616,19 +633,19 @@ async fn main() -> WebDriverResult<()> {
                     Some(FailureType::SignInFailed(y)) => {
                         // Do not stop webcom if the sign in failure reason is unknown
                         if let SignInFailure::Other(x) = y {
-                            println!(
+                            warn!(
                                 "Kon niet inloggen, maar een onbekende fout: {}. Probeert opnieuw",
                                 x
                             )
                         } else {
                             retry_count = max_retry_count;
-                            sign_in_failed_update(&username, true, Some(y.clone())).unwrap();
+                            sign_in_failed_update(&name, true, Some(y.clone())).unwrap();
                             error_reason = FailureType::SignInFailed(y.to_owned());
-                            println!("Inloggen niet succesvol, fout: {:?}", y)
+                            error!("Inloggen niet succesvol, fout: {:?}", y)
                         }
                     }
                     _ => {
-                        println!(
+                        warn!(
                             "Fout tijdens shift laden, opnieuw proberen, poging: {}. Fout: {}",
                             retry_count + 1,
                             &x.to_string()
@@ -641,14 +658,14 @@ async fn main() -> WebDriverResult<()> {
         retry_count += 1;
     }
     if running_errors.is_empty() {
-        println!("Alles is in een keer goed gegaan, jippie!");
+        info!("Alles is in een keer goed gegaan, jippie!");
     } else if running_errors.len() < max_retry_count {
-        println!("Errors have occured, but succeded in the end");
+        warn!("Errors have occured, but succeded in the end");
     } else {
         error_reason = FailureType::TriesExceeded;
-        match send_errors(running_errors, &username) {
+        match send_errors(running_errors, &name) {
             Ok(_) => (),
-            Err(x) => println!("failed to send error email, ironic: {:?}", x),
+            Err(x) => error!("failed to send error email, ironic: {:?}", x),
         }
     }
     if error_reason != FailureType::TriesExceeded {

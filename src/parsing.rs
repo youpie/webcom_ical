@@ -29,16 +29,16 @@ async fn get_elements(
             }
         };
         if !text.is_empty() && text.contains("Dienstduur") {
-            // println!("Loading shift: {:?}", &text);
+            debug!("Loading shift: {:?}", &text);
             let dag_text = element.find(By::Tag("strong")).await?.text().await?;
             let dag_text_split = dag_text.split_whitespace().next().unwrap();
 
-            // println!("dag {}", &dag_text);
+            debug!("dag {}", &dag_text);
             let dag: u8 = dag_text_split.parse().unwrap();
             let date = Date::from_calendar_date(year, month, dag).unwrap();
             let new_shift = Shift::new(text, date);
             temp_emlements.push(new_shift.clone());
-            println!("Found Shift {}", &new_shift.number);
+            info!("Found Shift {}", &new_shift.number);
         }
     }
     Ok(temp_emlements)
@@ -50,7 +50,7 @@ Just presses the previous button in webcom to load the previous month
 pub async fn load_previous_month_shifts(
     driver: &WebDriver,
 ) -> WebDriverResult<Vec<Shift>> {
-    println!("Loading Previous Month..");
+    info!("Loading Previous Month..");
     let now = time::OffsetDateTime::now_utc();
     let today = now.date();
     let new_month = today.month().previous();
@@ -73,7 +73,7 @@ Just presses the next button in webcom twice to load the next month.
 Only works correctly if the previous month function has been ran before
 */
 pub async fn load_next_month_shifts(driver: &WebDriver) -> WebDriverResult<Vec<Shift>> {
-    println!("Loading Next Month..");
+    info!("Loading Next Month..");
     let now = time::OffsetDateTime::now_utc();
     let today = now.date();
     let new_month = today.month().next();
@@ -102,7 +102,7 @@ Logs into webcom, has no logic for when the login fails.
 It will also find and return the first name of the user, this will fail if the login is unsuccesful
 */
 pub async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> GenResult<()> {
-    println!("Logging in..");
+    info!("Logging in..");
     sign_in_webcom(driver, user, pass).await?;
     //wait_until_loaded(&driver).await?;
 
@@ -110,7 +110,7 @@ pub async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> GenRes
     // let rooster_knop = driver.query(By::LinkText("Rooster")).first().await?;
     // rooster_knop.wait_until().displayed().await?;
     // rooster_knop.click().await?;
-    println!("Loading rooster..");
+    info!("Loading rooster..");
     navigate_to_subdirectory(driver, "roster.aspx").await?;
     Ok(())
 }
@@ -140,10 +140,10 @@ async fn sign_in_webcom(driver: &WebDriver, user: &str, pass: &str) -> GenResult
         .await?
         .click()
         .await?;
-    println!("waiting until loaded");
+    info!("waiting until login page is loaded");
     //wait_until_loaded(&driver).await?;
     let _ = wait_for_response(&driver, By::Tag("h3"), false).await;
-    println!("loaded");
+    info!("login page is loaded");
     let name_text = match driver.find(By::Tag("h3")).await {
         Ok(element) => element.text().await?,
         Err(_) => {

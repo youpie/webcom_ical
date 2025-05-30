@@ -42,16 +42,16 @@ pub async fn first_run(url: &str, personeelsnummer: &str) -> GenResult<()> {
     // If kuma preferences already exists, skip
     let data_pathbuf = PathBuf::from(KUMA_DATA_PATH);
     if data_pathbuf.exists() {
-        println!("Kuma ID found on disk");
+        info!("Kuma ID found on disk");
         return Ok(());
     }
     let url: Url = url.parse().unwrap();
-    println!("Kuma ID not found on disk");
+    warn!("Kuma ID not found on disk");
     let username = var("KUMA_USERNAME")?;
     let password = var("KUMA_PASSWORD")?;
     let kuma_client = connect_to_kuma(&url, username, password).await?;
     if let Some(monitor_id) = get_monitor_type_id(&kuma_client, personeelsnummer, MonitorType::Push, false).await?{
-        println!("id found in kuma online, saving to disk. ID: {monitor_id}");
+        info!("id found in kuma online, saving to disk. ID: {monitor_id}");
         KumaData{monitor_id}.save(PathBuf::from(KUMA_DATA_PATH))?;
         return Ok(())
     }
@@ -87,7 +87,7 @@ async fn create_monitor(kuma_client: &Client, personeelsnummer: &str, notificati
     };
     let monitor_response = kuma_client.add_monitor(monitor).await?;
     let monitor_id = monitor_response.common().id().unwrap();
-    println!("Monitor has been created, id: {monitor_id}");
+    info!("Monitor has been created, id: {monitor_id}");
     Ok(monitor_id)
 }
 
@@ -160,7 +160,7 @@ Webcom Ical weer online
     
     let notification_response = kuma_client.add_notification(notification.clone()).await?;
     let id = notification_response.id.unwrap();
-    println!("Created notification with id {id}");
+    warn!("Created notification with id {id}");
     Ok(id)
 }
 
@@ -170,12 +170,12 @@ async fn get_monitor_type_id(kuma_client: &Client, group_name: &str, monitor_typ
     for (_id, monitor) in current_monitors.into_iter(){
         if monitor.monitor_type() == monitor_type{
             if monitor.common().name() == &Some(group_name.to_string()) {
-                println!("Existing monitor group has been found");
+                info!("Existing monitor group has been found");
                 return Ok(Some(monitor.common().id().unwrap()));
             }
         }
     }
-    print!("Monitor group has not been found");
+    info!("Monitor group has not been found");
     // otherwise create a new one
     if create_new {
         
@@ -184,9 +184,9 @@ async fn get_monitor_type_id(kuma_client: &Client, group_name: &str, monitor_typ
             ..Default::default()
         }).await?;
         let id = new_monitor.common().id().unwrap();
-        println!(", created new one with id {id}");
+        info!(", created new one with id {id}");
         return Ok(Some(new_monitor.common().id().unwrap()));
     }
-    println!(", not creating new one");
+    info!(", not creating new one");
     Ok(None)
 }

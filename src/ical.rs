@@ -8,7 +8,7 @@ Creates the ICAL file to add to the calendar
 */
 pub fn create_ical(shifts: &Vec<Shift>) -> String {
     let name = set_get_name(None);
-    println!("Creating calendar file...");
+    info!("Creating calendar file...");
     let mut calendar = Calendar::new()
         .name(&format!("Hermes rooster - {}", name))
         .append_property(("X-USER-NAME", name.as_str()))
@@ -38,7 +38,6 @@ Shift sheet • {}",
                 .done(),
         );
     }
-    //println!("{}", calendar);
     String::from(calendar.to_string())
 }
 

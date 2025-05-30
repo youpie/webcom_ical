@@ -9,4 +9,4 @@ COPY ./kuma kuma
 
 RUN cargo install --path .
 
-CMD ["webcom_ical"]
+CMD ["RUST_LOG=info webcom_ical"]

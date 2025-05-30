@@ -488,7 +488,7 @@ pub fn send_failed_signin_mail(
         Some(SignInFailure::IncorrectCredentials) => {
             "Incorrecte inloggegevens, heb je misschien je wachtwoord veranderd?"
         }
-        Some(SignInFailure::TooManyTries) => "Te veel incorrecte inlogpogingen...",
+        Some(SignInFailure::TooManyTries) => "Te veel incorrecte inlogpogingen…",
         Some(SignInFailure::WebcomDown) => "Webcom heeft op dit moment een storing",
         Some(SignInFailure::Other(fault)) => fault,
     };

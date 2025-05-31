@@ -555,7 +555,7 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
         Err(err) => return Err(err),
     };
     save_shifts_on_disk(&shifts, Path::new(&format!("./{BASE_DIRECTORY}previous_shifts.toml")))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
-    let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts_to_check_broken).await?; // Replace the shifts with the newly created list of broken shifts
+    let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, shifts,&shifts_to_check_broken).await?; // Replace the shifts with the newly created list of broken shifts
     let shifts = gebroken_shifts::split_night_shift(&shifts);
     let calendar = create_ical(&shifts);
     let ical_path = PathBuf::from(&format!(

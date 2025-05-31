@@ -18,29 +18,30 @@ Does not return most errors as there are a few valid reason this function fails
 */
 pub async fn gebroken_diensten_laden(
     driver: &WebDriver,
-    shifts: &Vec<Shift>,
+    all_shifts: Vec<Shift>,
+    broken_shifts: &Vec<Shift>,
 ) -> WebDriverResult<Vec<Shift>> {
-    let mut new_shifts: Vec<Shift> = vec![];
-    for shift in shifts {
-        if shift.is_broken {
-            info!("Creating broken shift: {}", shift.number);
-            match get_broken_shift_time(driver, shift).await {
-                Ok(x) => {
-                    new_shifts.extend(x);
-                }
-                Err(x) => {
-                    warn!(
-                        "An error occured creating a broken shift: {:?}",
-                        x
-                    );
-                    new_shifts.push(shift.clone());
-                }
-            };
-            navigate_to_subdirectory(driver, "/WebComm/roster.aspx").await?; //Ga terug naar de rooster pagina, anders laden de gebroken shifts niet goed
-            wait_for_response(driver, By::ClassName("calDay"), false).await?;
-        } else {
-            new_shifts.push(shift.clone());
-        }
+    let mut new_shifts: Vec<Shift> = all_shifts;
+    for shift in broken_shifts {
+        match new_shifts.iter().position(|x| x.magic_number == shift.magic_number){ 
+            Some(index) => {new_shifts.remove(index);},
+            None => error!("Failed to remove broken shift {} from calendar...", shift.number)
+        };
+        info!("Creating broken shift: {}", shift.number);
+        match get_broken_shift_time(driver, shift).await {
+            Ok(x) => {
+                new_shifts.extend(x);
+            }
+            Err(x) => {
+                warn!(
+                    "An error occured creating a broken shift: {:?}",
+                    x
+                );
+                new_shifts.push(shift.clone());
+            }
+        };
+        navigate_to_subdirectory(driver, "/WebComm/roster.aspx").await?; //Ga terug naar de rooster pagina, anders laden de gebroken shifts niet goed
+        wait_for_response(driver, By::ClassName("calDay"), false).await?
     }
     Ok(new_shifts)
 }

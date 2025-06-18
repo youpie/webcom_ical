@@ -80,7 +80,7 @@ impl std::fmt::Display for FailureType {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 enum ShiftState {
     New,
     Changed,
@@ -189,6 +189,7 @@ impl Shift {
             description,
             is_broken,
             magic_number,
+            state: ShiftState::Unknown
         }
     }
 
@@ -304,7 +305,7 @@ fn get_sign_in_error_type(text: &str) -> SignInFailure {
 }
 
 fn create_ical_filename() -> GenResult<String> {
-    let username = var("USERNAME").unwrap();
+    let username = var("USERNAME")?;
     match var("RANDOM_FILENAME").ok() {
         Some(value) if value == "false".to_owned() => Ok(format!("{}.ics", username)),
         None => Ok(format!("{}.ics", username)),
@@ -559,16 +560,16 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     shifts.append(&mut load_previous_month_shifts(&driver,).await?);
     shifts.append(&mut load_next_month_shifts(&driver).await?);
     info!("Found {} shifts", shifts.len());
-
+    let previous_shifts_information = get_previous_shifts().unwrap();
+    let mut previous_shifts = previous_shifts_information.previous_shifts;
     // The main send email function will return the broken shifts that are new or have changed.
     // This is because the send email functions uses the previous shifts and scanns for new shifts
-    let shifts_to_check_broken = match email::send_emails(&shifts) {
-        Ok(changed_shifts) => changed_shifts,
-        Err(err) if err.downcast_ref::<PreviousShiftsError>().is_some() => shifts.clone(),
+    match email::send_emails(&shifts, &mut previous_shifts) {
+        Ok(_) => (),
         Err(err) => return Err(err),
     };
     save_shifts_on_disk(&shifts, Path::new(&format!("./{BASE_DIRECTORY}previous_shifts.toml")))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
-    let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, shifts,&shifts_to_check_broken).await?; // Replace the shifts with the newly created list of broken shifts
+    let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, shifts).await?; // Replace the shifts with the newly created list of broken shifts
     let shifts = gebroken_shifts::split_night_shift(&shifts);
     let calendar = create_ical(&shifts);
     let ical_path = PathBuf::from(&format!(

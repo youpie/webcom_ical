@@ -5,13 +5,12 @@ use lettre::{
 };
 use thiserror::Error;
 use std::{
-    fs,
-    path::{Path, PathBuf},
+    collections::HashMap, fs, hash::Hash, path::{Path, PathBuf}
 };
 use strfmt::strfmt;
 use thirtyfour::error::{WebDriverErrorInfo, WebDriverResult};
 use time::{macros::format_description, Date};
-use crate::BASE_DIRECTORY;
+use crate::{ShiftState, BASE_DIRECTORY};
 
 use crate::{create_ical_filename, create_shift_link, set_get_name, IncorrectCredentialsCount, Shift, Shifts, SignInFailure};
 
@@ -104,21 +103,21 @@ Main function for sending mails, it will always be called and will individually 
 If loading previous shifts fails for whatever it will not error but just do an early return.
 Because if the previous shifts file is not, it will just not send mails that time
 */
-pub fn send_emails(current_shifts: &Vec<Shift>) -> GenResult<Vec<Shift>> {
+pub fn send_emails(current_shifts: &Vec<Shift>, previous_shifts: &mut HashMap<i64,Shift>) -> GenResult<()> {
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
-    let previous_shifts = match load_previous_shifts() {
-        Ok(x) => x,
-        Err(error) => {
-            let previous_shift_error = match error.downcast_ref::<std::io::Error>() {
-                Some(io_error) => PreviousShiftsError::Io(io_error.to_string()),
-                None => PreviousShiftsError::Generic(error.to_string())
-            };
-            return Err(Box::new(previous_shift_error));
-        } //If there is any error loading previous shifts, just do an early return..
-    };
-    let changed_broken_shifts = find_send_shift_mails(&mailer, &previous_shifts, current_shifts, &env)?;
-    Ok(changed_broken_shifts)
+    // let previous_shifts = match load_previous_shifts() {
+    //     Ok(x) => x,
+    //     Err(error) => {
+    //         let previous_shift_error = match error.downcast_ref::<std::io::Error>() {
+    //             Some(io_error) => PreviousShiftsError::Io(io_error.to_string()),
+    //             None => PreviousShiftsError::Generic(error.to_string())
+    //         };
+    //         return Err(Box::new(previous_shift_error));
+    //     } //If there is any error loading previous shifts, just do an early return..
+    // };
+    find_send_shift_mails(&mailer, previous_shifts, current_shifts, &env)?;
+    Ok(())
 }
 
 // Creates SMTPtransport from username, password and server found in env
@@ -131,22 +130,22 @@ fn load_mailer(env: &EnvMailVariables) -> GenResult<SmtpTransport> {
 }
 
 // Loads shifts from last time this program was run
-fn load_previous_shifts() -> GenResult<Vec<Shift>> {
-    let path_str = format!("./{BASE_DIRECTORY}previous_shifts.toml");
-    let path = Path::new(&path_str);
-    let shifts_toml = std::fs::read_to_string(path)?;
-    let shifts: Shifts = toml::from_str(&shifts_toml)?;
-    Ok(shifts.shifts)
-}
+// fn load_previous_shifts() -> GenResult<Vec<Shift>> {
+//     let path_str = format!("./{BASE_DIRECTORY}previous_shifts.toml");
+//     let path = Path::new(&path_str);
+//     let shifts_toml = std::fs::read_to_string(path)?;
+//     let shifts: Shifts = toml::from_str(&shifts_toml)?;
+//     Ok(shifts.shifts)
+// }
 
-fn add_broken_shift(shift_to_check: &Shift, broken_shifts: &mut Vec<Shift>) {
-    // If changed shift is broken, add it to broken shift list
-    if shift_to_check.is_broken {
-        debug!("Broken shift {} does not need to be rechecked",shift_to_check.number);
-        broken_shifts.push(shift_to_check.clone());
-    }
+// fn add_broken_shift(shift_to_check: &Shift, broken_shifts: &mut Vec<Shift>) {
+//     // If changed shift is broken, add it to broken shift list
+//     if shift_to_check.is_broken {
+//         debug!("Broken shift {} does not need to be rechecked",shift_to_check.number);
+//         broken_shifts.push(shift_to_check.clone());
+//     }
 
-}
+// }
 
 /*
 Will search for new shifts given previous shifts.
@@ -155,67 +154,68 @@ Will send an email is send_mail is true
 */
 fn find_send_shift_mails(
     mailer: &SmtpTransport,
-    previous_shifts: &Vec<Shift>,
+    previous_shifts: &HashMap<i64, Shift>,
     current_shifts: &Vec<Shift>,
     env: &EnvMailVariables,
 ) -> GenResult<Vec<Shift>> {
-    let mut updated_shifts = Vec::new();
-    let mut new_shifts_list = Vec::new();
-    let mut changed_broken_shifts_list = Vec::new();
     let current_date: Date = Date::parse(
         &chrono::offset::Local::now().format("%d-%m-%Y").to_string(),
         DATE_DESCRIPTION,
     )?;
-
-    // Track shifts by start date
-    let previous_shifts_by_start_date: std::collections::HashMap<_, _> = previous_shifts
-        .iter()
-        .map(|shift| (shift.date, shift))
-        .collect();
-    let mut removed_shifts_dict = previous_shifts_by_start_date.clone();
+    let mut current_shifts = current_shifts.clone();
 
     // Iterate through the current shifts to check for updates or new shifts
-    for current_shift in current_shifts {
-        if current_shift.date < current_date {
-            removed_shifts_dict.remove_entry(&current_shift.date);
-            continue; // Skip old shifts
+    for current_shift in &mut current_shifts {
+        if let Some(_) = previous_shifts.get(&current_shift.magic_number) {
+            current_shift.state = ShiftState::Unchanged;
+        } else {
+            for previous_shift in previous_shifts {
+                if previous_shift.1.date == current_shift.date {
+                    current_shift.state = ShiftState::Changed;
+                }
+                else {
+                    current_shift.state = ShiftState::New;
+                }
+            }
         }
 
-        match previous_shifts_by_start_date.get(&current_shift.date) {
-            Some(previous_shift) => {
-                // If the shift exists, compare its full details for updates
-                if current_shift.magic_number != previous_shift.magic_number {
-                    updated_shifts.push(current_shift.clone());
-                    add_broken_shift(&current_shift, &mut changed_broken_shifts_list);
-                }
-                removed_shifts_dict.remove_entry(&current_shift.date);
-            }
-            None => {
-                // It's a new shift
-                new_shifts_list.push(current_shift.clone());
-                add_broken_shift(&current_shift, &mut changed_broken_shifts_list);
-            }
-        } 
     }
-
-    if !new_shifts_list.is_empty() && env.send_email_new_shift {
-        info!("Found {} new shifts, sending email", new_shifts_list.len());
-        create_send_new_email(mailer, &new_shifts_list, env, false)?;
+    let new_shifts: Vec<&Shift> = current_shifts.iter().filter(|item| {
+        if item.state == ShiftState::New {
+            true
+        } else {
+            false
+        }
+    }).collect();
+    let updated_shifts: Vec<&Shift> = current_shifts.iter().filter(|item| {
+        if item.state == ShiftState::Changed {
+            true
+        } else {
+            false
+        }
+    }).collect();
+    let mut removed_shifts: Vec<&Shift> = current_shifts.iter().filter(|item| {
+        if item.state == ShiftState::Deleted {
+            true
+        } else {
+            false
+        }
+    }).collect();
+    if !new_shifts.is_empty() && env.send_email_new_shift {
+        info!("Found {} new shifts, sending email", new_shifts.len());
+        create_send_new_email(mailer, new_shifts, env, false)?;
     }
 
     if !updated_shifts.is_empty() && env.send_mail_updated_shift {
         info!("Found {} updated shifts, sending email", updated_shifts.len());
-        create_send_new_email(mailer, &updated_shifts, env, true)?;
+        create_send_new_email(mailer, updated_shifts, env, true)?;
     }
-    let mut removed_shifts: Vec<Shift> = removed_shifts_dict.values().cloned().cloned().collect();
-    removed_shifts.retain(|shift| shift.date >= current_date);
     if !removed_shifts.is_empty() && env.send_mail_updated_shift {
         info!("Removing {} shifts", removed_shifts.len());
         removed_shifts.retain(|shift| shift.date >= current_date);
-        send_removed_shifts_mail(mailer, env, &removed_shifts)?;
+        send_removed_shifts_mail(mailer, env, removed_shifts)?;
     }
-    info!("{} broken shifts need to be scanned", changed_broken_shifts_list.len());
-    Ok(changed_broken_shifts_list)
+    Ok(current_shifts.clone())
 }
 
 /*
@@ -225,7 +225,7 @@ Will always send under the name of Peter
 */
 fn create_send_new_email(
     mailer: &SmtpTransport,
-    new_shifts: &Vec<Shift>,
+    new_shifts: Vec<&Shift>,
     env: &EnvMailVariables,
     update: bool,
 ) -> GenResult<()> {
@@ -240,7 +240,7 @@ fn create_send_new_email(
     };
 
     let mut shift_tables = String::new();
-    for shift in new_shifts {
+    for shift in &new_shifts {
         let shift_table_clone = strfmt!(&shift_table,
             shift_number => shift.number.clone(),
             shift_date => shift.date.format(DATE_DESCRIPTION)?.to_string(),
@@ -304,7 +304,7 @@ fn create_footer(only_url:bool) -> String {
 fn send_removed_shifts_mail(
     mailer: &SmtpTransport,
     env: &EnvMailVariables,
-    removed_shifts: &Vec<Shift>,
+    removed_shifts: Vec<&Shift>,
 ) -> GenResult<()> {
     let base_html = fs::read_to_string("./templates/email_base.html").unwrap();
     let removed_shift_html = fs::read_to_string("./templates/removed_shift_base.html").unwrap();
@@ -318,7 +318,7 @@ fn send_removed_shifts_mail(
     let email_shift_s = if removed_shifts.len() == 1 { "" } else { "en" };
     let name = set_get_name(None);
     let mut shift_tables = String::new();
-    for shift in removed_shifts {
+    for shift in &removed_shifts {
         let shift_table_clone = strfmt!(&shift_table,
             shift_number => shift.number.clone().strikethrough(),
             shift_date => shift.date.format(DATE_DESCRIPTION)?.to_string().strikethrough(),

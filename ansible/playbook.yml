@@ -45,6 +45,8 @@
     - name: Set environment variables
       set_fact:
         random_filename: "{{ my_uuid }}"
+
+    - name: Set environment variables
       set_fact:
         timeout_time: "{{ timeout_time_hrs | int * 3600 + 400 }}"
 
@@ -65,7 +67,7 @@
 
     - name: Start Docker containers
       community.docker.docker_compose_v2:
-        project_src: "~/Services/Webcom/{{ personeelsnummer }}"
+       project_src: "~/Services/Webcom/{{ personeelsnummer }}"
 
     - name: Add cron job to start Docker container every hour
       ansible.builtin.cron:

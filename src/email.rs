@@ -21,7 +21,7 @@ const ERROR_VALUE: &str = "HIER HOORT WAT ANDERS DAN DEZE TEKST TE STAAN, CONFIG
 const SENDER_NAME: &str = "Peter";
 const TIME_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
     format_description!("[hour]:[minute]");
-const DATE_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
+pub const DATE_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
     format_description!("[day]-[month]-[year]");
 
 const COLOR_BLUE: &str = "#1a5fb4";

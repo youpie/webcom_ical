@@ -80,6 +80,16 @@ impl std::fmt::Display for FailureType {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+enum ShiftState {
+    New,
+    Changed,
+    Deleted,
+    Unchanged,
+    #[default]
+    Unknown
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Shift {
     date: Date,
@@ -93,6 +103,9 @@ pub struct Shift {
     description: String,
     is_broken: bool,
     magic_number: i64,
+    // This field is not always needed. Especially when serializing.
+    #[serde(skip, default)]
+    state: ShiftState
 }
 
 impl Shift {

@@ -1,7 +1,26 @@
+use std::{fs::read_to_string, str::FromStr};
+
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use icalendar::{Calendar, CalendarDateTime, Event, Component, EventLike};
+use icalendar::{Calendar, CalendarComponent, CalendarDateTime, Component, Event, EventLike};
 use time::{Date, Time};
-use crate::{create_shift_link, set_get_name, Shift};
+use crate::{create_ical_filename, create_shift_link, set_get_name, GenResult, Shift};
+
+pub fn load_ical_file() -> GenResult<Vec<Shift>> {
+    let path = create_ical_filename()?;
+    let calendar_string = read_to_string(path)?;
+    let calendar: Calendar = calendar_string.parse()?;
+    let components = calendar.components;
+    for component in components {
+        if let CalendarComponent::Event(shift_event) = component {
+            if let Some(shift_json) = shift_event.property_value("X-BUSSIE-METADATA") { 
+                if let Ok(shift) = serde_json::from_str::<Shift>(shift_json) {
+
+                }
+            }
+        }
+    }
+    Ok(vec![])
+}
 
 /*
 Creates the ICAL file to add to the calendar
@@ -16,7 +35,7 @@ pub fn create_ical(shifts: &Vec<Shift>) -> String {
         .timezone("Europe/Amsterdam")
         .done();
     for shift in shifts {
-        let shift_link = create_shift_link(shift).unwrap();
+        let shift_link = create_shift_link(shift);
         calendar.push(
             Event::new()
                 .summary(&format!("Shift - {}", shift.number))

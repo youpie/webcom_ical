@@ -102,6 +102,7 @@ pub struct Shift {
     location: String,
     description: String,
     is_broken: bool,
+    broken_period: Option<(Time, Time)>,
     magic_number: i64,
     // This field is not always needed. Especially when serializing.
     #[serde(skip, default)]
@@ -188,6 +189,7 @@ impl Shift {
             location,
             description,
             is_broken,
+            broken_period: None,
             magic_number,
             state: ShiftState::Unknown
         }
@@ -564,7 +566,7 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     let mut previous_shifts = previous_shifts_information.previous_shifts;
     // The main send email function will return the broken shifts that are new or have changed.
     // This is because the send email functions uses the previous shifts and scanns for new shifts
-    match email::send_emails(&shifts, &mut previous_shifts) {
+    match email::send_emails(&mut shifts, &mut previous_shifts) {
         Ok(_) => (),
         Err(err) => return Err(err),
     };

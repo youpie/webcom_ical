@@ -103,19 +103,13 @@ Main function for sending mails, it will always be called and will individually 
 If loading previous shifts fails for whatever it will not error but just do an early return.
 Because if the previous shifts file is not, it will just not send mails that time
 */
-pub fn send_emails(current_shifts: &Vec<Shift>, previous_shifts: &mut HashMap<i64,Shift>) -> GenResult<()> {
+pub fn send_emails(current_shifts: &mut Vec<Shift>, previous_shifts: &mut HashMap<i64,Shift>) -> GenResult<()> {
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
-    // let previous_shifts = match load_previous_shifts() {
-    //     Ok(x) => x,
-    //     Err(error) => {
-    //         let previous_shift_error = match error.downcast_ref::<std::io::Error>() {
-    //             Some(io_error) => PreviousShiftsError::Io(io_error.to_string()),
-    //             None => PreviousShiftsError::Generic(error.to_string())
-    //         };
-    //         return Err(Box::new(previous_shift_error));
-    //     } //If there is any error loading previous shifts, just do an early return..
-    // };
+    if previous_shifts.is_empty() {
+        error!("!!! PREVIOUS SHIFTS WAS EMPTY. SKIPPING !!!");
+        return Ok(());
+    }
     find_send_shift_mails(&mailer, previous_shifts, current_shifts, &env)?;
     Ok(())
 }
@@ -155,17 +149,16 @@ Will send an email is send_mail is true
 fn find_send_shift_mails(
     mailer: &SmtpTransport,
     previous_shifts: &HashMap<i64, Shift>,
-    current_shifts: &Vec<Shift>,
+    current_shifts: &mut Vec<Shift>,
     env: &EnvMailVariables,
 ) -> GenResult<Vec<Shift>> {
     let current_date: Date = Date::parse(
         &chrono::offset::Local::now().format("%d-%m-%Y").to_string(),
         DATE_DESCRIPTION,
     )?;
-    let mut current_shifts = current_shifts.clone();
 
     // Iterate through the current shifts to check for updates or new shifts
-    for current_shift in &mut current_shifts {
+    for current_shift in &mut *current_shifts {
         if let Some(_) = previous_shifts.get(&current_shift.magic_number) {
             current_shift.state = ShiftState::Unchanged;
         } else {
@@ -180,21 +173,22 @@ fn find_send_shift_mails(
         }
 
     }
-    let new_shifts: Vec<&Shift> = current_shifts.iter().filter(|item| {
+    let current_shift_clone = current_shifts.clone();
+    let new_shifts: Vec<&Shift> = current_shift_clone.iter().filter(|item| {
         if item.state == ShiftState::New {
             true
         } else {
             false
         }
     }).collect();
-    let updated_shifts: Vec<&Shift> = current_shifts.iter().filter(|item| {
+    let updated_shifts: Vec<&Shift> = current_shift_clone.iter().filter(|item| {
         if item.state == ShiftState::Changed {
             true
         } else {
             false
         }
     }).collect();
-    let mut removed_shifts: Vec<&Shift> = current_shifts.iter().filter(|item| {
+    let mut removed_shifts: Vec<&Shift> = current_shift_clone.iter().filter(|item| {
         if item.state == ShiftState::Deleted {
             true
         } else {

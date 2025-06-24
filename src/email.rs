@@ -5,14 +5,14 @@ use lettre::{
 };
 use thiserror::Error;
 use std::{
-    collections::HashMap, fs, hash::Hash, path::{Path, PathBuf}
+    collections::HashMap, fs, path::PathBuf
 };
 use strfmt::strfmt;
 use thirtyfour::error::{WebDriverErrorInfo, WebDriverResult};
 use time::{macros::format_description, Date};
-use crate::{ShiftState, BASE_DIRECTORY};
+use crate::ShiftState;
 
-use crate::{create_ical_filename, create_shift_link, set_get_name, IncorrectCredentialsCount, Shift, Shifts, SignInFailure};
+use crate::{create_ical_filename, create_shift_link, set_get_name, IncorrectCredentialsCount, Shift, SignInFailure};
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 

@@ -5,34 +5,29 @@ use dotenvy::dotenv_override;
 use dotenvy::var;
 use email::send_errors;
 use email::send_welcome_mail;
-use email::PreviousShiftsError;
 use reqwest;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::fs::write;
-use std::hash::DefaultHasher;
-use std::hash::Hash;
-use std::hash::Hasher;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
-use std::str::Split;
 use std::sync::LazyLock;
 use std::sync::RwLock;
 use thirtyfour::prelude::*;
 use thiserror::Error;
-use time::Duration;
 use time::macros::format_description;
 use url::Url;
 
 use crate::ical::*;
 use crate::parsing::*;
+use crate::shift::*;
 
-use time::Date;
 use time::Time;
 
 pub mod email;
 pub mod gebroken_shifts;
+pub mod shift;
 mod ical;
 pub mod kuma;
 mod parsing;
@@ -77,145 +72,6 @@ enum FailureType {
 impl std::fmt::Display for FailureType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
-enum ShiftState {
-    New,
-    Changed,
-    Deleted,
-    Unchanged,
-    #[default]
-    Unknown
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Shift {
-    date: Date,
-    start: Time,
-    end_date: Date,
-    end: Time,
-    duration: Duration,
-    number: String,
-    kind: String,
-    location: String,
-    description: String,
-    is_broken: bool,
-    broken_period: Option<(Time, Time)>,
-    magic_number: i64,
-    // This field is not always needed. Especially when serializing.
-    #[serde(skip, default)]
-    state: ShiftState
-}
-
-impl Shift {
-    /*
-    Creates a new Shift struct from a simple string straight from webcom
-    Also hashes the string to see if it has been updated
-    Looks intimidating, bus is mostly boilerplate + a bit of logic for correctly parsing the duration
-    */
-    fn new(text: String, date: Date) -> Self {
-        let text_clone = text.clone();
-        let parts = text_clone.split("\u{a0}• \u{a0}• ");
-        let mut location_modifier = 1;
-        let parts_clean: Vec<String> = parts
-            .map(|x| {
-                let y = x.replace("\u{a0}• ", "");
-                y
-            })
-            .collect();
-        let mut parts_list: Vec<Split<'_, &str>> =
-            parts_clean.iter().map(|x| x.split(": ")).collect();
-        let number: String = parts_list[0].nth(1).unwrap().to_string();
-        let _date: String = parts_list[1].nth(1).unwrap().to_string();
-        let time: String = parts_list[2].nth(1).unwrap_or("").to_string();
-        let shift_duration: String = parts_list[3].nth(1).unwrap_or("").to_string();
-        let _working_hours: String = parts_list[4].nth(1).unwrap_or("").to_string();
-        let _day_of_week: String = parts_list[5].nth(1).unwrap_or("").to_string();
-        let kind: String = parts_list[6].nth(1).unwrap_or("").to_string();
-        let mut location = "Onbekend".to_string();
-        if parts_list[7].next().unwrap_or("") == "Startplaats" {
-            location_modifier = 0;
-            location = parts_list[7].next().unwrap_or("").to_string();
-        }
-        let description: String = parts_list[8 - location_modifier]
-            .nth(1)
-            .unwrap_or("")
-            .to_string();
-        let start_time_str = time.split_whitespace().nth(0).unwrap();
-        let end_time_str = time.split_whitespace().nth(2).unwrap();
-        let start = get_time(start_time_str);
-        let end = get_time(end_time_str);
-        let mut is_broken = false;
-        let shift_type = number.chars().nth(0).unwrap();
-        let mut hasher = DefaultHasher::new();
-        text.hash(&mut hasher);
-        let magic_number = (hasher.finish() as i128 - i64::MAX as i128) as i64;
-        if shift_type == 'g' || shift_type == 'G' {
-            is_broken = true;
-        }
-
-        let duration_split = shift_duration.split_whitespace().nth(0).unwrap().split(":");
-        let duration_minutes = Duration::minutes(
-            duration_split
-                .clone()
-                .nth(1)
-                .unwrap()
-                .parse::<i64>()
-                .unwrap(),
-        );
-        let duration_hours = Duration::hours(
-            duration_split
-                .clone()
-                .nth(0)
-                .unwrap()
-                .parse::<i64>()
-                .unwrap(),
-        );
-        let duration = duration_hours + duration_minutes;
-        let mut end_date = date;
-        if end < start {
-            end_date = date + Duration::days(1);
-        }
-        Self {
-            date,
-            number,
-            start,
-            end_date,
-            end,
-            duration,
-            kind,
-            location,
-            description,
-            is_broken,
-            broken_period: None,
-            magic_number,
-            state: ShiftState::Unknown
-        }
-    }
-
-    // Create two new shifts from one broken shift.
-    // Assumes second shift cannot start after midnight
-    fn new_from_existing(
-        new_between_times: (Time, Time),
-        existing_shift: &Self,
-        start_next_day: bool,
-    ) -> Vec<Self> {
-        let mut part_one = existing_shift.clone();
-        part_one.end = new_between_times.0;
-        part_one.end_date = match start_next_day {
-            true => existing_shift.end_date,
-            false => existing_shift.date,
-        };
-        let mut part_two = existing_shift.clone();
-        part_two.start = new_between_times.1;
-        part_two.date = match start_next_day {
-            true => existing_shift.end_date,
-            false => existing_shift.date,
-        };
-        let shifts: Vec<Self> = vec![part_one, part_two];
-        shifts
     }
 }
 
@@ -571,8 +427,9 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
         Err(err) => return Err(err),
     };
     save_shifts_on_disk(&shifts, Path::new(&format!("./{BASE_DIRECTORY}previous_shifts.toml")))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
-    let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, shifts).await?; // Replace the shifts with the newly created list of broken shifts
+    gebroken_shifts::gebroken_diensten_laden(&driver, &mut shifts).await?; // Replace the shifts with the newly created list of broken shifts
     let shifts = gebroken_shifts::split_night_shift(&shifts);
+    let shifts = gebroken_shifts::split_broken_shifts(shifts)?;
     let calendar = create_ical(&shifts);
     let ical_path = PathBuf::from(&format!(
         "{}{}",

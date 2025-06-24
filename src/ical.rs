@@ -1,13 +1,12 @@
 use std::{collections::HashMap, fs::{read_to_string, write}, path::{Path, PathBuf}};
 
-use crate::{create_ical_filename, create_shift_link, email::DATE_DESCRIPTION, set_get_name, GenResult, Shift, ShiftState};
+use crate::{create_ical_filename, create_shift_link, set_get_name, GenResult, Shift, ShiftState};
 use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime};
 use dotenvy::var;
 use icalendar::{
     Calendar, CalendarComponent, CalendarDateTime, Component, Event, EventLike,
     parser::{read_calendar, unfold},
 };
-use serde::Serialize;
 use time::{Date, OffsetDateTime, Time};
 
 const PREVIOUS_EXECUTION_DATE_PATH: &str = "./kuma/previous_execution_date";
@@ -40,7 +39,7 @@ fn split_calendar(events: Vec<Event>) -> (Vec<Event>, Option<Vec<Event>>) {
         (date.year() - 2025 * 365) + 31 * date.month() as i32 + date.day() as i32
     }) {
         Ok(date) => date,
-        Err(err) => {
+        Err(_err) => {
             warn!("failed to get current date");
             return (events, None);
         }
@@ -86,7 +85,7 @@ fn is_partial_calendar_regeneration_needed() -> Option<bool> {
         (date.year() - 2025 * 365) + 31 * date.month() as i32 + date.day() as i32
     }) {
         Ok(date) => date,
-        Err(err) => {
+        Err(_err) => {
             warn!("failed to get current date");
             return None;
         }

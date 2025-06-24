@@ -414,21 +414,21 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     wait_untill_redirect(&driver).await?;
     load_calendar(&driver, &username, &password).await?;
     wait_until_loaded(&driver).await?;
-    let mut shifts = load_current_month_shifts(&driver).await?;
-    shifts.append(&mut load_previous_month_shifts(&driver,).await?);
-    shifts.append(&mut load_next_month_shifts(&driver).await?);
-    info!("Found {} shifts", shifts.len());
+    let mut new_shifts = load_current_month_shifts(&driver).await?;
+    new_shifts.append(&mut load_previous_month_shifts(&driver,).await?);
+    new_shifts.append(&mut load_next_month_shifts(&driver).await?);
+    info!("Found {} shifts", new_shifts.len());
     let previous_shifts_information = get_previous_shifts().unwrap();
     let mut previous_shifts = previous_shifts_information.previous_shifts;
     // The main send email function will return the broken shifts that are new or have changed.
     // This is because the send email functions uses the previous shifts and scanns for new shifts
-    match email::send_emails(&mut shifts, &mut previous_shifts) {
+    match email::send_emails(&mut new_shifts, &mut previous_shifts) {
         Ok(_) => (),
         Err(err) => return Err(err),
     };
-    save_shifts_on_disk(&shifts, Path::new(&format!("./{BASE_DIRECTORY}previous_shifts.toml")))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
-    gebroken_shifts::gebroken_diensten_laden(&driver, &mut shifts).await?; // Replace the shifts with the newly created list of broken shifts
-    let shifts = gebroken_shifts::split_night_shift(&shifts);
+    save_shifts_on_disk(&new_shifts, Path::new(&format!("./{BASE_DIRECTORY}previous_shifts.toml")))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
+    gebroken_shifts::gebroken_diensten_laden(&driver, &mut new_shifts).await?; // Replace the shifts with the newly created list of broken shifts
+    let shifts = gebroken_shifts::split_night_shift(&new_shifts);
     let shifts = gebroken_shifts::split_broken_shifts(shifts)?;
     let calendar = create_ical(&shifts);
     let ical_path = PathBuf::from(&format!(

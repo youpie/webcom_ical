@@ -4,6 +4,7 @@ use lettre::{
     SmtpTransport, Transport,
 };
 use thiserror::Error;
+use std::ops::Deref;
 use std::{
     collections::HashMap, fs, path::PathBuf
 };
@@ -156,20 +157,36 @@ fn find_send_shift_mails(
         &chrono::offset::Local::now().format("%d-%m-%Y").to_string(),
         DATE_DESCRIPTION,
     )?;
-
+    let mut shifts = previous_shifts.clone();
     // Iterate through the current shifts to check for updates or new shifts
-    for current_shift in &mut *current_shifts {
-        if let Some(_) = previous_shifts.get(&current_shift.magic_number) {
-            current_shift.state = ShiftState::Unchanged;
+
+    // We start with a list of previously valid shifts. All marked as deleted
+    // we will then loop over a list of newly loaded shifts from the website
+    for current_shift in &mut *current_shifts { 
+        // If the hash of this current shift is found in the previously valid shift list,
+        // we know this shift has remained unchanged. So mark it as such
+        if let Some(previous_shift) = shifts.get_mut(&current_shift.magic_number) {
+            previous_shift.state = ShiftState::Unchanged;
         } else {
-            for previous_shift in previous_shifts {
+            // if it is not found, we loop over the list of previously known shifts
+            for previous_shift in shifts.clone() {
+                // if during the loop, we find a previously valid shift with the same starting date as the current shift
+                // whereby we assume only 1 shift can be active per day
+                // we know it must have changed, as if it hadn't it would have been found from its hash
+                // so it can be marked as changed
+                // We must first remove the old shift, then add the new shift
                 if previous_shift.1.date == current_shift.date {
+                    shifts.remove(&previous_shift.0);
                     current_shift.state = ShiftState::Changed;
-                }
-                else {
-                    current_shift.state = ShiftState::New;
+                    shifts.insert(current_shift.magic_number, current_shift.clone());
+                    break;
                 }
             }
+            // If after that loop, no previously known shift with the same start date as the new shift was found
+            // we know it is a new shift, so we mark it as such and add it to the list of known shifts
+            // I THINK this currently marks all removed shifts as new, so check that when i have the brain capacity 
+            current_shift.state = ShiftState::New;
+            shifts.insert(current_shift.magic_number, current_shift.clone());
         }
 
     }

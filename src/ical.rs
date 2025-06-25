@@ -117,7 +117,7 @@ fn create_shift_hashmap(events: Vec<Event>) -> HashMap<i64, Shift> {
 }
 
 // Save relevant shifts to disk
-pub fn save_relevant_shifts(relevant_shifts: &Vec<Shift>) -> GenResult<()> {
+pub fn save_relevant_shifts(relevant_shifts: &HashMap<i64,Shift>) -> GenResult<()> {
     match write(RELEVANT_EVENTS_PATH, serde_json::to_string_pretty(relevant_shifts)?) {
         Ok(_) => info!("Saving Relevant shifts to disk was succesful"),
         Err(err) => error!("Saving Relevant shifts to disk FAILED. ERROR: {}",err.to_string())

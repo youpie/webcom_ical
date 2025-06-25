@@ -7,6 +7,7 @@ use email::send_errors;
 use email::send_welcome_mail;
 use reqwest;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs::File;
 use std::fs::write;
 use std::io::Write;
@@ -408,10 +409,6 @@ fn sign_in_failed_update(
 // Main program logic that has to run, if it fails it will all be reran.
 async fn main_program(driver: &WebDriver, username: &str, password: &str) -> GenResult<()> {
     driver.delete_all_cookies().await?;
-    // let main_url = format!(
-    //     "https://dmz-wbc-web0{}.connexxion.nl/WebComm/default.aspx",
-    //     (retry_count % 2) + 1
-    // );
     let main_url = "webcom.connexxion.nl";
     info!("Loading site: {}..", main_url);
     match driver.goto(main_url).await {
@@ -425,8 +422,12 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     new_shifts.append(&mut load_previous_month_shifts(&driver,).await?);
     new_shifts.append(&mut load_next_month_shifts(&driver).await?);
     info!("Found {} shifts", new_shifts.len());
-    // TODO this funcition should turn new shifts to a hashmap and represent as previous shifts if None is returned
-    let previous_shifts_information = get_previous_shifts().unwrap();
+    
+    // If getting previous shift information failed, just create an empty one. Because it will cause a new calendar to be created
+    let previous_shifts_information = match get_previous_shifts() {
+        Some(previous_shifts) => previous_shifts,
+        None => PreviousShiftInformation::new()
+    };
     let non_relevant_shifts = previous_shifts_information.previous_non_relevant_shifts;
     let mut previous_shifts = previous_shifts_information.previous_relevant_shifts;
     // The main send email function will return the broken shifts that are new or have changed.

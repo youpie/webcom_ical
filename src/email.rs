@@ -4,7 +4,6 @@ use lettre::{
     SmtpTransport, Transport,
 };
 use thiserror::Error;
-use std::ops::Deref;
 use std::{
     collections::HashMap, fs, path::PathBuf
 };
@@ -109,8 +108,9 @@ pub fn send_emails(current_shifts: &mut Vec<Shift>, previous_shifts: &HashMap<i6
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
     if previous_shifts.is_empty() {
+        // if the previous were empty, just return the list of current shifts as all new
         error!("!!! PREVIOUS SHIFTS WAS EMPTY. SKIPPING !!!");
-        return Ok(previous_shifts.clone());
+        return Ok(current_shifts.iter().cloned().map(|mut shift| {shift.state = ShiftState::New; shift}).map(|shift| {(shift.magic_number,shift)}).collect::<HashMap<i64,Shift>>());
     }
     Ok(find_send_shift_mails(&mailer, previous_shifts, current_shifts, &env)?)
     

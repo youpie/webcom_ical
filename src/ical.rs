@@ -74,12 +74,6 @@ fn split_calendar(events: Vec<Event>) -> (Vec<Event>, Option<Vec<Event>>) {
 // If false, doesn't need to happen
 // None, unknown, error occured
 fn is_partial_calendar_regeneration_needed() -> Option<bool> {
-    
-    let previous_execution_date = match &read_to_string(PREVIOUS_EXECUTION_DATE_PATH).unwrap_or_default().parse::<i32>() {
-        Ok(date) => {debug!("Previous date: {date}");*date},
-        Err(err) => {warn!("Getting previous execution date went wrong. Err: {}",err.to_string());
-            return None}
-    };
     let current_date = match OffsetDateTime::now_local().map(|date_time| {
         let date = date_time.date();
         (date.year() - 2025 * 365) + 31 * date.month() as i32 + date.day() as i32
@@ -90,8 +84,14 @@ fn is_partial_calendar_regeneration_needed() -> Option<bool> {
             return None;
         }
     };
+    let previous_execution_date = match &read_to_string(PREVIOUS_EXECUTION_DATE_PATH).unwrap_or_default().parse::<i32>() {
+        Ok(date) => {debug!("Previous date: {date}");*date},
+        Err(err) => {warn!("Getting previous execution date went wrong. Err: {}",err.to_string());
+            _  = write(PREVIOUS_EXECUTION_DATE_PATH, current_date.to_string());
+            return None}
+    };
     debug!("Current date: {current_date}");
-    _  = write(PREVIOUS_EXECUTION_DATE_PATH, current_date.to_be_bytes());
+    _  = write(PREVIOUS_EXECUTION_DATE_PATH, current_date.to_string());
     if previous_execution_date != current_date {
         Some(true)
     }
@@ -129,7 +129,19 @@ pub fn save_relevant_shifts(relevant_shifts: &Vec<Shift>) -> GenResult<()> {
 pub struct PreviousShiftInformation {
     pub previous_relevant_shifts: HashMap<i64, Shift>,
     pub previous_non_relevant_shifts: Vec<Shift>,
-    pub full_update: bool,
+}
+
+impl PreviousShiftInformation {
+    pub fn new_from_relevant(shifts: &Vec<Shift>) -> Self{
+        let map = shifts.iter().cloned().map(|shift| {(shift.magic_number,shift)}).collect::<HashMap<i64,Shift>>();
+        Self { previous_relevant_shifts: map, previous_non_relevant_shifts: vec![] }
+    }
+    pub fn new() -> Self {
+        Self {
+            previous_non_relevant_shifts: vec![],
+            previous_relevant_shifts: HashMap::new()
+        }
+    }
 }
 
 pub fn get_previous_shifts() -> Option<PreviousShiftInformation> {
@@ -160,7 +172,6 @@ pub fn get_previous_shifts() -> Option<PreviousShiftInformation> {
         Some(PreviousShiftInformation {
             previous_relevant_shifts: previous_shifts_hash,
             previous_non_relevant_shifts,
-            full_update: true
         })
     } else {
         let relevant_shift_str = read_to_string(RELEVANT_EVENTS_PATH).unwrap();
@@ -170,7 +181,6 @@ pub fn get_previous_shifts() -> Option<PreviousShiftInformation> {
         Some(PreviousShiftInformation {
             previous_relevant_shifts,
             previous_non_relevant_shifts,
-            full_update: false
         })
     }
     

@@ -41,6 +41,7 @@ pub async fn gebroken_diensten_laden(
             info!("Shift {} is broken, but unchanged from last check", shift.number);
         }
     }
+    info!("Done generating broken shifts");
     Ok(())
 }
 

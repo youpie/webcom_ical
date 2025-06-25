@@ -76,7 +76,7 @@ fn split_calendar(events: Vec<Event>) -> (Vec<Event>, Option<Vec<Event>>) {
 fn is_partial_calendar_regeneration_needed() -> Option<bool> {
     let current_date = match OffsetDateTime::now_local().map(|date_time| {
         let date = date_time.date();
-        (date.year() - 2025 * 365) + 31 * date.month() as i32 + date.day() as i32
+        (date.year() - 2025) * 365 + 31 * date.month() as i32 + date.day() as i32
     }) {
         Ok(date) => date,
         Err(_err) => {
@@ -118,7 +118,7 @@ fn create_shift_hashmap(events: Vec<Event>) -> HashMap<i64, Shift> {
 
 // Save relevant shifts to disk
 pub fn save_relevant_shifts(relevant_shifts: &Vec<Shift>) -> GenResult<()> {
-    match write(RELEVANT_EVENTS_PATH, toml::to_string_pretty(&relevant_shifts)?) {
+    match write(RELEVANT_EVENTS_PATH, serde_json::to_string_pretty(relevant_shifts)?) {
         Ok(_) => info!("Saving Relevant shifts to disk was succesful"),
         Err(err) => error!("Saving Relevant shifts to disk FAILED. ERROR: {}",err.to_string())
     };
@@ -153,6 +153,7 @@ pub fn get_previous_shifts() -> Option<PreviousShiftInformation> {
         create_ical_filename().unwrap()
     ));
     if is_partial_calendar_regeneration_needed().is_none_or(|needed| needed) || !(relevant_events_exist && non_relevant_events_exist) {
+        debug!("calendar regeneration needed");
         if !main_ical_path.exists() {
             return None;
         }
@@ -165,7 +166,7 @@ pub fn get_previous_shifts() -> Option<PreviousShiftInformation> {
         //     Err(err) => error!("Saving relevant shifts to disk FAILED. ERROR: {}",err.to_string())
         // };
         let previous_non_relevant_shifts: Vec<Shift> = create_shift_hashmap(calendar_split.1.unwrap()).values().cloned().collect();
-        match write(NON_RELEVANT_EVENTS_PATH, toml::to_string_pretty(&previous_non_relevant_shifts).unwrap()) {
+        match write(NON_RELEVANT_EVENTS_PATH, serde_json::to_string_pretty(&previous_non_relevant_shifts).unwrap()) {
             Ok(_) => debug!("Saving non-relevant shifts to disk was succesful"),
             Err(err) => error!("Saving non-relevant shifts to disk FAILED. ERROR: {}",err.to_string())
         };
@@ -176,8 +177,8 @@ pub fn get_previous_shifts() -> Option<PreviousShiftInformation> {
     } else {
         let relevant_shift_str = read_to_string(RELEVANT_EVENTS_PATH).unwrap();
         let irrelevant_shift_str = read_to_string(NON_RELEVANT_EVENTS_PATH).unwrap();
-        let previous_relevant_shifts: HashMap<i64, Shift> = toml::from_str(&relevant_shift_str).unwrap();
-        let previous_non_relevant_shifts: Vec<Shift> = toml::from_str(&irrelevant_shift_str).unwrap();
+        let previous_relevant_shifts: HashMap<i64, Shift> = serde_json::from_str(&relevant_shift_str).unwrap();
+        let previous_non_relevant_shifts: Vec<Shift> = serde_json::from_str(&irrelevant_shift_str).unwrap();
         Some(PreviousShiftInformation {
             previous_relevant_shifts,
             previous_non_relevant_shifts,

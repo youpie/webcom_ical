@@ -373,7 +373,7 @@ fn send_removed_shifts_mail(
 Composes and sends email of found errors, in plaintext
 List of errors can be as long as possible, but for now is always 3
 */
-pub fn send_errors(errors: Vec<Box<dyn std::error::Error>>, name: &str) -> GenResult<()> {
+pub fn send_errors(errors: &Vec<Box<dyn std::error::Error>>, name: &str) -> GenResult<()> {
     let env = EnvMailVariables::new(false)?;
     if !env.send_error_mail {
         info!("tried to send error mail, but is disabled");

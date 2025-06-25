@@ -7,7 +7,6 @@ use email::send_errors;
 use email::send_welcome_mail;
 use reqwest;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs::File;
 use std::fs::write;
 use std::io::Write;
@@ -36,10 +35,10 @@ mod parsing;
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 const BASE_DIRECTORY: &str = "kuma/";
-const FALLBACK_URL: &str = "https://dmz-wbc-web01.connexxion.nl/WebComm/default.aspx";
+const FALLBACK_URL: &str = "https://dmz-wbc-web02.connexxion.nl/WebComm/default.aspx";
 static NAME: LazyLock<RwLock<Option<String>>> = LazyLock::new(|| RwLock::new(None));
 
-
+// This should also store the hash of the password. So it can know if the password has changed in the meantime
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct IncorrectCredentialsCount {
     retry_count: usize,
@@ -55,28 +54,39 @@ impl IncorrectCredentialsCount {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Error)]
 enum SignInFailure {
+    #[error("Er zijn te veel incorrecte inlogpogingen in een korte periode gedaan")]
     TooManyTries,
+    #[error("Inloggegevens kloppen niet")]
     IncorrectCredentials,
+    #[error("Webcomm heeft een storing")]
     WebcomDown,
+    #[error("Onbekende fout: {0}")]
     Other(String),
 }
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error, PartialEq, Clone)]
 enum FailureType {
+    #[error("Webcom ical was niet in staat na meerdere pogingen diensten correct in te laden")]
     TriesExceeded,
+    #[error("Webcom ical kan geen verbinding maken met de interne browser")]
     GeckoEngine,
+    #[error("Webcom ical kon niet inloggen. Fout: {}",0.to_string())]
     SignInFailed(SignInFailure),
+    #[error("Webcom ical kon geen verbinding maken met de Webcomm site")]
+    ConnectError,
+    #[error("Een niet-specifieke fout is opgetreden: {0}")]
     Other(String),
+    #[error("Ok")]
     OK,
 }
 
-impl std::fmt::Display for FailureType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
+// impl std::fmt::Display for FailureType {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "{:?}", self)
+//     }
+// }
 
 /*
 An absolutely useless struct that is only needed  becasue a Vec<> cannot be serialised
@@ -252,13 +262,13 @@ async fn heartbeat(
     let mut request_url: Url = url.clone().unwrap().parse().unwrap();
     request_url.set_path(&format!("/api/push/{personeelsnummer}"));
     request_url.set_query(Some(&format!(
-        "status={}&msg={:?}&ping=",
-        match reason {
+        "status={}&msg={}&ping=",
+        match reason.clone() {
             FailureType::GeckoEngine => "down",
-            FailureType::SignInFailed(_) => "down",
+            FailureType::SignInFailed(failure) if matches!(failure, SignInFailure::WebcomDown | SignInFailure::TooManyTries | SignInFailure::Other(_)) => "down",
             _ => "up",
         },
-        reason
+        reason.to_string()
     )));
     reqwest::get(request_url).await?;
     Ok(())
@@ -414,7 +424,7 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     match driver.goto(main_url).await {
         Ok(_) => wait_untill_redirect(&driver).await?,
         Err(_) => {error!("Failed waiting for redirect. Going to fallback {FALLBACK_URL}");
-        driver.goto(FALLBACK_URL).await?}
+        driver.goto(FALLBACK_URL).await.map_err(|_| {Box::new(FailureType::ConnectError)})? }
     };
     load_calendar(&driver, &username, &password).await?;
     wait_until_loaded(&driver).await?;
@@ -438,9 +448,10 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     };
     let mut current_shifts: Vec<Shift> = current_shifts_map.values().cloned().collect();
     gebroken_shifts::gebroken_diensten_laden(&driver, &mut current_shifts).await?; // Replace the shifts with the newly created list of broken shifts
+    debug!("Shift information:\n{current_shifts:#?}");
     ical::save_relevant_shifts(&current_shifts)?;
-    let current_shifts = gebroken_shifts::split_night_shift(&current_shifts);
     let current_shifts = gebroken_shifts::split_broken_shifts(current_shifts)?;
+    let current_shifts = gebroken_shifts::split_night_shift(&current_shifts);
     let calendar = create_ical(&current_shifts, non_relevant_shifts);
     let ical_path = PathBuf::from(&format!(
         "{}{}",
@@ -481,7 +492,7 @@ async fn main() -> WebDriverResult<()> {
         Ok(driver) => driver,
         Err(error) => {
             error!("Kon driver niet opstarten: {:?}", &error);
-            send_errors(vec![error], &name).unwrap();
+            send_errors(&vec![error], &name).unwrap();
             error_reason = FailureType::GeckoEngine;
             heartbeat(error_reason, kuma_url, &username).await.unwrap();
             return Err(WebDriverError::FatalError("driver fout".to_string()));
@@ -547,11 +558,24 @@ async fn main() -> WebDriverResult<()> {
         warn!("Errors have occured, but succeded in the end");
     } else {
         error_reason = FailureType::TriesExceeded;
-        match send_errors(running_errors, &name) {
+        match send_errors(&running_errors, &name) {
             Ok(_) => (),
             Err(x) => error!("failed to send error email, ironic: {:?}", x),
         }
     }
+    // TODO the logic for selecting the error reason is quite confusing. This should be cleaned up someday
+    // Could be done by always returning a failuretype. Wrapping it around all error types. Possible based on the type of error
+    // Then having one big match on what to do based on the failure type?
+    // But that is for later
+    // This currently informs the user if webcom is down
+    if let Some(last_error) = running_errors.last() {
+            if let Some(failure_type) = last_error.downcast_ref::<FailureType>() {
+                if failure_type == &FailureType::ConnectError {
+                    info!("Failure reason is because webcom is down");
+                    error_reason = FailureType::ConnectError;
+                } 
+            }
+        } 
     if error_reason != FailureType::TriesExceeded {
         heartbeat(error_reason, kuma_url, &username).await.unwrap();
     }

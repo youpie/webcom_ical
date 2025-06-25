@@ -410,8 +410,11 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     // );
     let main_url = "webcom.connexxion.nl";
     info!("Loading site: {}..", main_url);
-    driver.goto(main_url).await?;
-    wait_untill_redirect(&driver).await?;
+    match driver.goto(main_url).await {
+        Ok(_) => wait_untill_redirect(&driver).await?,
+        Err(_) => {error!("Failed waiting for redirect. Going to fallback {FALLBACK_URL}");
+        driver.goto(FALLBACK_URL).await?}
+    };
     load_calendar(&driver, &username, &password).await?;
     wait_until_loaded(&driver).await?;
     let mut new_shifts = load_current_month_shifts(&driver).await?;

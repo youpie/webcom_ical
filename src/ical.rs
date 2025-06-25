@@ -100,7 +100,6 @@ fn is_partial_calendar_regeneration_needed() -> Option<bool> {
     }
 }
 
-// All shifts are marked to be deleted. As if they are not marked that later on we know they really should be deleted
 fn create_shift_hashmap(events: Vec<Event>) -> HashMap<i64, Shift> {
     let mut previous_shift_map = HashMap::new();
     for event in events {
@@ -108,6 +107,7 @@ fn create_shift_hashmap(events: Vec<Event>) -> HashMap<i64, Shift> {
             if let Ok(shift) = serde_json::from_str::<Shift>(shift_string) {
                 let mut shift = shift;
                 let shift_hash = shift.magic_number;
+                // All shifts are marked to be deleted. As if they are not marked that later on we know they really should be deleted
                 shift.state = ShiftState::Deleted;
                 previous_shift_map.insert(shift_hash, shift);
             }
@@ -116,20 +116,31 @@ fn create_shift_hashmap(events: Vec<Event>) -> HashMap<i64, Shift> {
     previous_shift_map
 }
 
+// Save relevant shifts to disk
+pub fn save_relevant_shifts(relevant_shifts: &Vec<Shift>) -> GenResult<()> {
+    match write(RELEVANT_EVENTS_PATH, toml::to_string_pretty(&relevant_shifts)?) {
+        Ok(_) => info!("Saving Relevant shifts to disk was succesful"),
+        Err(err) => error!("Saving Relevant shifts to disk FAILED. ERROR: {}",err.to_string())
+    };
+    Ok(())
+}
+
 #[derive(Debug)]
 pub struct PreviousShiftInformation {
-    pub previous_shifts: HashMap<i64, Shift>,
+    pub previous_relevant_shifts: HashMap<i64, Shift>,
+    pub previous_non_relevant_shifts: Vec<Shift>,
     pub full_update: bool,
 }
 
 pub fn get_previous_shifts() -> Option<PreviousShiftInformation> {
     let relevant_events_exist = Path::new(RELEVANT_EVENTS_PATH).exists();
+    let non_relevant_events_exist = Path::new(NON_RELEVANT_EVENTS_PATH).exists();
     let main_ical_path = PathBuf::from(&format!(
         "{}{}",
         var("SAVE_TARGET").unwrap(),
         create_ical_filename().unwrap()
     ));
-    if is_partial_calendar_regeneration_needed().is_none_or(|needed| needed) || !relevant_events_exist {
+    if is_partial_calendar_regeneration_needed().is_none_or(|needed| needed) || !(relevant_events_exist && non_relevant_events_exist) {
         if !main_ical_path.exists() {
             return None;
         }
@@ -141,20 +152,24 @@ pub fn get_previous_shifts() -> Option<PreviousShiftInformation> {
         //     Ok(_) => debug!("Saving relevant shifts to disk was succesful"),
         //     Err(err) => error!("Saving relevant shifts to disk FAILED. ERROR: {}",err.to_string())
         // };
-        let shift_vec: Vec<Shift> = create_shift_hashmap(calendar_split.1.unwrap()).values().cloned().collect();
-        match write(NON_RELEVANT_EVENTS_PATH, toml::to_string_pretty(&shift_vec).unwrap()) {
+        let previous_non_relevant_shifts: Vec<Shift> = create_shift_hashmap(calendar_split.1.unwrap()).values().cloned().collect();
+        match write(NON_RELEVANT_EVENTS_PATH, toml::to_string_pretty(&previous_non_relevant_shifts).unwrap()) {
             Ok(_) => debug!("Saving non-relevant shifts to disk was succesful"),
             Err(err) => error!("Saving non-relevant shifts to disk FAILED. ERROR: {}",err.to_string())
         };
         Some(PreviousShiftInformation {
-            previous_shifts: previous_shifts_hash,
+            previous_relevant_shifts: previous_shifts_hash,
+            previous_non_relevant_shifts,
             full_update: true
         })
     } else {
         let relevant_shift_str = read_to_string(RELEVANT_EVENTS_PATH).unwrap();
-        let previous_shifts: HashMap<i64, Shift> = toml::from_str(&relevant_shift_str).unwrap();
+        let irrelevant_shift_str = read_to_string(NON_RELEVANT_EVENTS_PATH).unwrap();
+        let previous_relevant_shifts: HashMap<i64, Shift> = toml::from_str(&relevant_shift_str).unwrap();
+        let previous_non_relevant_shifts: Vec<Shift> = toml::from_str(&irrelevant_shift_str).unwrap();
         Some(PreviousShiftInformation {
-            previous_shifts: previous_shifts,
+            previous_relevant_shifts,
+            previous_non_relevant_shifts,
             full_update: false
         })
     }
@@ -196,7 +211,9 @@ Shift sheet • {}",
 /*
 Creates the ICAL file to add to the calendar
 */
-pub fn create_ical(shifts: &Vec<Shift>) -> String {
+pub fn create_ical(relevant_shifts: &Vec<Shift>, non_relevant_shifts: Vec<Shift>) -> String {
+    let mut shifts = non_relevant_shifts;
+    shifts.append(&mut relevant_shifts.clone());
     let name = set_get_name(None);
     info!("Creating calendar file...");
     let mut calendar = Calendar::new()
@@ -207,7 +224,7 @@ pub fn create_ical(shifts: &Vec<Shift>) -> String {
         .done();
     for shift in shifts {
         
-        calendar.push(create_event(shift));
+        calendar.push(create_event(&shift));
             
     }
     String::from(calendar.to_string())

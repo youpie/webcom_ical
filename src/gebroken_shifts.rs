@@ -1,4 +1,4 @@
-use crate::{GenResult, Shift};
+use crate::{shift::ShiftState, GenResult, Shift};
 use async_recursion::async_recursion;
 use dotenvy::var;
 use thirtyfour::{
@@ -21,20 +21,25 @@ pub async fn gebroken_diensten_laden(
     all_shifts: &mut Vec<Shift>,
 ) -> WebDriverResult<()> {
     for shift in all_shifts {
-        info!("Creating broken shift: {}", shift.number);
-        match get_broken_shift_time(driver, shift).await {
-            Ok(_) => {
-                info!("Added broken shift time to shift {}",shift.number);
-            }
-            Err(x) => {
-                warn!(
-                    "An error occured creating a broken shift: {:?}",
-                    x
-                );
-            }
-        };
-        navigate_to_subdirectory(driver, "/WebComm/roster.aspx").await?; //Ga terug naar de rooster pagina, anders laden de gebroken shifts niet goed
-        wait_for_response(driver, By::ClassName("calDay"), false).await?
+        if shift.is_broken && (shift.state == ShiftState::Changed || shift.state == ShiftState::New) {
+            info!("Creating broken shift: {}", shift.number);
+
+            match get_broken_shift_time(driver, shift).await {
+                Ok(_) => {
+                    info!("Added broken shift time to shift {}",shift.number);
+                }
+                Err(x) => {
+                    warn!(
+                        "An error occured creating a broken shift: {:?}",
+                        x
+                    );
+                }
+            };
+            navigate_to_subdirectory(driver, "/WebComm/roster.aspx").await?; //Ga terug naar de rooster pagina, anders laden de gebroken shifts niet goed
+            wait_for_response(driver, By::ClassName("calDay"), false).await?
+        } else if shift.is_broken && shift.state == ShiftState::Unchanged {
+            info!("Shift {} is broken, but unchanged from last check", shift.number);
+        }
     }
     Ok(())
 }

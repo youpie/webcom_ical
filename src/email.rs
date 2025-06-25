@@ -103,16 +103,17 @@ impl EnvMailVariables {
 Main function for sending mails, it will always be called and will individually check if that function needs to be called
 If loading previous shifts fails for whatever it will not error but just do an early return.
 Because if the previous shifts file is not, it will just not send mails that time
+Returns the list of previously known shifts, updated with new shits
 */
-pub fn send_emails(current_shifts: &mut Vec<Shift>, previous_shifts: &mut HashMap<i64,Shift>) -> GenResult<()> {
+pub fn send_emails(current_shifts: &mut Vec<Shift>, previous_shifts: &HashMap<i64,Shift>) -> GenResult<HashMap<i64, Shift>> {
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
     if previous_shifts.is_empty() {
         error!("!!! PREVIOUS SHIFTS WAS EMPTY. SKIPPING !!!");
-        return Ok(());
+        return Ok(previous_shifts.clone());
     }
-    find_send_shift_mails(&mailer, previous_shifts, current_shifts, &env)?;
-    Ok(())
+    Ok(find_send_shift_mails(&mailer, previous_shifts, current_shifts, &env)?)
+    
 }
 
 // Creates SMTPtransport from username, password and server found in env
@@ -152,12 +153,12 @@ fn find_send_shift_mails(
     previous_shifts: &HashMap<i64, Shift>,
     current_shifts: &mut Vec<Shift>,
     env: &EnvMailVariables,
-) -> GenResult<Vec<Shift>> {
+) -> GenResult<HashMap<i64, Shift>> {
     let current_date: Date = Date::parse(
         &chrono::offset::Local::now().format("%d-%m-%Y").to_string(),
         DATE_DESCRIPTION,
     )?;
-    let mut shifts = previous_shifts.clone();
+    let mut shifts  = previous_shifts.clone();
     // Iterate through the current shifts to check for updates or new shifts
 
     // We start with a list of previously valid shifts. All marked as deleted
@@ -226,7 +227,7 @@ fn find_send_shift_mails(
         removed_shifts.retain(|shift| shift.date >= current_date);
         send_removed_shifts_mail(mailer, env, removed_shifts)?;
     }
-    Ok(current_shifts.clone())
+    Ok(shifts)
 }
 
 /*

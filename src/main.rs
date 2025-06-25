@@ -35,7 +35,9 @@ mod parsing;
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 const BASE_DIRECTORY: &str = "kuma/";
+const FALLBACK_URL: &str = "https://dmz-wbc-web01.connexxion.nl/WebComm/default.aspx";
 static NAME: LazyLock<RwLock<Option<String>>> = LazyLock::new(|| RwLock::new(None));
+
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct IncorrectCredentialsCount {
@@ -373,6 +375,8 @@ fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>> {
     Ok(return_value)
 }
 
+
+
 fn sign_in_failed_update(
     username: &str,
     failed: bool,
@@ -421,19 +425,22 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     new_shifts.append(&mut load_previous_month_shifts(&driver,).await?);
     new_shifts.append(&mut load_next_month_shifts(&driver).await?);
     info!("Found {} shifts", new_shifts.len());
+    // TODO this funcition should turn new shifts to a hashmap and represent as previous shifts if None is returned
     let previous_shifts_information = get_previous_shifts().unwrap();
-    let mut previous_shifts = previous_shifts_information.previous_shifts;
+    let non_relevant_shifts = previous_shifts_information.previous_non_relevant_shifts;
+    let mut previous_shifts = previous_shifts_information.previous_relevant_shifts;
     // The main send email function will return the broken shifts that are new or have changed.
     // This is because the send email functions uses the previous shifts and scanns for new shifts
-    match email::send_emails(&mut new_shifts, &mut previous_shifts) {
-        Ok(_) => (),
+    let current_shifts_map = match email::send_emails(&mut new_shifts, &mut previous_shifts) {
+        Ok(shifts) => shifts,
         Err(err) => return Err(err),
     };
-    save_shifts_on_disk(&new_shifts, Path::new(&format!("./{BASE_DIRECTORY}previous_shifts.toml")))?; // We save the shifts before modifying them further to declutter the list. We only need the start and end times of the total shift.
-    gebroken_shifts::gebroken_diensten_laden(&driver, &mut new_shifts).await?; // Replace the shifts with the newly created list of broken shifts
-    let shifts = gebroken_shifts::split_night_shift(&new_shifts);
-    let shifts = gebroken_shifts::split_broken_shifts(shifts)?;
-    let calendar = create_ical(&shifts);
+    let mut current_shifts: Vec<Shift> = current_shifts_map.values().cloned().collect();
+    gebroken_shifts::gebroken_diensten_laden(&driver, &mut current_shifts).await?; // Replace the shifts with the newly created list of broken shifts
+    ical::save_relevant_shifts(&current_shifts)?;
+    let current_shifts = gebroken_shifts::split_night_shift(&current_shifts);
+    let current_shifts = gebroken_shifts::split_broken_shifts(current_shifts)?;
+    let calendar = create_ical(&current_shifts, non_relevant_shifts);
     let ical_path = PathBuf::from(&format!(
         "{}{}",
         var("SAVE_TARGET")?,

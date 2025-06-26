@@ -36,7 +36,7 @@ mod parsing;
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 const BASE_DIRECTORY: &str = "kuma/";
-const FALLBACK_URL: &str = "https://dmz-wbc-web01.connexxion.nl/WebComm/default.aspx"
+const FALLBACK_URL: &str = "https://dmz-wbc-web01.connexxion.nl/WebComm/default.aspx";
 static NAME: LazyLock<RwLock<Option<String>>> = LazyLock::new(|| RwLock::new(None));
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

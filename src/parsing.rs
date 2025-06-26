@@ -38,7 +38,7 @@ async fn get_elements(
             let date = Date::from_calendar_date(year, month, dag).unwrap();
             let new_shift = Shift::new(text, date);
             temp_emlements.push(new_shift.clone());
-            info!("Found Shift {}", &new_shift.number);
+            debug!("Found Shift {}", &new_shift.number);
         }
     }
     Ok(temp_emlements)

@@ -104,13 +104,13 @@ If loading previous shifts fails for whatever it will not error but just do an e
 Because if the previous shifts file is not, it will just not send mails that time
 Returns the list of previously known shifts, updated with new shits
 */
-pub fn send_emails(current_shifts: &mut Vec<Shift>, previous_shifts: &HashMap<i64,Shift>) -> GenResult<HashMap<i64, Shift>> {
+pub fn send_emails(current_shifts: &mut Vec<Shift>, previous_shifts: &Vec<Shift>) -> GenResult<Vec<Shift>> {
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
     if previous_shifts.is_empty() {
         // if the previous were empty, just return the list of current shifts as all new
         error!("!!! PREVIOUS SHIFTS WAS EMPTY. SKIPPING !!!");
-        return Ok(current_shifts.iter().cloned().map(|mut shift| {shift.state = ShiftState::New; shift}).map(|shift| {(shift.magic_number,shift)}).collect::<HashMap<i64,Shift>>());
+        return Ok(current_shifts.iter().cloned().map(|mut shift| {shift.state = ShiftState::New; shift}).collect());
     }
     Ok(find_send_shift_mails(&mailer, previous_shifts, current_shifts, &env)?)
     
@@ -147,18 +147,19 @@ fn load_mailer(env: &EnvMailVariables) -> GenResult<SmtpTransport> {
 Will search for new shifts given previous shifts.
 Will be ran twice, If provided new shifts, it will look for updated shifts instead
 Will send an email is send_mail is true
+It doesn't make a lot of sense that this function is in Email
 */
 fn find_send_shift_mails(
     mailer: &SmtpTransport,
-    previous_shifts: &HashMap<i64, Shift>,
+    previous_shifts: &Vec<Shift>,
     current_shifts: &mut Vec<Shift>,
     env: &EnvMailVariables,
-) -> GenResult<HashMap<i64, Shift>> {
+) -> GenResult<Vec<Shift>> {
     let current_date: Date = Date::parse(
         &chrono::offset::Local::now().format("%d-%m-%Y").to_string(),
         DATE_DESCRIPTION,
     )?;
-    let mut shifts  = previous_shifts.clone();
+    let mut current_shifts_map  = previous_shifts.iter().cloned().map(|shift| {(shift.magic_number,shift)}).collect::<HashMap<i64,Shift>>();
     // Iterate through the current shifts to check for updates or new shifts
 
     // We start with a list of previously valid shifts. All marked as deleted
@@ -166,53 +167,49 @@ fn find_send_shift_mails(
     for current_shift in &mut *current_shifts { 
         // If the hash of this current shift is found in the previously valid shift list,
         // we know this shift has remained unchanged. So mark it as such
-        if let Some(previous_shift) = shifts.get_mut(&current_shift.magic_number) {
+        if let Some(previous_shift) = current_shifts_map.get_mut(&current_shift.magic_number) {
             previous_shift.state = ShiftState::Unchanged;
         } else {
             // if it is not found, we loop over the list of previously known shifts
-            for previous_shift in shifts.clone() {
+            for previous_shift in current_shifts_map.clone() {
                 // if during the loop, we find a previously valid shift with the same starting date as the current shift
                 // whereby we assume only 1 shift can be active per day
                 // we know it must have changed, as if it hadn't it would have been found from its hash
                 // so it can be marked as changed
                 // We must first remove the old shift, then add the new shift
                 if previous_shift.1.date == current_shift.date {
-                    shifts.remove(&previous_shift.0);
+                    match current_shifts_map.remove(&previous_shift.0) {
+                        Some(_) => (),
+                        None => warn!("Tried to remove shift {} as it has been updated, but that failed", previous_shift.1.number)
+                    };
                     current_shift.state = ShiftState::Changed;
-                    shifts.insert(current_shift.magic_number, current_shift.clone());
+                    current_shifts_map.insert(current_shift.magic_number, current_shift.clone());
                     break;
                 }
             }
             // If after that loop, no previously known shift with the same start date as the new shift was found
             // we know it is a new shift, so we mark it as such and add it to the list of known shifts
             // I THINK this currently marks all removed shifts as new, so check that when i have the brain capacity 
-            current_shift.state = ShiftState::New;
-            shifts.insert(current_shift.magic_number, current_shift.clone());
+            if current_shift.state != ShiftState::Changed {
+                current_shift.state = ShiftState::New;
+                current_shifts_map.insert(current_shift.magic_number, current_shift.clone());
+            }
+            
         }
 
     }
-    let current_shift_clone = current_shifts.clone();
-    let new_shifts: Vec<&Shift> = current_shift_clone.iter().filter(|item| {
-        if item.state == ShiftState::New {
-            true
-        } else {
-            false
-        }
+    let current_shift_vec: Vec<Shift> = current_shifts_map.values().cloned().collect();
+    let new_shifts: Vec<&Shift> = current_shift_vec.iter().filter(|item| {
+        item.state == ShiftState::New
     }).collect();
-    let updated_shifts: Vec<&Shift> = current_shift_clone.iter().filter(|item| {
-        if item.state == ShiftState::Changed {
-            true
-        } else {
-            false
-        }
+    let updated_shifts: Vec<&Shift> = current_shift_vec.iter().filter(|item| {
+        item.state == ShiftState::Changed
     }).collect();
-    let mut removed_shifts: Vec<&Shift> = current_shift_clone.iter().filter(|item| {
-        if item.state == ShiftState::Deleted {
-            true
-        } else {
-            false
-        }
+    let mut removed_shifts: Vec<&Shift> = current_shift_vec.iter().filter(|item| {
+        item.state == ShiftState::Deleted
     }).collect();
+    debug!("shift vec : {:#?}",current_shift_vec);
+    debug!("Removed shift vec size: {}", removed_shifts.len());
     if !new_shifts.is_empty() && env.send_email_new_shift {
         info!("Found {} new shifts, sending email", new_shifts.len());
         create_send_new_email(mailer, new_shifts, env, false)?;
@@ -227,7 +224,9 @@ fn find_send_shift_mails(
         removed_shifts.retain(|shift| shift.date >= current_date);
         send_removed_shifts_mail(mailer, env, removed_shifts)?;
     }
-    Ok(shifts)
+    // At last remove all shifts marked as removed from the vec
+    let current_shift_vec = current_shift_vec.into_iter().filter(|shift| shift.state != ShiftState::Deleted).collect();
+    Ok(current_shift_vec)
 }
 
 /*

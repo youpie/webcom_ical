@@ -1,8 +1,6 @@
 # Korte termijn - Volgende release
 - Password hash toevoegen bij sign_in_failure zodat webcom ical kan herkennen als het ww is veranderd
-- Zorgen dat updated en deleted shifts correct herkend worden
 - Hoeveelheid unwraps in nieuwe code weghalen, tenzij het echt niet anders kan
-- Laatste uitvoeringsdatum in Unix timestamp toevoegen aan ICAL
 - Niet 2 uitvoeringen vereisen voordat nieuwe diensten herkend kunnen worden
 
 # Middelange termijn
@@ -20,5 +18,7 @@
 - Enkel programma voor alle users
 - Automatische Gecko Engine assignment
 - User data niet opslaan in .env bestand
+    - database gebruiken?
 - Wachtwoorden niet in plaintext opslaan
+- Tests toevoegen
 - New user creation

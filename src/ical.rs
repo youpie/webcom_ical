@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs::{read_to_string, write}, path::{Path, PathBuf}};
+use std::{fs::{read_to_string, write}, path::{Path, PathBuf}, time::{Duration, SystemTime, UNIX_EPOCH}};
 
 use crate::{create_ical_filename, create_shift_link, set_get_name, GenResult, Shift, ShiftState};
 use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime};
@@ -100,16 +100,15 @@ fn is_partial_calendar_regeneration_needed() -> Option<bool> {
     }
 }
 
-fn create_shift_hashmap(events: Vec<Event>) -> HashMap<i64, Shift> {
-    let mut previous_shift_map = HashMap::new();
+fn create_shift_hashmap(events: Vec<Event>) -> Vec<Shift> {
+    let mut previous_shift_map = vec![];
     for event in events {
         if let Some(shift_string) = event.property_value("X-BUSSIE-METADATA") {
             if let Ok(shift) = serde_json::from_str::<Shift>(shift_string) {
                 let mut shift = shift;
-                let shift_hash = shift.magic_number;
                 // All shifts are marked to be deleted. As if they are not marked that later on we know they really should be deleted
                 shift.state = ShiftState::Deleted;
-                previous_shift_map.insert(shift_hash, shift);
+                previous_shift_map.push(shift);
             }
         }
     } 
@@ -117,7 +116,7 @@ fn create_shift_hashmap(events: Vec<Event>) -> HashMap<i64, Shift> {
 }
 
 // Save relevant shifts to disk
-pub fn save_relevant_shifts(relevant_shifts: &HashMap<i64,Shift>) -> GenResult<()> {
+pub fn save_relevant_shifts(relevant_shifts: &Vec<Shift>) -> GenResult<()> {
     match write(RELEVANT_EVENTS_PATH, serde_json::to_string_pretty(relevant_shifts)?) {
         Ok(_) => info!("Saving Relevant shifts to disk was succesful"),
         Err(err) => error!("Saving Relevant shifts to disk FAILED. ERROR: {}",err.to_string())
@@ -127,19 +126,18 @@ pub fn save_relevant_shifts(relevant_shifts: &HashMap<i64,Shift>) -> GenResult<(
 
 #[derive(Debug)]
 pub struct PreviousShiftInformation {
-    pub previous_relevant_shifts: HashMap<i64, Shift>,
+    pub previous_relevant_shifts: Vec<Shift>,
     pub previous_non_relevant_shifts: Vec<Shift>,
 }
 
 impl PreviousShiftInformation {
-    pub fn new_from_relevant(shifts: &Vec<Shift>) -> Self{
-        let map = shifts.iter().cloned().map(|shift| {(shift.magic_number,shift)}).collect::<HashMap<i64,Shift>>();
-        Self { previous_relevant_shifts: map, previous_non_relevant_shifts: vec![] }
+    pub fn new_from_relevant(shifts: Vec<Shift>) -> Self{
+        Self { previous_relevant_shifts: shifts, previous_non_relevant_shifts: vec![] }
     }
     pub fn new() -> Self {
         Self {
             previous_non_relevant_shifts: vec![],
-            previous_relevant_shifts: HashMap::new()
+            previous_relevant_shifts: vec![]
         }
     }
 }
@@ -165,7 +163,7 @@ pub fn get_previous_shifts() -> Option<PreviousShiftInformation> {
         //     Ok(_) => debug!("Saving relevant shifts to disk was succesful"),
         //     Err(err) => error!("Saving relevant shifts to disk FAILED. ERROR: {}",err.to_string())
         // };
-        let previous_non_relevant_shifts: Vec<Shift> = create_shift_hashmap(calendar_split.1.unwrap()).values().cloned().collect();
+        let previous_non_relevant_shifts: Vec<Shift> = create_shift_hashmap(calendar_split.1.unwrap());
         match write(NON_RELEVANT_EVENTS_PATH, serde_json::to_string_pretty(&previous_non_relevant_shifts).unwrap()) {
             Ok(_) => debug!("Saving non-relevant shifts to disk was succesful"),
             Err(err) => error!("Saving non-relevant shifts to disk FAILED. ERROR: {}",err.to_string())
@@ -177,7 +175,9 @@ pub fn get_previous_shifts() -> Option<PreviousShiftInformation> {
     } else {
         let relevant_shift_str = read_to_string(RELEVANT_EVENTS_PATH).unwrap();
         let irrelevant_shift_str = read_to_string(NON_RELEVANT_EVENTS_PATH).unwrap();
-        let previous_relevant_shifts: HashMap<i64, Shift> = serde_json::from_str(&relevant_shift_str).unwrap();
+        let previous_relevant_shifts: Vec<Shift> = serde_json::from_str(&relevant_shift_str).unwrap();
+        // All relevant shifts MUST FIRST BE MARKED AS DELETED for deleted shift detection to work
+        let previous_relevant_shifts = previous_relevant_shifts.into_iter().map(|mut shift| {shift.state = ShiftState::Deleted; shift}).collect();
         let previous_non_relevant_shifts: Vec<Shift> = serde_json::from_str(&irrelevant_shift_str).unwrap();
         Some(PreviousShiftInformation {
             previous_relevant_shifts,
@@ -226,10 +226,13 @@ pub fn create_ical(relevant_shifts: &Vec<Shift>, non_relevant_shifts: Vec<Shift>
     let mut shifts = non_relevant_shifts;
     shifts.append(&mut relevant_shifts.clone());
     let name = set_get_name(None);
+    // get the current systemtime as a unix timestamp
+    let current_timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::from_secs(0));
     info!("Creating calendar file...");
     let mut calendar = Calendar::new()
         .name(&format!("Hermes rooster - {}", name))
         .append_property(("X-USER-NAME", name.as_str()))
+        .append_property(("X-LAST-UPDATED", current_timestamp.as_secs().to_string().as_str()))
         .append_property(("METHOD", "PUBLISH"))
         .timezone("Europe/Amsterdam")
         .done();

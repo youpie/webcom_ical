@@ -35,7 +35,8 @@ mod parsing;
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 const BASE_DIRECTORY: &str = "kuma/";
-const FALLBACK_URL: &str = "https://dmz-wbc-web02.connexxion.nl/WebComm/default.aspx";
+// the ;x should be equal to the ammount of fallback URLs
+const FALLBACK_URL: [&str;2] = ["https://dmz-wbc-web01.connexxion.nl/WebComm/default.aspx","https://dmz-wbc-web02.connexxion.nl/WebComm/default.aspx"];
 static NAME: LazyLock<RwLock<Option<String>>> = LazyLock::new(|| RwLock::new(None));
 
 // This should also store the hash of the password. So it can know if the password has changed in the meantime
@@ -94,12 +95,6 @@ An absolutely useless struct that is only needed  becasue a Vec<> cannot be seri
 #[derive(Serialize, Deserialize)]
 pub struct Shifts {
     shifts: Vec<Shift>,
-}
-
-impl Shifts {
-    fn new(shifts: Vec<Shift>) -> Self {
-        Self { shifts }
-    }
 }
 
 fn create_shift_link(shift: &Shift) -> GenResult<String> {
@@ -182,19 +177,6 @@ fn create_ical_filename() -> GenResult<String> {
         None => Ok(format!("{}.ics", username)),
         _ => Ok(format!("{}.ics", var("RANDOM_FILENAME")?)),
     }
-}
-
-/*
-Serialise the shifts to be saved to disk.
-This is needed to send a mail when a new shift is found
-Needs to create a struct with a Vec<Shift> because otherwise it wouldn't serialise correctly
-*/
-fn save_shifts_on_disk(shifts: &Vec<Shift>, path: &Path) -> GenResult<()> {
-    let shifts_struct = Shifts::new(shifts.clone());
-    let shifts_serialised = toml::to_string(&shifts_struct)?;
-    let mut output = File::create(path)?;
-    write!(output, "{}", shifts_serialised)?;
-    Ok(())
 }
 
 pub async fn wait_until_loaded(driver: &WebDriver) -> GenResult<()> {
@@ -417,14 +399,14 @@ fn sign_in_failed_update(
 }
 
 // Main program logic that has to run, if it fails it will all be reran.
-async fn main_program(driver: &WebDriver, username: &str, password: &str) -> GenResult<()> {
+async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_count: usize) -> GenResult<()> {
     driver.delete_all_cookies().await?;
     let main_url = "webcom.connexxion.nl";
     info!("Loading site: {}..", main_url);
     match driver.goto(main_url).await {
         Ok(_) => wait_untill_redirect(&driver).await?,
-        Err(_) => {error!("Failed waiting for redirect. Going to fallback {FALLBACK_URL}");
-        driver.goto(FALLBACK_URL).await.map_err(|_| {Box::new(FailureType::ConnectError)})? }
+        Err(_) => {error!("Failed waiting for redirect. Going to fallback {}",FALLBACK_URL[retry_count%FALLBACK_URL.len()]);
+        driver.goto(FALLBACK_URL[retry_count%FALLBACK_URL.len()]).await.map_err(|_| {Box::new(FailureType::ConnectError)})? }
     };
     load_calendar(&driver, &username, &password).await?;
     wait_until_loaded(&driver).await?;
@@ -446,10 +428,10 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
         Ok(shifts) => shifts,
         Err(err) => return Err(err),
     };
-    let mut current_shifts: Vec<Shift> = current_shifts_map.values().cloned().collect();
+    let mut current_shifts: Vec<Shift> = current_shifts_map;
     gebroken_shifts::gebroken_diensten_laden(&driver, &mut current_shifts).await?; // Replace the shifts with the newly created list of broken shifts
     debug!("Shift information:\n{current_shifts:#?}");
-    ical::save_relevant_shifts(&current_shifts_map)?;
+    ical::save_relevant_shifts(&current_shifts)?;
     let current_shifts = gebroken_shifts::split_broken_shifts(current_shifts)?;
     let current_shifts = gebroken_shifts::split_night_shift(&current_shifts);
     let calendar = create_ical(&current_shifts, non_relevant_shifts);
@@ -518,7 +500,7 @@ async fn main() -> WebDriverResult<()> {
         error_reason = FailureType::SignInFailed(failure);
     }
     while retry_count <= max_retry_count - 1 {
-        match main_program(&driver, &username, &password).await {
+        match main_program(&driver, &username, &password, retry_count).await {
             Ok(_) => {
                 sign_in_failed_update(&name, false, None).unwrap();
                 retry_count = max_retry_count;

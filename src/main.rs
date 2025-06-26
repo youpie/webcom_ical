@@ -36,6 +36,7 @@ mod parsing;
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 const BASE_DIRECTORY: &str = "kuma/";
+const FALLBACK_URL: &str = "https://dmz-wbc-web01.connexxion.nl/WebComm/default.aspx"
 static NAME: LazyLock<RwLock<Option<String>>> = LazyLock::new(|| RwLock::new(None));
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -531,8 +532,11 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str) -> Gen
     // );
     let main_url = "webcom.connexxion.nl";
     println!("Loading site: {}..", main_url);
-    driver.goto(main_url).await?;
-    wait_untill_redirect(&driver).await?;
+    match driver.goto(main_url).await {
+        Ok(_) => wait_untill_redirect(&driver).await?,
+        Err(_) => {println!("Failed waiting for redirect. Going to fallback {FALLBACK_URL}");
+        driver.goto(FALLBACK_URL).await? }
+    };
     load_calendar(&driver, &username, &password).await?;
     wait_until_loaded(&driver).await?;
     let mut shifts = load_current_month_shifts(&driver).await?;

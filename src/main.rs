@@ -9,6 +9,9 @@ use reqwest;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::fs::write;
+use std::hash::DefaultHasher;
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
@@ -44,6 +47,7 @@ static NAME: LazyLock<RwLock<Option<String>>> = LazyLock::new(|| RwLock::new(Non
 pub struct IncorrectCredentialsCount {
     retry_count: usize,
     error: Option<SignInFailure>,
+    previous_password_hash: Option<u64>
 }
 
 impl IncorrectCredentialsCount {
@@ -51,6 +55,7 @@ impl IncorrectCredentialsCount {
         Self {
             retry_count: 0,
             error: None,
+            previous_password_hash: None
         }
     }
 }
@@ -82,12 +87,6 @@ enum FailureType {
     #[error("Ok")]
     OK,
 }
-
-// impl std::fmt::Display for FailureType {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "{:?}", self)
-//     }
-// }
 
 /*
 An absolutely useless struct that is only needed  becasue a Vec<> cannot be serialised
@@ -345,6 +344,19 @@ fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>> {
         }
     };
     let return_value: Option<SignInFailure>;
+    if let Some(previous_password_hash) = failure_counter.previous_password_hash {
+        if let Ok(current_password) = var("PASSWORD") {
+            let mut hasher = DefaultHasher::new();
+            current_password.hash(&mut hasher);
+            let current_password_hash = hasher.finish();
+            if previous_password_hash != current_password_hash {
+                info!("Password hash has changed, resuming execution"); 
+                return Ok(None);
+            }
+        }
+        
+    }
+    
     // else check if retry counter == reduce_ammount, if not, stop running
     if failure_counter.retry_count == 0 {
         return_value = None;
@@ -355,11 +367,13 @@ fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>> {
         );
         failure_counter.retry_count += 1;
         return_value = None;
-    } else {
+    }
+    else {
         warn!("Skipped execution due to previous sign in error");
         failure_counter.retry_count += 1;
         return_value = Some(failure_counter.error.clone().unwrap());
     }
+
     if failure_counter.retry_count % resend_error_mail_count == 0 && failure_counter.error.is_some()
     {
         email::send_failed_signin_mail(username, &failure_counter, false)?;

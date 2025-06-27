@@ -38,6 +38,16 @@
       default: "true"
 
   tasks:
+    - name: Check if user exists
+      ansible.builtin.stat:
+        path: "~/Services/Webcom/{{ personeelsnummer }}"
+      register: folder_stat
+
+    - name: Fail if user exists
+      ansible.builtin.fail:
+        msg: "The user {{ personeelsnummer }} already exists."
+      when: folder_stat.stat.exists
+
     - name: Generate a UUID
       set_fact:
         my_uuid: "{{ lookup('community.general.random_string', length=12, special=false, upper=false, digits=true, lower=true) }}"

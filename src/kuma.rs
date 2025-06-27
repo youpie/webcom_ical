@@ -4,7 +4,7 @@ use kuma_client::{monitor, Client, notification};
 use serde::{Deserialize, Serialize};
 use strfmt::strfmt;
 use std::collections::HashMap;
-use std::fs::File;
+use std::fs::{read_to_string, File};
 use std::io::Write;
 use std::path::PathBuf;
 use url::Url;
@@ -92,42 +92,42 @@ async fn create_monitor(kuma_client: &Client, personeelsnummer: &str, notificati
 }
 
 async fn create_notification(kuma_client: &Client, personeelsnummer: &str, kuma_url: &Url) -> GenResult<i32> {
-//     let base_html = read_to_string("./templates/email_base.html").unwrap();
-//     let offline_html = read_to_string("./templates/kuma_offline.html").unwrap();
-//     let online_html = read_to_string("./templates/kuma_online.html").unwrap();
+    let base_html = read_to_string("./templates/email_base.html").unwrap();
+    let offline_html = read_to_string("./templates/kuma_offline.html").unwrap();
+    let online_html = read_to_string("./templates/kuma_online.html").unwrap();
 
-//     let body_online = strfmt!(&base_html,
-//         content => strfmt!(&online_html,
-//             kuma_url => kuma_url.to_string()
-//         )?,
-//         banner_color => COLOR_GREEN 
-//     )?;
-//     let body_offline = strfmt!(&base_html,
-//         content => strfmt!(&offline_html,
-//             kuma_url => kuma_url.to_string(),
-//             msg => "{{msg}}"
-//         )?,
-//         banner_color => COLOR_RED 
-//     )?;
-//     let body = format!("{{% if status contains \"Up\" %}}
-// {body_online}
-// {{% else %}}
-// {body_offline}
-// {{% endif %}}");
-    let kuma_url_string = kuma_url.to_string();
+    let body_online = strfmt!(&base_html,
+        content => strfmt!(&online_html,
+            kuma_url => kuma_url.to_string()
+        )?,
+        banner_color => COLOR_GREEN 
+    )?;
+    let body_offline = strfmt!(&base_html,
+        content => strfmt!(&offline_html,
+            kuma_url => kuma_url.to_string(),
+            msg => "{{msg}}"
+        )?,
+        banner_color => COLOR_RED 
+    )?;
     let body = format!("{{% if status contains \"Up\" %}}
-Hoi,
-Webcom Ical heeft weer wat van zich laten horen! Je krijgt weer mailtjes bij nieuwe diensten en je agenda zal weer geüpdate worden!
-
-Bekijk de actuele status op: {kuma_url_string}
+{body_online}
 {{% else %}}
-Hoi,
-Webcom Ical heeft al een tijdje niks van zich laten horen, hierdoor krijg je waarschijnlijk geen mails bij nieuwe diensten, en wordt je agenda niet meer geüpdate tot nader bericht.
-
-Bekijk de actuele status op: {kuma_url_string}
-
-De fout is: {{{{msg}}}}
+{body_offline}
 {{% endif %}}");
+    let kuma_url_string = kuma_url.to_string();
+//     let body = format!("{{% if status contains \"Up\" %}}
+// Hoi,
+// Webcom Ical heeft weer wat van zich laten horen! Je krijgt weer mailtjes bij nieuwe diensten en je agenda zal weer geüpdate worden!
+
+// Bekijk de actuele status op: {kuma_url_string}
+// {{% else %}}
+// Hoi,
+// Webcom Ical heeft al een tijdje niks van zich laten horen, hierdoor krijg je waarschijnlijk geen mails bij nieuwe diensten, en wordt je agenda niet meer geüpdate tot nader bericht.
+
+// Bekijk de actuele status op: {kuma_url_string}
+
+// De fout is: {{{{msg}}}}
+// {{% endif %}}");
 
     let email_env = email::EnvMailVariables::new(true)?;
     let port = var("KUMA_MAIL_PORT")?;

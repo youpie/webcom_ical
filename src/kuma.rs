@@ -100,14 +100,16 @@ async fn create_notification(kuma_client: &Client, personeelsnummer: &str, kuma_
         content => strfmt!(&online_html,
             kuma_url => kuma_url.to_string()
         )?,
-        banner_color => COLOR_GREEN 
+        banner_color => COLOR_GREEN,
+        footer => ""
     )?;
     let body_offline = strfmt!(&base_html,
         content => strfmt!(&offline_html,
             kuma_url => kuma_url.to_string(),
             msg => "{{msg}}"
         )?,
-        banner_color => COLOR_RED 
+        banner_color => COLOR_RED,
+        footer => ""
     )?;
     let body = format!("{{% if status contains \"Up\" %}}
 {body_online}

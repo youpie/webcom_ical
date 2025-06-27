@@ -430,7 +430,7 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
     info!("Found {} shifts", new_shifts.len());
     
     // If getting previous shift information failed, just create an empty one. Because it will cause a new calendar to be created
-    let previous_shifts_information = match get_previous_shifts() {
+    let previous_shifts_information = match get_previous_shifts()? {
         Some(previous_shifts) => previous_shifts,
         None => PreviousShiftInformation::new()
     };

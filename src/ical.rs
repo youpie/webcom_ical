@@ -40,7 +40,7 @@ fn split_calendar(events: Vec<Event>) -> (Vec<Event>, Option<Vec<Event>>) {
     }) {
         Ok(date) => date,
         Err(_err) => {
-            warn!("failed to get current date");
+            error!("failed to get current date, all shifts are treated as relevant");
             return (events, None);
         }
     };
@@ -142,20 +142,20 @@ impl PreviousShiftInformation {
     }
 }
 
-pub fn get_previous_shifts() -> Option<PreviousShiftInformation> {
+pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
     let relevant_events_exist = Path::new(RELEVANT_EVENTS_PATH).exists();
     let non_relevant_events_exist = Path::new(NON_RELEVANT_EVENTS_PATH).exists();
     let main_ical_path = PathBuf::from(&format!(
         "{}{}",
         var("SAVE_TARGET").unwrap(),
-        create_ical_filename().unwrap()
+        create_ical_filename()?
     ));
     if is_partial_calendar_regeneration_needed().is_none_or(|needed| needed) || !(relevant_events_exist && non_relevant_events_exist) {
         debug!("calendar regeneration needed");
         if !main_ical_path.exists() {
-            return None;
+            return Ok(None);
         }
-        let main_calendar = load_ical_file(&main_ical_path).unwrap();
+        let main_calendar = load_ical_file(&main_ical_path)?;
         let calendar_events = get_calendar_events(main_calendar);
         let calendar_split = split_calendar(calendar_events);
         let previous_shifts_hash = create_shift_hashmap(calendar_split.0);
@@ -163,26 +163,26 @@ pub fn get_previous_shifts() -> Option<PreviousShiftInformation> {
         //     Ok(_) => debug!("Saving relevant shifts to disk was succesful"),
         //     Err(err) => error!("Saving relevant shifts to disk FAILED. ERROR: {}",err.to_string())
         // };
-        let previous_non_relevant_shifts: Vec<Shift> = create_shift_hashmap(calendar_split.1.unwrap());
-        match write(NON_RELEVANT_EVENTS_PATH, serde_json::to_string_pretty(&previous_non_relevant_shifts).unwrap()) {
+        let previous_non_relevant_shifts: Vec<Shift> = create_shift_hashmap(calendar_split.1.unwrap_or_default());
+        match write(NON_RELEVANT_EVENTS_PATH, serde_json::to_string_pretty(&previous_non_relevant_shifts)?) {
             Ok(_) => debug!("Saving non-relevant shifts to disk was succesful"),
             Err(err) => error!("Saving non-relevant shifts to disk FAILED. ERROR: {}",err.to_string())
         };
-        Some(PreviousShiftInformation {
+        Ok(Some(PreviousShiftInformation {
             previous_relevant_shifts: previous_shifts_hash,
             previous_non_relevant_shifts,
-        })
+        }))
     } else {
         let relevant_shift_str = read_to_string(RELEVANT_EVENTS_PATH).unwrap();
         let irrelevant_shift_str = read_to_string(NON_RELEVANT_EVENTS_PATH).unwrap();
-        let previous_relevant_shifts: Vec<Shift> = serde_json::from_str(&relevant_shift_str).unwrap();
+        let previous_relevant_shifts: Vec<Shift> = serde_json::from_str(&relevant_shift_str).unwrap_or_default();
         // All relevant shifts MUST FIRST BE MARKED AS DELETED for deleted shift detection to work
         let previous_relevant_shifts = previous_relevant_shifts.into_iter().map(|mut shift| {shift.state = ShiftState::Deleted; shift}).collect();
-        let previous_non_relevant_shifts: Vec<Shift> = serde_json::from_str(&irrelevant_shift_str).unwrap();
-        Some(PreviousShiftInformation {
+        let previous_non_relevant_shifts: Vec<Shift> = serde_json::from_str(&irrelevant_shift_str).unwrap_or_default();
+        Ok(Some(PreviousShiftInformation {
             previous_relevant_shifts,
             previous_non_relevant_shifts,
-        })
+        }))
     }
     
 }

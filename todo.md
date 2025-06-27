@@ -1,6 +1,5 @@
 # Korte termijn - Volgende release
 - Password hash toevoegen bij sign_in_failure zodat webcom ical kan herkennen als het ww is veranderd
-- Hoeveelheid unwraps in nieuwe code weghalen, tenzij het echt niet anders kan
 - Niet 2 uitvoeringen vereisen voordat nieuwe diensten herkend kunnen worden
 
 # Middelange termijn

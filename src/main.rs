@@ -510,7 +510,10 @@ async fn main() -> WebDriverResult<()> {
     if let Some(url_unwrap) = kuma_url.clone() {
         if !url_unwrap.is_empty() {
             debug!("Checking if kuma needs to be created");
-            kuma::first_run(&url_unwrap, &username).await.unwrap();
+            match kuma::first_run(&url_unwrap, &username).await {
+                Ok(_) => info!("Kuma run was succesful"),
+                Err(err) => warn!("Kuma run was not succesful. Error: {}",err.to_string())
+            }
         }
     }
     // Check if the program is allowed to run, or not due to failed sign-in

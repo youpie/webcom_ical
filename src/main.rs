@@ -511,7 +511,7 @@ async fn main() -> WebDriverResult<()> {
         if !url_unwrap.is_empty() {
             debug!("Checking if kuma needs to be created");
             match kuma::first_run(&url_unwrap, &username).await {
-                Ok(_) => info!("Kuma run was succesful"),
+                Ok(_) => debug!("Kuma run was succesful"),
                 Err(err) => warn!("Kuma run was not succesful. Error: {}",err.to_string())
             }
         }

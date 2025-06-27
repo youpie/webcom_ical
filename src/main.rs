@@ -269,6 +269,13 @@ fn save_sign_in_failure_count(path: &Path, counter: &IncorrectCredentialsCount) 
     Ok(())
 }
 
+fn get_password_hash() -> GenResult<u64> {
+    let current_password = var("PASSWORD")?;
+    let mut hasher = DefaultHasher::new();
+    current_password.hash(&mut hasher);
+    Ok(hasher.finish())
+}
+
 // If returning true, continue execution
 fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>> {
     let resend_error_mail_count: usize = var("SIGNIN_FAIL_MAIL_REPEAT")
@@ -291,16 +298,12 @@ fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>> {
     };
     let return_value: Option<SignInFailure>;
     if let Some(previous_password_hash) = failure_counter.previous_password_hash {
-        if let Ok(current_password) = var("PASSWORD") {
-            let mut hasher = DefaultHasher::new();
-            current_password.hash(&mut hasher);
-            let current_password_hash = hasher.finish();
+        if let Ok(current_password_hash) = get_password_hash() {
             if previous_password_hash != current_password_hash {
                 info!("Password hash has changed, resuming execution"); 
                 return Ok(None);
-            }
+            }    
         }
-        
     }
     
     // else check if retry counter == reduce_ammount, if not, stop running
@@ -337,6 +340,10 @@ fn sign_in_failed_update(
 ) -> GenResult<()> {
     let path = Path::new("./sign_in_failure_count.toml");
     let mut failure_counter = load_sign_in_failure_count(path)?;
+    if let Ok(current_password_hash) = get_password_hash() {
+        info!("Got current password hash");
+        failure_counter.previous_password_hash = Some(current_password_hash);
+    }
     // if failed == true, set increment counter and set error
     if failed == true {
         failure_counter.error = failure_type;
@@ -444,7 +451,6 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
     };
     let mut current_shifts: Vec<Shift> = current_shifts_map;
     gebroken_shifts::gebroken_diensten_laden(&driver, &mut current_shifts).await?; // Replace the shifts with the newly created list of broken shifts
-    debug!("Shift information:\n{current_shifts:#?}");
     ical::save_relevant_shifts(&current_shifts)?;
     let current_shifts = gebroken_shifts::split_broken_shifts(current_shifts)?;
     let current_shifts = gebroken_shifts::split_night_shift(&current_shifts);

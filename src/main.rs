@@ -42,7 +42,6 @@ const BASE_DIRECTORY: &str = "kuma/";
 const FALLBACK_URL: [&str;2] = ["https://dmz-wbc-web01.connexxion.nl/WebComm/default.aspx","https://dmz-wbc-web02.connexxion.nl/WebComm/default.aspx"];
 static NAME: LazyLock<RwLock<Option<String>>> = LazyLock::new(|| RwLock::new(None));
 
-// This should also store the hash of the password. So it can know if the password has changed in the meantime
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct IncorrectCredentialsCount {
     retry_count: usize,
@@ -270,59 +269,6 @@ fn save_sign_in_failure_count(path: &Path, counter: &IncorrectCredentialsCount) 
     Ok(())
 }
 
-// This is a pretty useless function. It checks if the DOMAIN env variable was changed since last time the program was run
-// It is just to send a new welcome mail
-fn check_domain_update(ical_path: &PathBuf) {
-    let previous_domain;
-    let path = &format!("./{BASE_DIRECTORY}previous_domain");
-    match std::fs::read_to_string(path) {
-        Ok(x) => {
-            // println!("{}", &x);
-            previous_domain = Some(x)
-        }
-        Err(_) => previous_domain = None,
-    }
-    let current_domain = var("DOMAIN").unwrap_or("".to_string());
-    if let Some(previous_domain_unwrap) = previous_domain {
-        if previous_domain_unwrap != current_domain {
-            let _ = send_welcome_mail(ical_path, true);
-        }
-    }
-    match File::create(path) {
-        Ok(mut file) => {
-            let _ = write!(file, "{}", current_domain);
-        }
-        Err(_) => (),
-    }
-}
-
-fn set_get_name(new_name_option: Option<String>) -> String {
-    let path = "./kuma/name";
-    // Just return constant name if already set
-    if let Ok(const_name) = NAME.read() {
-        if new_name_option.is_none() && const_name.is_some() {
-            return const_name.clone().unwrap();
-        }
-    }
-    let mut name = std::fs::read_to_string(path)
-        .ok()
-        .unwrap_or("FOUT BIJ LADEN VAN NAAM".to_owned());
-
-    // Write new name if previous name is different (deadname protection lmao)
-    if let Some(new_name) = new_name_option {
-        if new_name != name {
-            if let Err(error) = write(path, &new_name) {
-                error!("Fout tijdens opslaan van naam: {}", error.to_string());
-            }
-            name = new_name;
-        }
-    }
-    if let Ok(mut const_name) = NAME.write() {
-        *const_name = Some(name.clone());
-    }
-    name
-}
-
 // If returning true, continue execution
 fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>> {
     let resend_error_mail_count: usize = var("SIGNIN_FAIL_MAIL_REPEAT")
@@ -410,6 +356,60 @@ fn sign_in_failed_update(
     }
     save_sign_in_failure_count(path, &failure_counter)?;
     Ok(())
+}
+
+
+// This is a pretty useless function. It checks if the DOMAIN env variable was changed since last time the program was run
+// It is just to send a new welcome mail
+fn check_domain_update(ical_path: &PathBuf) {
+    let previous_domain;
+    let path = &format!("./{BASE_DIRECTORY}previous_domain");
+    match std::fs::read_to_string(path) {
+        Ok(x) => {
+            // println!("{}", &x);
+            previous_domain = Some(x)
+        }
+        Err(_) => previous_domain = None,
+    }
+    let current_domain = var("DOMAIN").unwrap_or("".to_string());
+    if let Some(previous_domain_unwrap) = previous_domain {
+        if previous_domain_unwrap != current_domain {
+            let _ = send_welcome_mail(ical_path, true);
+        }
+    }
+    match File::create(path) {
+        Ok(mut file) => {
+            let _ = write!(file, "{}", current_domain);
+        }
+        Err(_) => (),
+    }
+}
+
+fn set_get_name(new_name_option: Option<String>) -> String {
+    let path = "./kuma/name";
+    // Just return constant name if already set
+    if let Ok(const_name) = NAME.read() {
+        if new_name_option.is_none() && const_name.is_some() {
+            return const_name.clone().unwrap();
+        }
+    }
+    let mut name = std::fs::read_to_string(path)
+        .ok()
+        .unwrap_or("FOUT BIJ LADEN VAN NAAM".to_owned());
+
+    // Write new name if previous name is different (deadname protection lmao)
+    if let Some(new_name) = new_name_option {
+        if new_name != name {
+            if let Err(error) = write(path, &new_name) {
+                error!("Fout tijdens opslaan van naam: {}", error.to_string());
+            }
+            name = new_name;
+        }
+    }
+    if let Ok(mut const_name) = NAME.write() {
+        *const_name = Some(name.clone());
+    }
+    name
 }
 
 // Main program logic that has to run, if it fails it will all be reran.

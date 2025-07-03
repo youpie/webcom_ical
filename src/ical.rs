@@ -7,6 +7,7 @@ use icalendar::{
     Calendar, CalendarComponent, CalendarDateTime, Component, Event, EventLike,
     parser::{read_calendar, unfold},
 };
+use serde_json::from_str;
 use time::{Date, Month, OffsetDateTime, Time};
 
 const PREVIOUS_EXECUTION_DATE_PATH: &str = "./kuma/previous_execution_date";
@@ -69,24 +70,24 @@ fn split_calendar(events: Vec<Event>) -> (Vec<Event>, Option<Vec<Event>>) {
 // If false, doesn't need to happen
 // None, unknown, error occured
 fn is_partial_calendar_regeneration_needed() -> Option<bool> {
-    let current_date = match OffsetDateTime::now_local().map(|date_time| {
-        let date = date_time.date();
-        (date.year() - 2025) * 365 + 31 * date.month() as i32 + date.day() as i32
-    }) {
-        Ok(date) => date,
+    let current_date = match OffsetDateTime::now_local() {
+        Ok(date) => date.date(),
         Err(_err) => {
             warn!("failed to get current date");
             return None;
         }
     };
-    let previous_execution_date = match &read_to_string(PREVIOUS_EXECUTION_DATE_PATH).unwrap_or_default().parse::<i32>() {
-        Ok(date) => {debug!("Previous date: {date}");*date},
+    let previous_execution_date =  match || -> GenResult<Date> {
+        let previous_execution_file = read_to_string(PREVIOUS_EXECUTION_DATE_PATH)?;
+        Ok(from_str::<Date>(&previous_execution_file)?)
+    }() {
+        Ok(date) => date,
         Err(err) => {warn!("Getting previous execution date went wrong. Err: {}",err.to_string());
-            _  = write(PREVIOUS_EXECUTION_DATE_PATH, current_date.to_string());
+            _  = write(PREVIOUS_EXECUTION_DATE_PATH, serde_json::to_string(&current_date).unwrap().as_bytes());
             return None}
     };
     debug!("Current date: {current_date}");
-    _  = write(PREVIOUS_EXECUTION_DATE_PATH, current_date.to_string());
+    _ = write(PREVIOUS_EXECUTION_DATE_PATH, serde_json::to_string(&current_date).unwrap().as_bytes());
     if previous_execution_date != current_date {
         Some(true)
     }
@@ -146,7 +147,7 @@ pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
         create_ical_filename()?
     ));
     if is_partial_calendar_regeneration_needed().is_none_or(|needed| needed) || !(relevant_events_exist && non_relevant_events_exist) {
-        debug!("calendar regeneration needed");
+        info!("calendar regeneration needed");
         if !main_ical_path.exists() {
             return Ok(None);
         }
@@ -168,6 +169,7 @@ pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
             previous_non_relevant_shifts,
         }))
     } else {
+        info!("Calendar regeneration NOT needed");
         let relevant_shift_str = read_to_string(RELEVANT_EVENTS_PATH).unwrap();
         let irrelevant_shift_str = read_to_string(NON_RELEVANT_EVENTS_PATH).unwrap();
         let previous_relevant_shifts: Vec<Shift> = serde_json::from_str(&relevant_shift_str).unwrap_or_default();

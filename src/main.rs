@@ -7,6 +7,7 @@ use email::send_errors;
 use email::send_welcome_mail;
 use reqwest;
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::fs::File;
 use std::fs::write;
 use std::hash::DefaultHasher;
@@ -435,7 +436,25 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
     load_calendar(&driver, &username, &password).await?;
     wait_until_loaded(&driver).await?;
     let mut new_shifts = load_current_month_shifts(&driver).await?;
-    new_shifts.append(&mut load_previous_month_shifts(&driver,0).await?);
+    let ical_path = PathBuf::from(&format!(
+        "{}{}",
+        var("SAVE_TARGET")?,
+        create_ical_filename()?
+    ));
+    if !ical_path.exists() {
+        info!("An existing calendar file has not been found, adding two extra months of shifts, also removing partial calendars");
+        match || -> GenResult<()> {fs::remove_file(PathBuf::from(NON_RELEVANT_EVENTS_PATH))?;
+        Ok(fs::remove_file(PathBuf::from(RELEVANT_EVENTS_PATH))?)}() {
+            Ok(_) => debug!("Removing files succesful"),
+            Err(err) => warn!("Removing partial calendar files failed. Error: {}", err.to_string())
+        };
+        
+        new_shifts.append(&mut load_previous_month_shifts(&driver,2).await?);
+    }
+    else {
+        debug!("Existing calendar file found");
+        new_shifts.append(&mut load_previous_month_shifts(&driver,0).await?);
+    }
     new_shifts.append(&mut load_next_month_shifts(&driver).await?);
     info!("Found {} shifts", new_shifts.len());
     
@@ -460,11 +479,6 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
     current_shifts.sort_by_key(|shift| shift.magic_number);
     current_shifts.dedup();
     let calendar = create_ical(&current_shifts, non_relevant_shifts);
-    let ical_path = PathBuf::from(&format!(
-        "{}{}",
-        var("SAVE_TARGET")?,
-        create_ical_filename()?
-    ));
     send_welcome_mail(&ical_path, false)?;
     check_domain_update(&ical_path);
     let mut output = File::create(&ical_path)?;

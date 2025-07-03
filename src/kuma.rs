@@ -1,12 +1,9 @@
 use dotenvy::var;
 use kuma_client::monitor::{MonitorGroup, MonitorType};
 use kuma_client::{monitor, Client, notification};
-use serde::{Deserialize, Serialize};
 use strfmt::strfmt;
 use std::collections::HashMap;
-use std::fs::{read_to_string, File};
-use std::io::Write;
-use std::path::PathBuf;
+use std::fs::read_to_string;
 use url::Url;
 
 use crate::email;

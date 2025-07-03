@@ -11,8 +11,8 @@ use serde_json::from_str;
 use time::{Date, Month, OffsetDateTime, Time};
 
 const PREVIOUS_EXECUTION_DATE_PATH: &str = "./kuma/previous_execution_date";
-const NON_RELEVANT_EVENTS_PATH: &str = "./kuma/non_relevant_events";
-const RELEVANT_EVENTS_PATH: &str = "./kuma/relevant_events";
+pub const NON_RELEVANT_EVENTS_PATH: &str = "./kuma/non_relevant_events";
+pub const RELEVANT_EVENTS_PATH: &str = "./kuma/relevant_events";
 
 pub fn load_ical_file(path: &Path) -> GenResult<Calendar> {
     let calendar_string = read_to_string(path)?;

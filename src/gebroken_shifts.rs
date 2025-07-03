@@ -152,14 +152,16 @@ pub async fn navigate_to_subdirectory(driver: &WebDriver, subdirectory: &str) ->
 // This function clones a vec of shifts and splits broken shifts, if that value is set
 pub fn split_broken_shifts(shifts: Vec<Shift>) -> GenResult<Vec<Shift>> {
     let mut shifts_clone = shifts.clone();
+    let mut shifts_to_append = vec![];
     for shift in shifts.iter().enumerate() {
         if shift.1.broken_period.is_some() {
             if let Some(mut shifts_split) = shift.1.split_broken() {
                 shifts_clone.remove(shift.0);
-                shifts_clone.append(&mut shifts_split);
+                shifts_to_append.append(&mut shifts_split);
             }
         }
     }
+    shifts_clone.append(&mut shifts_to_append);
     Ok(shifts_clone)
 }
 

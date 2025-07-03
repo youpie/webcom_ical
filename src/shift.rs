@@ -127,11 +127,11 @@ impl Shift {
     pub fn split_broken(
         &self,
     ) -> Option<Vec<Self>> {
-        let mut part_one = self.clone();
         let break_period = match self.broken_period {
             Some(period) => period,
             None => {return None;}
         };
+        let mut part_one = self.clone();
         part_one.end = break_period.0;
         let mut part_two = self.clone();
         part_two.start = break_period.1;

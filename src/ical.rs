@@ -1,13 +1,13 @@
 use std::{fs::{read_to_string, write}, path::{Path, PathBuf}, time::{Duration, SystemTime, UNIX_EPOCH}};
 
 use crate::{create_ical_filename, create_shift_link, set_get_name, GenResult, Shift, ShiftState};
-use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::{Datelike, Local, Months, NaiveDate, NaiveDateTime, NaiveTime};
 use dotenvy::var;
 use icalendar::{
     Calendar, CalendarComponent, CalendarDateTime, Component, Event, EventLike,
     parser::{read_calendar, unfold},
 };
-use time::{Date, OffsetDateTime, Time};
+use time::{Date, Month, OffsetDateTime, Time};
 
 const PREVIOUS_EXECUTION_DATE_PATH: &str = "./kuma/previous_execution_date";
 const NON_RELEVANT_EVENTS_PATH: &str = "./kuma/non_relevant_events";
@@ -34,30 +34,25 @@ pub fn get_calendar_events(calendar: Calendar) -> Vec<Event> {
 // 1st element is relevant, second element is non-relevant. If it returns none, something went wrong getting the current date
 fn split_calendar(events: Vec<Event>) -> (Vec<Event>, Option<Vec<Event>>) {
     // The date is how many days have elapsed since 1-1-2025. Assuming 31 days per month
-    let current_date = match OffsetDateTime::now_local().map(|date_time| {
-        let date = date_time.date();
-        (date.year() - 2025 * 365) + 31 * date.month() as i32 + date.day() as i32
-    }) {
-        Ok(date) => date,
-        Err(_err) => {
-            error!("failed to get current date, all shifts are treated as relevant");
-            return (events, None);
-        }
-    };
+    let today = Local::now().date_naive();
+    let first_of_this_month = NaiveDate::from_ymd_opt(today.year(), today.month(), 1).unwrap();
+
+    // Subtract one month, with proper handling for end-of-month behavior
+    let cutoff = first_of_this_month
+        .checked_sub_months(Months::new(1))
+        .unwrap(); 
+
     let mut non_relevant_events = vec![];
     let mut relevant_events = vec![];
     for event in events {
         // If event date is unknown. Just add it to the non relevant events
         let event_date = if let Some(event_date) = event.get_start() {
-            let date = event_date.date_naive();
-            (date.year() as i32 - 2025) * 365
-                + (date.month0() as i32 + 1) * 31
-                + (date.day0() as i32 + 1)
+            event_date.date_naive()
         } else {
             non_relevant_events.push(event);
             continue;
         };
-        if current_date - event_date < 28 {
+        if event_date < cutoff {
             relevant_events.push(event);
         } else {
             non_relevant_events.push(event);

@@ -61,7 +61,7 @@ pub async fn load_previous_month_shifts(
             today.year() - 1
         } else {
             today.year()
-        };;
+        };
     for _ in 0..extra_months_back {
         info!("Going way back");
         new_month = new_month.previous();

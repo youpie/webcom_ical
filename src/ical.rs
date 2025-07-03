@@ -8,7 +8,7 @@ use icalendar::{
     parser::{read_calendar, unfold},
 };
 use serde_json::from_str;
-use time::{Date, Month, OffsetDateTime, Time};
+use time::{Date, OffsetDateTime, Time};
 
 const PREVIOUS_EXECUTION_DATE_PATH: &str = "./kuma/previous_execution_date";
 pub const NON_RELEVANT_EVENTS_PATH: &str = "./kuma/non_relevant_events";
@@ -127,9 +127,6 @@ pub struct PreviousShiftInformation {
 }
 
 impl PreviousShiftInformation {
-    pub fn new_from_relevant(shifts: Vec<Shift>) -> Self{
-        Self { previous_relevant_shifts: shifts, previous_non_relevant_shifts: vec![] }
-    }
     pub fn new() -> Self {
         Self {
             previous_non_relevant_shifts: vec![],

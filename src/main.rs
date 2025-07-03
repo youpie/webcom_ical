@@ -445,7 +445,7 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
         info!("An existing calendar file has not been found, adding two extra months of shifts, also removing partial calendars");
         match || -> GenResult<()> {fs::remove_file(PathBuf::from(NON_RELEVANT_EVENTS_PATH))?;
         Ok(fs::remove_file(PathBuf::from(RELEVANT_EVENTS_PATH))?)}() {
-            Ok(_) => debug!("Removing files succesful"),
+            Ok(_) => info!("Removing files succesful"),
             Err(err) => warn!("Removing partial calendar files failed. Error: {}", err.to_string())
         };
         

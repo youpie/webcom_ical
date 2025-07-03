@@ -53,7 +53,7 @@ fn split_calendar(events: Vec<Event>) -> (Vec<Event>, Option<Vec<Event>>) {
             non_relevant_events.push(event);
             continue;
         };
-        if event_date < cutoff {
+        if event_date >= cutoff {
             relevant_events.push(event);
         } else {
             non_relevant_events.push(event);
@@ -192,7 +192,7 @@ let previous_execution_date = match Date::parse(&read_to_string(PREVIOUS_EXECUTI
     }; */
 
 fn create_event(shift: &Shift) -> Event {
-    let shift_link = create_shift_link(shift).unwrap_or("ERROR".to_owned());
+    let shift_link = create_shift_link(shift, true).unwrap_or("ERROR".to_owned());
     Event::new()
                 .summary(&format!("Shift - {}", shift.number))
                 .description(&format!(
@@ -225,11 +225,13 @@ pub fn create_ical(relevant_shifts: &Vec<Shift>, non_relevant_shifts: Vec<Shift>
     let name = set_get_name(None);
     // get the current systemtime as a unix timestamp
     let current_timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::from_secs(0));
+    let heartbeat_interval: i32 = var("KUMA_HEARTBEAT_INTERVAL").unwrap_or("0".to_owned()).parse().unwrap_or(0);
     info!("Creating calendar file...");
     let mut calendar = Calendar::new()
         .name(&format!("Hermes rooster - {}", name))
         .append_property(("X-USER-NAME", name.as_str()))
         .append_property(("X-LAST-UPDATED", current_timestamp.as_secs().to_string().as_str()))
+        .append_property(("X-UPDATE-INTERVAL-MINUTES", heartbeat_interval.to_string().as_str()))
         .append_property(("METHOD", "PUBLISH"))
         .timezone("Europe/Amsterdam")
         .done();

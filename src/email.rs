@@ -199,10 +199,10 @@ fn find_send_shift_mails(
 
     }
     let current_shift_vec: Vec<Shift> = current_shifts_map.values().cloned().collect();
-    let new_shifts: Vec<&Shift> = current_shift_vec.iter().filter(|item| {
+    let mut new_shifts: Vec<&Shift> = current_shift_vec.iter().filter(|item| {
         item.state == ShiftState::New
     }).collect();
-    let updated_shifts: Vec<&Shift> = current_shift_vec.iter().filter(|item| {
+    let mut updated_shifts: Vec<&Shift> = current_shift_vec.iter().filter(|item| {
         item.state == ShiftState::Changed
     }).collect();
     let mut removed_shifts: Vec<&Shift> = current_shift_vec.iter().filter(|item| {
@@ -210,11 +210,12 @@ fn find_send_shift_mails(
     }).collect();
     debug!("shift vec : {:#?}",current_shift_vec);
     debug!("Removed shift vec size: {}", removed_shifts.len());
+    new_shifts.retain(|shift| shift.date >= current_date);
     if !new_shifts.is_empty() && env.send_email_new_shift {
         info!("Found {} new shifts, sending email", new_shifts.len());
         create_send_new_email(mailer, new_shifts, env, false)?;
     }
-
+    updated_shifts.retain(|shift| shift.date >= current_date);
     if !updated_shifts.is_empty() && env.send_mail_updated_shift {
         info!("Found {} updated shifts, sending email", updated_shifts.len());
         create_send_new_email(mailer, updated_shifts, env, true)?;
@@ -222,7 +223,10 @@ fn find_send_shift_mails(
     if !removed_shifts.is_empty() && env.send_mail_updated_shift {
         info!("Removing {} shifts", removed_shifts.len());
         removed_shifts.retain(|shift| shift.date >= current_date);
-        send_removed_shifts_mail(mailer, env, removed_shifts)?;
+        if !removed_shifts.is_empty() {
+            send_removed_shifts_mail(mailer, env, removed_shifts)?;
+        }
+        
     }
     // At last remove all shifts marked as removed from the vec
     let current_shift_vec = current_shift_vec.into_iter().filter(|shift| shift.state != ShiftState::Deleted).collect();
@@ -259,7 +263,7 @@ fn create_send_new_email(
             shift_end => shift.end.format(TIME_DESCRIPTION)?.to_string(),
             shift_duration_hour => shift.duration.whole_hours().to_string(),
             shift_duration_minute => (shift.duration.whole_minutes() % 60).to_string(),
-            shift_link => create_shift_link(shift)?
+            shift_link => create_shift_link(shift, false)?
         )?;
         shift_tables.push_str(&shift_table_clone);
     }
@@ -337,7 +341,7 @@ fn send_removed_shifts_mail(
             shift_end => shift.end.format(TIME_DESCRIPTION)?.to_string().strikethrough(),
             shift_duration_hour => shift.duration.whole_hours().to_string().strikethrough(),
             shift_duration_minute => (shift.duration.whole_minutes() % 60).to_string().strikethrough(),
-            shift_link => create_shift_link(shift)?
+            shift_link => create_shift_link(shift, false)?
         )?;
         shift_tables.push_str(&shift_table_clone);
     }

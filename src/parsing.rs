@@ -1,3 +1,4 @@
+use async_recursion::async_recursion;
 use thirtyfour::error::{WebDriverError, WebDriverResult};
 use thirtyfour::{By, WebDriver};
 use time::{Date, Month};
@@ -47,25 +48,42 @@ async fn get_elements(
 /*
 Just presses the previous button in webcom to load the previous month
 */
+#[async_recursion]
 pub async fn load_previous_month_shifts(
     driver: &WebDriver,
-) -> WebDriverResult<Vec<Shift>> {
+    extra_months_back: usize
+) -> GenResult<Vec<Shift>> {
     info!("Loading Previous Month..");
     let now = time::OffsetDateTime::now_utc();
     let today = now.date();
-    let new_month = today.month().previous();
-    let new_year = if new_month == Month::December {
-        today.year() - 1
-    } else {
-        today.year()
-    };
+    let mut new_month = today.month().previous();
+    let mut new_year = if new_month == Month::December {
+            today.year() - 1
+        } else {
+            today.year()
+        };;
+    for _ in 0..extra_months_back {
+        info!("Going way back");
+        new_month = new_month.previous();
+
+        new_year = if new_month == Month::December {
+            new_year - 1
+        } else {
+            new_year
+        };
+    }
+    let mut shifts = vec![]; 
+    if extra_months_back > 0 {
+        shifts.append(&mut load_previous_month_shifts(driver, extra_months_back - 1).await?)
+    }
     navigate_to_subdirectory(
         &driver,
         &format!("roster.aspx?{}-{}-01", new_year, new_month as u8),
     )
         .await?;
     wait_until_loaded(&driver).await.unwrap();
-    Ok(get_elements(&driver, new_month, new_year).await?)
+    shifts.append(&mut get_elements(&driver, new_month, new_year).await?);
+    Ok(shifts)
 }
 
 /*

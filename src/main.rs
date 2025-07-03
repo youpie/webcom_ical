@@ -95,11 +95,14 @@ pub struct Shifts {
     shifts: Vec<Shift>,
 }
 
-fn create_shift_link(shift: &Shift) -> GenResult<String> {
+fn create_shift_link(shift: &Shift, include_domain: bool) -> GenResult<String> {
     let date_format = format_description!("[day]-[month]-[year]");
     let formatted_date = shift.date.format(date_format)?;
-    let domain = var("PDF_SHIFT_DOMAIN").unwrap_or("https://emphisia.nl/shift/".to_string());
-    if domain.is_empty() {
+    let domain = match include_domain {
+        true => var("PDF_SHIFT_DOMAIN").unwrap_or("https://emphisia.nl/shift/".to_string()),
+        false => "".to_owned()
+    };
+    if domain.is_empty() && include_domain == true {
         return Ok(format!(
             "https://dmz-wbc-web01.connexxion.nl/WebComm/shiprint.aspx?{}",
             &formatted_date
@@ -432,7 +435,7 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
     load_calendar(&driver, &username, &password).await?;
     wait_until_loaded(&driver).await?;
     let mut new_shifts = load_current_month_shifts(&driver).await?;
-    new_shifts.append(&mut load_previous_month_shifts(&driver,).await?);
+    new_shifts.append(&mut load_previous_month_shifts(&driver,0).await?);
     new_shifts.append(&mut load_next_month_shifts(&driver).await?);
     info!("Found {} shifts", new_shifts.len());
     

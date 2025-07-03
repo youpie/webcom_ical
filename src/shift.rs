@@ -15,7 +15,7 @@ pub enum ShiftState {
     Unknown
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Shift {
     pub date: Date,
     pub start: Time,

@@ -453,7 +453,9 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
     gebroken_shifts::gebroken_diensten_laden(&driver, &mut current_shifts).await?; // Replace the shifts with the newly created list of broken shifts
     ical::save_relevant_shifts(&current_shifts)?;
     let current_shifts = gebroken_shifts::split_broken_shifts(current_shifts)?;
-    let current_shifts = gebroken_shifts::split_night_shift(&current_shifts);
+    let mut current_shifts = gebroken_shifts::split_night_shift(&current_shifts);
+    current_shifts.sort_by_key(|shift| shift.magic_number);
+    current_shifts.dedup();
     let calendar = create_ical(&current_shifts, non_relevant_shifts);
     let ical_path = PathBuf::from(&format!(
         "{}{}",

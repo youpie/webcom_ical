@@ -344,7 +344,7 @@ fn sign_in_failed_update(
     let path = Path::new("./sign_in_failure_count.toml");
     let mut failure_counter = load_sign_in_failure_count(path)?;
     if let Ok(current_password_hash) = get_password_hash() {
-        info!("Got current password hash");
+        debug!("Got current password hash: {current_password_hash}");
         failure_counter.previous_password_hash = Some(current_password_hash);
     }
     // if failed == true, set increment counter and set error

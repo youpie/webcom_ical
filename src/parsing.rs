@@ -53,7 +53,7 @@ pub async fn load_previous_month_shifts(
     driver: &WebDriver,
     extra_months_back: usize
 ) -> GenResult<Vec<Shift>> {
-    info!("Loading Previous Month..");
+    debug!("Loading Previous Month..");
     let now = time::OffsetDateTime::now_utc();
     let today = now.date();
     let mut new_month = today.month().previous();
@@ -91,7 +91,7 @@ Just presses the next button in webcom twice to load the next month.
 Only works correctly if the previous month function has been ran before
 */
 pub async fn load_next_month_shifts(driver: &WebDriver) -> WebDriverResult<Vec<Shift>> {
-    info!("Loading Next Month..");
+    debug!("Loading Next Month..");
     let now = time::OffsetDateTime::now_utc();
     let today = now.date();
     let new_month = today.month().next();
@@ -158,10 +158,10 @@ async fn sign_in_webcom(driver: &WebDriver, user: &str, pass: &str) -> GenResult
         .await?
         .click()
         .await?;
-    info!("waiting until login page is loaded");
+    debug!("waiting until login page is loaded");
     //wait_until_loaded(&driver).await?;
     let _ = wait_for_response(&driver, By::Tag("h3"), false).await;
-    info!("login page is loaded");
+    debug!("login page is loaded");
     let name_text = match driver.find(By::Tag("h3")).await {
         Ok(element) => element.text().await?,
         Err(_) => {

@@ -63,6 +63,7 @@ pub struct EnvMailVariables {
 /*
 Loads all env variables needed for sending mails
 Does not load defaults if they are not found and will just error
+If kuma is true, it adds KUMA_ to the var names to find ones specific for KUMA
 */
 impl EnvMailVariables {
     pub fn new(kuma: bool) -> GenResult<Self> {
@@ -208,7 +209,7 @@ fn find_send_shift_mails(
     let mut removed_shifts: Vec<&Shift> = current_shift_vec.iter().filter(|item| {
         item.state == ShiftState::Deleted
     }).collect();
-    debug!("shift vec : {:#?}",current_shift_vec);
+    // debug!("shift vec : {:#?}",current_shift_vec);
     debug!("Removed shift vec size: {}", removed_shifts.len());
     new_shifts.retain(|shift| shift.date >= current_date);
     if !new_shifts.is_empty() && env.send_email_new_shift {

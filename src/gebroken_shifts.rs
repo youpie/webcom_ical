@@ -158,6 +158,7 @@ pub fn split_broken_shifts(shifts: Vec<Shift>) -> GenResult<Vec<Shift>> {
         let position = vec_len - shift.0;
         if shift.1.broken_period.is_some() {
             if let Some(mut shifts_split) = shift.1.split_broken() {
+                debug!("Broken shift {} has broken shift times of {:?}", shift.1.number, shift.1.broken_period);
                 shifts_clone.remove(position);
                 shifts_to_append.append(&mut shifts_split);
             }

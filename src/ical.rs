@@ -1,4 +1,4 @@
-use std::{fs::{read_to_string, write}, path::{Path, PathBuf}, time::{Duration, SystemTime, UNIX_EPOCH}};
+use std::{collections::HashMap, fs::{read_to_string, write}, path::{Path, PathBuf}, time::{Duration, SystemTime, UNIX_EPOCH}};
 
 use crate::{create_ical_filename, create_shift_link, set_get_name, GenResult, Shift, ShiftState};
 use chrono::{Datelike, Local, Months, NaiveDate, NaiveDateTime, NaiveTime};
@@ -188,7 +188,7 @@ let previous_execution_date = match Date::parse(&read_to_string(PREVIOUS_EXECUTI
             return (events,None)}
     }; */
 
-fn create_event(shift: &Shift) -> Event {
+fn create_event(shift: &Shift, metadata: Option<&Shift>) -> Event {
     let shift_link = create_shift_link(shift, true).unwrap_or("ERROR".to_owned());
     Event::new()
                 .summary(&format!("Shift - {}", shift.number))
@@ -206,7 +206,7 @@ Shift sheet • {}",
                 .location(&shift.location)
                 .append_property(icalendar::Property::new(
                     "X-BUSSIE-METADATA",
-                    &serde_json::to_string(shift).unwrap(),
+                    &serde_json::to_string(metadata.unwrap_or(shift)).unwrap(),
                 ))
                 .starts(create_dateperhapstime(shift.date, shift.start))
                 .ends(create_dateperhapstime(shift.end_date, shift.end))
@@ -216,8 +216,11 @@ Shift sheet • {}",
 /*
 Creates the ICAL file to add to the calendar
 */
-pub fn create_ical(relevant_shifts: &Vec<Shift>, non_relevant_shifts: Vec<Shift>) -> String {
+pub fn create_ical(relevant_shifts: &Vec<Shift>, non_relevant_shifts: Vec<Shift>, metadata: Vec<Shift>) -> String {
     let mut shifts = non_relevant_shifts;
+    let metadata_shifts_hashmap: HashMap<i64, Shift> = metadata.into_iter()
+        .map(|x| (x.magic_number, x)) // Replace `operation(x)` with your specific operation
+        .collect();
     shifts.append(&mut relevant_shifts.clone());
     let name = set_get_name(None);
     // get the current systemtime as a unix timestamp
@@ -233,9 +236,8 @@ pub fn create_ical(relevant_shifts: &Vec<Shift>, non_relevant_shifts: Vec<Shift>
         .timezone("Europe/Amsterdam")
         .done();
     for shift in shifts {
-        
-        calendar.push(create_event(&shift));
-            
+        let metadata_shift = metadata_shifts_hashmap.get(&shift.magic_number);
+        calendar.push(create_event(&shift, metadata_shift));
     }
     String::from(calendar.to_string())
 }

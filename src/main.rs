@@ -467,18 +467,17 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
     let mut previous_shifts = previous_shifts_information.previous_relevant_shifts;
     // The main send email function will return the broken shifts that are new or have changed.
     // This is because the send email functions uses the previous shifts and scanns for new shifts
-    let current_shifts_map = match email::send_emails(&mut new_shifts, &mut previous_shifts) {
+    let mut current_shifts = match email::send_emails(&mut new_shifts, &mut previous_shifts) {
         Ok(shifts) => shifts,
         Err(err) => return Err(err),
     };
-    let mut current_shifts: Vec<Shift> = current_shifts_map;
     gebroken_shifts::gebroken_diensten_laden(&driver, &mut current_shifts).await?; // Replace the shifts with the newly created list of broken shifts
     ical::save_relevant_shifts(&current_shifts)?;
-    let current_shifts = gebroken_shifts::split_broken_shifts(current_shifts)?;
-    let mut current_shifts = gebroken_shifts::split_night_shift(&current_shifts);
-    current_shifts.sort_by_key(|shift| shift.magic_number);
-    current_shifts.dedup();
-    let calendar = create_ical(&current_shifts, non_relevant_shifts);
+    let current_shifts_modified = gebroken_shifts::split_broken_shifts(current_shifts.clone())?;
+    let mut current_shifts_modified = gebroken_shifts::split_night_shift(&current_shifts_modified);
+    current_shifts_modified.sort_by_key(|shift| shift.magic_number);
+    current_shifts_modified.dedup();
+    let calendar = create_ical(&current_shifts_modified, non_relevant_shifts, current_shifts);
     send_welcome_mail(&ical_path, false)?;
     check_domain_update(&ical_path);
     let mut output = File::create(&ical_path)?;

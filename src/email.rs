@@ -435,6 +435,8 @@ pub fn send_welcome_mail(
         EnvMailVariables::str_to_bool(&var("SEND_WELCOME_MAIL").unwrap_or("false".to_string()));
 
     if !send_welcome_mail {
+        debug!("{:?}",var("SEND_WELCOME_MAIL"));
+        info!("Wanted to send welcome mail. But it is disabled");
         return Ok(());
     }
 
@@ -444,7 +446,7 @@ pub fn send_welcome_mail(
 
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
-    let ical_username = var("ICAL_USER").unwrap_or(ERROR_VALUE.to_string());
+    let ical_username = var("ICAL_USER").unwrap_or("".to_owned());
     let ical_password = var("ICAL_PASS").unwrap_or(ERROR_VALUE.to_string());
 
     let name = set_get_name(None);
@@ -453,9 +455,23 @@ pub fn send_welcome_mail(
         auth_username => ical_username.clone(), 
         auth_password => ical_password.clone(), 
         admin_email => env.mail_error_to.clone())?;
+
+    let agenda_url = create_footer(true);
+    let agenda_url_webcal = agenda_url.clone().replace("https", "webcal");
+    let donation_text = var("DONATION_TEXT").unwrap_or(ERROR_VALUE.to_owned());
+    let donation_service = var("DONATION_SERVICE").unwrap_or(ERROR_VALUE.to_owned());
+    let donation_link = var("DONATION_LINK").unwrap();
+    let iban = var("IBAN").unwrap_or(ERROR_VALUE.to_owned());
+    let iban_name = var("IBAN_NAME").unwrap_or(ERROR_VALUE.to_owned());
     let onboarding_html = strfmt!(&onboarding_html, 
         name => name.clone(),
-        agenda_url => create_footer(true),
+        agenda_url,
+        agenda_url_webcal,
+        donation_service,
+        donation_text,
+        donation_link,
+        iban,
+        iban_name,
         auth_credentials => if ical_username.is_empty() {String::new()} else {auth_html}
     )?;
     let email_body_html = strfmt!(&base_html,

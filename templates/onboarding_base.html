@@ -1,16 +1,85 @@
-<table width="100%" cellpadding="5" cellspacing="0" border="0" style="margin-bottom:20px;">
-    <tr>
-      <td style="font-size:16px; font-weight:bold; padding-bottom:10px;">Welkom bij Webcom Ical {name}!</td>
-    </tr>
-    <tr>
-      <td style="padding-bottom:10px;">Je shifts zijn voor het eerst succesvol ingeladen. De link om deze in je agenda te laden is:</td>
-    </tr>
-    <tr>
-      <!-- Plain text link for easy copy/paste -->
-      <td style="padding-bottom:10px; word-break: break-all;">{agenda_url}</td>
-    </tr>
-    <tr>
-      <td style="padding-bottom:10px;">Ooit staat hier ook een uitleg om deze link toe te voegen aan je agenda, maar voor nu moet je het zelf uitzoeken 🙂</td>
-    </tr>
-    {auth_credentials}
-  </table>
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:Arial,sans-serif;font-size:15px;color:#333;line-height:1.6;">
+  <tr>
+    <td style="font-size:20px;font-weight:bold;padding-bottom:15px;">
+      Welkom bij Webcom Ical, {name}!
+    </td>
+  </tr>
+
+  <!-- Agenda info -->
+  <tr>
+    <td style="font-size:16px;font-weight:bold;padding-bottom:10px;">
+      📅 Diensten toevoegen aan je agenda
+    </td>
+  </tr>
+  <tr>
+    <td style="padding-bottom:15px;">
+      Je shifts zijn succesvol ingeladen. Ze zijn beschikbaar op het onderstaande adres:
+    </td>
+  </tr>
+  <tr>
+    <td style="padding-bottom:20px;">
+      <a href="{agenda_url_webcal}" style="word-break:break-all;color:#1a73e8;text-decoration:none;"><strong>{agenda_url}</strong></a>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding-bottom:10px;">
+      <strong>Gebruik je Apple Agenda?</strong><br>
+      Klik simpelweg op de link hierboven om de diensten aan je agenda toe te voegen. Werkt dat niet? Kopieer dan de onderstaande link en open deze in je browser:<br>
+      {agenda_url_webcal}
+    </td>
+  </tr>
+  <tr>
+    <td style="padding-bottom:20px;">
+      <strong>Gebruik je Google Calendar?</strong><br>
+      Gebruik onderstaande knop om de diensten toe te voegen aan je agenda.
+      <br><br>
+      <a href="https://calendar.google.com/calendar/u/0/r?cid={agenda_url_webcal}" style="display:inline-block;padding:10px 18px;background-color:#34a853;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:bold;">
+        Toevoegen aan Google Calendar
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding-bottom:25px;">
+      Gebruik je geen Apple of Google Agenda? Zoek online op termen als <em>webcal</em> of <em>iCal</em> voor instructies om de link handmatig toe te voegen.
+    </td>
+  </tr>
+  <!-- Login info -->
+  <tr>
+    <td>
+      {auth_credentials}
+    </td>
+  </tr>
+  <!-- Scheiding -->
+  <tr>
+    <td style="border-top:1px solid #ccc;padding-top:25px;padding-bottom:10px;"></td>
+  </tr>
+
+  <!-- Donatie info -->
+  <tr>
+    <td style="font-size:16px;font-weight:bold;padding-bottom:10px;">
+      ❤️ Ondersteun Webcom Ical
+    </td>
+  </tr>
+  <tr>
+    <td style="padding-bottom:15px;">
+      Webcom Ical is een gratis dienst. Wil je bijdragen aan het onderhoud en de verdere ontwikkeling? Overweeg dan een donatie.
+    </td>
+  </tr>
+  <tr>
+    <td style="padding-bottom:15px;">
+      <strong>Doneren met {donation_service}:</strong><br>
+      {donation_text}<br>
+      <a href="{donation_link}" style="display:inline-block;padding:10px 18px;background-color:#1a73e8;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:bold;">
+        Doneren
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding-bottom:20px;">
+      <strong>Doneren via bankoverschrijving:</strong><br>
+      IBAN: <code>{iban}</code><br>
+      Ten name van: <em>{iban_name}</em><br>
+      Periodieke donaties worden zeer gewaardeerd voor het dekken van serverkosten.
+    </td>
+  </tr>
+</table>

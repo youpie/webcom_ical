@@ -21,9 +21,16 @@ pub async fn first_run(url: &str, personeelsnummer: &str) -> GenResult<()> {
     let notification_id = create_notification(&kuma_client, personeelsnummer,&url).await?;
     if let Some(monitor_id) = get_monitor_type_id(&kuma_client, personeelsnummer, MonitorType::Push, false).await?{
         debug!("id found in kuma online, ID: {monitor_id}");
+        if notification_id.1 {
+            info!("Assigning new notification to monitor");
+            let mut monitor = kuma_client.get_monitor(monitor_id).await?;
+            *monitor.common_mut().notification_id_list_mut() = Some(HashMap::from([(notification_id.0.to_string(),true)]));
+            kuma_client.edit_monitor(monitor).await?;
+        }
+        
         return Ok(())
     }
-    let _monitor_id = create_monitor(&kuma_client, personeelsnummer,notification_id).await?;
+    let _monitor_id = create_monitor(&kuma_client, personeelsnummer,notification_id.0).await?;
     Ok(())
 }
 
@@ -57,7 +64,8 @@ async fn create_monitor(kuma_client: &Client, personeelsnummer: &str, notificati
     Ok(monitor_id)
 }
 
-async fn create_notification(kuma_client: &Client, personeelsnummer: &str, kuma_url: &Url) -> GenResult<i32> {
+// Create a new notification if it does not already exist. The second value tells that a new notification has been created
+async fn create_notification(kuma_client: &Client, personeelsnummer: &str, kuma_url: &Url) -> GenResult<(i32, bool)> {
     let base_html = read_to_string("./templates/email_base.html").unwrap();
     let offline_html = read_to_string("./templates/kuma_offline.html").unwrap();
     let online_html = read_to_string("./templates/kuma_online.html").unwrap();
@@ -88,7 +96,7 @@ async fn create_notification(kuma_client: &Client, personeelsnummer: &str, kuma_
         if let Some(name) = notification.name {
             if name == format!("{}_mail",personeelsnummer) {
                 debug!("Notification for user {personeelsnummer} already exists, ID: {:?}. Not creating new one",notification.id);
-                return Ok(notification.id.unwrap_or_default());
+                return Ok((notification.id.unwrap_or_default(), false));
             }
         }
     };
@@ -127,7 +135,7 @@ Webcom Ical weer online
     let notification_response = kuma_client.add_notification(notification.clone()).await?;
     let id = notification_response.id.unwrap();
     info!("Created notification with ID {id}");
-    Ok(id)
+    Ok((id, true))
 }
 
 async fn get_monitor_type_id(kuma_client: &Client, group_name: &str, monitor_type: MonitorType, create_new: bool) -> GenResult<Option<i32>> {

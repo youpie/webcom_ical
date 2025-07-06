@@ -369,35 +369,8 @@ fn sign_in_failed_update(
     Ok(())
 }
 
-
-// This is a pretty useless function. It checks if the DOMAIN env variable was changed since last time the program was run
-// It is just to send a new welcome mail
-fn check_domain_update(ical_path: &PathBuf) {
-    let previous_domain;
-    let path = &format!("./{BASE_DIRECTORY}previous_domain");
-    match std::fs::read_to_string(path) {
-        Ok(x) => {
-            // println!("{}", &x);
-            previous_domain = Some(x)
-        }
-        Err(_) => previous_domain = None,
-    }
-    let current_domain = var("DOMAIN").unwrap_or("".to_string());
-    if let Some(previous_domain_unwrap) = previous_domain {
-        if previous_domain_unwrap != current_domain {
-            let _ = send_welcome_mail(ical_path, true);
-        }
-    }
-    match File::create(path) {
-        Ok(mut file) => {
-            let _ = write!(file, "{}", current_domain);
-        }
-        Err(_) => (),
-    }
-}
-
 fn set_get_name(new_name_option: Option<String>) -> String {
-    let path = "./kuma/name";
+    let path = &format!("./{BASE_DIRECTORY}name");
     // Just return constant name if already set
     if let Ok(const_name) = NAME.read() {
         if new_name_option.is_none() && const_name.is_some() {
@@ -478,8 +451,7 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
     current_shifts_modified.sort_by_key(|shift| shift.magic_number);
     current_shifts_modified.dedup();
     let calendar = create_ical(&current_shifts_modified, non_relevant_shifts, current_shifts);
-    send_welcome_mail(&ical_path, false)?;
-    check_domain_update(&ical_path);
+    send_welcome_mail(&ical_path)?;
     let mut output = File::create(&ical_path)?;
     info!("Writing to: {:?}", &ical_path);
     write!(output, "{}", calendar)?;

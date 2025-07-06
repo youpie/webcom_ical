@@ -414,9 +414,8 @@ pub fn send_gecko_error_mail<T: std::fmt::Debug>(error: WebDriverResult<T>) -> G
 
 pub fn send_welcome_mail(
     path: &PathBuf,
-    updated_link: bool,
 ) -> GenResult<()> {
-    if path.exists() && !updated_link {
+    if path.exists() {
         return Ok(());
     }
     let send_welcome_mail =
@@ -467,16 +466,11 @@ pub fn send_welcome_mail(
         banner_color => COLOR_BLUE,
         footer => "".to_owned()
     )?;
-
-    let subject = match updated_link {
-        true => "Je Webcom Ical agenda link is veranderd",
-        false => &format!("Welkom bij Webcom Ical {}!", &name),
-    };
     warn!("welkom mail sturen");
     let email = Message::builder()
         .from(format!("{} <{}>",SENDER_NAME, &env.mail_from).parse()?)
         .to(format!("{} <{}>", name, &env.mail_to).parse()?)
-        .subject(subject)
+        .subject(format!("Welkom bij Webcom Ical {}!", &name))
         .header(ContentType::TEXT_HTML)
         .body(email_body_html)?;
     mailer.send(&email)?;

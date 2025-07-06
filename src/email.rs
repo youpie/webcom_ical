@@ -444,7 +444,10 @@ pub fn send_welcome_mail(
         admin_email => env.mail_error_to.clone())?;
 
     let agenda_url = create_footer(true);
-    let agenda_url_webcal = agenda_url.clone().replace("https", "webcals");
+    let agenda_url_webcal = agenda_url.clone().replace("https", "webcal");
+    // A lot of email clients don't want to open webcal links. So by pointing to a website which returns a 302 to a webcal link it tricks the email client
+    let rewrite_url = var("WEBCAL_REWRITE_URL").unwrap_or_default();
+    let webcal_rewrite_url = format!("{rewrite_url}{}",if !rewrite_url.is_empty() {create_ical_filename().unwrap_or_default()} else{agenda_url_webcal.clone()});
     let kuma_info = if let Ok(kuma_url) = var("KUMA_URL") {
         let extracted_kuma_mail = var("KUMA_MAIL_FROM").unwrap_or(ERROR_VALUE.to_owned()).split("<").last().unwrap_or_default().replace(">", "");
         format!("Als Webcom Ical een storing heeft ontvang je meestal een mail van <em>{}</em> (deze kan in je spam belanden!), op <a href=\"{kuma_url}\" style=\"color:#d97706;text-decoration:none;\">{kuma_url}</a> kan je de actuele status van Webcom Ical bekijken.",
@@ -462,6 +465,7 @@ pub fn send_welcome_mail(
         name => name.clone(),
         agenda_url,
         agenda_url_webcal,
+        webcal_rewrite_url,
         kuma_info,
         donation_service,
         donation_text,

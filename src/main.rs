@@ -406,6 +406,11 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
         Err(_) => {error!("Failed waiting for redirect. Going to fallback {}",FALLBACK_URL[retry_count%FALLBACK_URL.len()]);
         driver.goto(FALLBACK_URL[retry_count%FALLBACK_URL.len()]).await.map_err(|_| {Box::new(FailureType::ConnectError)})? }
     };
+    // If getting previous shift information failed, just create an empty one. Because it will cause a new calendar to be created
+    let previous_shifts_information = match get_previous_shifts()? {
+        Some(previous_shifts) => previous_shifts,
+        None => PreviousShiftInformation::new()
+    };
     load_calendar(&driver, &username, &password).await?;
     wait_until_loaded(&driver).await?;
     let mut new_shifts = load_current_month_shifts(&driver).await?;
@@ -431,11 +436,6 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
     new_shifts.append(&mut load_next_month_shifts(&driver).await?);
     info!("Found {} shifts", new_shifts.len());
     
-    // If getting previous shift information failed, just create an empty one. Because it will cause a new calendar to be created
-    let previous_shifts_information = match get_previous_shifts()? {
-        Some(previous_shifts) => previous_shifts,
-        None => PreviousShiftInformation::new()
-    };
     let non_relevant_shifts = previous_shifts_information.previous_non_relevant_shifts;
     let mut previous_shifts = previous_shifts_information.previous_relevant_shifts;
     // The main send email function will return the broken shifts that are new or have changed.

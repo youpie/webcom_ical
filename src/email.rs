@@ -445,8 +445,10 @@ pub fn send_welcome_mail(
 
     let agenda_url = create_footer(true);
     let agenda_url_webcal = agenda_url.clone().replace("https", "webcals");
-    let kuma_info = if let Ok(kuma_url) = var("KUMA-URL") {
-        format!("Als Webcom Ical een storing heeft ontvang je meestal een mail van <em>{}</em> (deze kan in je spam belanden!), op <a href=\"{kuma_url}\" style=\"color:#d97706;text-decoration:none;\">{kuma_url}</a> kan je de actuele status van Webcom Ical bekijken.",var("KUMA_MAIL_FROM").unwrap_or(ERROR_VALUE.to_owned()))
+    let kuma_info = if let Ok(kuma_url) = var("KUMA_URL") {
+        let extracted_kuma_mail = var("KUMA_MAIL_FROM").unwrap_or(ERROR_VALUE.to_owned()).split("<").last().unwrap_or_default().replace(">", "");
+        format!("Als Webcom Ical een storing heeft ontvang je meestal een mail van <em>{}</em> (deze kan in je spam belanden!), op <a href=\"{kuma_url}\" style=\"color:#d97706;text-decoration:none;\">{kuma_url}</a> kan je de actuele status van Webcom Ical bekijken.",
+            extracted_kuma_mail)
     } else {
         "".to_owned()
     };
@@ -455,6 +457,7 @@ pub fn send_welcome_mail(
     let donation_link = var("DONATION_LINK").unwrap();
     let iban = var("IBAN").unwrap_or(ERROR_VALUE.to_owned());
     let iban_name = var("IBAN_NAME").unwrap_or(ERROR_VALUE.to_owned());
+    let admin_email = var("MAIL_ERROR_TO").unwrap_or_default();
     let onboarding_html = strfmt!(&onboarding_html, 
         name => name.clone(),
         agenda_url,
@@ -465,7 +468,8 @@ pub fn send_welcome_mail(
         donation_link,
         iban,
         iban_name,
-        auth_credentials => if ical_username.is_empty() {"".to_owned()} else {auth_html}
+        auth_credentials => if ical_username.is_empty() {"".to_owned()} else {auth_html},
+        admin_email
     )?;
     let email_body_html = strfmt!(&base_html,
         content => onboarding_html,

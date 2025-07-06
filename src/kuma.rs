@@ -115,7 +115,7 @@ Webcom Ical weer online
 {% endif %}",
         "type": "smtp",
         "smtpSecure": secure,
-        "useHTMLBody": true
+        "htmlBody": true
 
     });
     let notification = notification::Notification{

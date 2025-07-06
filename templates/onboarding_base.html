@@ -39,15 +39,51 @@
     </td>
   </tr>
   <tr>
-    <td style="padding-bottom:25px;">
+    <td style="padding-bottom:10px;">
       Gebruik je geen Apple of Google Agenda? Zoek online op termen als <em>webcal</em> of <em>iCal</em> voor instructies om de link handmatig toe te voegen.
+    </td>
+  </tr>
+  <tr>
+    <td style="padding-bottom:5px;">
+      ⚠️ <strong> Let wel op! </strong> Webcom ical kan fouten maken of voor langere tijd je diensten niet in kunnen laden. Als je een dienst mist of te laat komt door foutive informatie op webcom is dat je eigen schuld. Gebruik je koppie en controlleer zo nu en dan Webcomm zelf. <br>
+    </td>
+
+    <td style="padding-bottom: 25px;">
+      Als webcom ical een storing heeft ontvang je hierover meestal een email van {kuma_mail} deze mail in de spam kan belanden.
     </td>
   </tr>
   <!-- Login info -->
   <tr>
-    <td>
+    <td style="padding-bottom:25px;">
       {auth_credentials}
     </td>
+  </tr>
+  <tr>
+    <td style="padding-bottom:10px;">
+      <strong>Bussie 🚍️</strong><br>
+      Bussie is de app om je diensten digitaal te bekijken. Probeer het uit door op de onderstaande knop te drukken!<br>
+      <a href="https://bussie.app/shifts/{agenda_url}" target="_blank" style="all: unset;">
+          <button style=" background-color: #edf0fe;  
+              font-size: 14px;
+              font-weight: bold;
+              color: #422ad5;
+              border: none;
+              border-radius: 6px;
+              padding: 0.8em;
+              display: flex;
+              justify-content: center;
+              gap: 0.5em;
+              align-items: center;
+              cursor: pointer;"
+                  onmouseover="this.style.backgroundColor='#3b25c1'; this.style.color='#e0e7ff'; this.style.boxShadow='0 2px 4px #3a25c1b2';"
+                  onmouseout="this.style.backgroundColor='#edf0fe'; this.style.color='#422ad5'; this.style.boxShadow='none';"
+                  onmousedown="this.style.translate='0 0.5px';" onmouseup="this.style.translate='0 0';">
+                  <img src="https://raw.githubusercontent.com/gist/tcBorek2002/e7f4794010a504e7e02314694c483826/raw/26bcb66f701c0fe2538f343f5d5676e8dc6608c6/bus.svg" alt="Bus" class="custom-image" style="    height: 1.6em;" />
+                  Voeg mijn diensten toe aan Bussie
+          </button>
+      </a>
+    </td>
+  </tr>
   </tr>
   <!-- Scheiding -->
   <tr>
@@ -81,5 +117,20 @@
       Ten name van: <em>{iban_name}</em><br>
       Periodieke donaties worden zeer gewaardeerd voor het dekken van serverkosten.
     </td>
+  </tr>
+    <!-- Scheiding -->
+  <tr>
+    <td style="border-top:1px solid #ccc;padding-top:25px;padding-bottom:10px;"></td>
+  </tr>
+  <tr>
+    <td style="font-size:16px;font-weight:bold;padding-bottom:10px;">
+      ❓️ Vragen of onduidelijkheden
+    </td>
+    <tr>
+    <td style="padding-bottom:15px;">
+      Is iets niet helemaal duidelijk, of komen de diensten in je agenda niet overeen met webcom. Voel je vrij om contact op te nemen met het onderstaande adres <br>
+      {admin_email}
+    </td>
+  </tr>
   </tr>
 </table>

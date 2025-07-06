@@ -126,24 +126,6 @@ fn load_mailer(env: &EnvMailVariables) -> GenResult<SmtpTransport> {
     Ok(mailer)
 }
 
-// Loads shifts from last time this program was run
-// fn load_previous_shifts() -> GenResult<Vec<Shift>> {
-//     let path_str = format!("./{BASE_DIRECTORY}previous_shifts.toml");
-//     let path = Path::new(&path_str);
-//     let shifts_toml = std::fs::read_to_string(path)?;
-//     let shifts: Shifts = toml::from_str(&shifts_toml)?;
-//     Ok(shifts.shifts)
-// }
-
-// fn add_broken_shift(shift_to_check: &Shift, broken_shifts: &mut Vec<Shift>) {
-//     // If changed shift is broken, add it to broken shift list
-//     if shift_to_check.is_broken {
-//         debug!("Broken shift {} does not need to be rechecked",shift_to_check.number);
-//         broken_shifts.push(shift_to_check.clone());
-//     }
-
-// }
-
 /*
 Will search for new shifts given previous shifts.
 Will be ran twice, If provided new shifts, it will look for updated shifts instead
@@ -306,14 +288,20 @@ fn create_footer(only_url:bool) -> String {
       <td style="background-color:#FFFFFF; text-align:center;font-size:12px;padding-bottom:10px;">
         <a href="{footer_url}" style="color:#9a9996;">{footer_url}</a>
       </td>
+      <tr>
+      <td style="background-color:#FFFFFF; text-align:center;font-size:12px;padding-bottom:10px;">
+        <a style="color:#9a9996;">{admin_email_comment}</a>
+      </td>
       </tr>"#;
     let domain = var("DOMAIN").unwrap_or(ERROR_VALUE.to_string());
     let url = format!("{}/{}", domain, create_ical_filename().unwrap_or(ERROR_VALUE.to_owned()));
+    let admin_email = var("MAIL_ERROR_TO").ok();
     match only_url {
         true => url,
         false => strfmt!(footer_text,
-    footer_text => "Je agenda link:",
-    footer_url => url).unwrap_or("".to_owned())
+            footer_text => "Je agenda link:",
+            footer_url => url,
+            admin_email_comment => if let Some(email) = admin_email {format!("Vragen of opmerkingen? Neem contact op met {email}")} else {"".to_owned()}).unwrap_or("".to_owned()),
         }
 }
 
@@ -457,7 +445,7 @@ pub fn send_welcome_mail(
         admin_email => env.mail_error_to.clone())?;
 
     let agenda_url = create_footer(true);
-    let agenda_url_webcal = agenda_url.clone().replace("https", "webcal");
+    let agenda_url_webcal = agenda_url.clone().replace("https", "webcals");
     let donation_text = var("DONATION_TEXT").unwrap_or(ERROR_VALUE.to_owned());
     let donation_service = var("DONATION_SERVICE").unwrap_or(ERROR_VALUE.to_owned());
     let donation_link = var("DONATION_LINK").unwrap();
@@ -472,7 +460,7 @@ pub fn send_welcome_mail(
         donation_link,
         iban,
         iban_name,
-        auth_credentials => if ical_username.is_empty() {String::new()} else {auth_html}
+        auth_credentials => if ical_username.is_empty() {"".to_owned()} else {auth_html}
     )?;
     let email_body_html = strfmt!(&base_html,
         content => onboarding_html,

@@ -10,6 +10,9 @@ use icalendar::{
 use serde_json::from_str;
 use time::{Date, OffsetDateTime, Time};
 
+// UPDATE THIS WHENEVER ANYTHING CHANGES IN THE ICAL
+const CALENDAR_VERSION: usize = 2;
+
 const PREVIOUS_EXECUTION_DATE_PATH: &str = "./kuma/previous_execution_date";
 pub const NON_RELEVANT_EVENTS_PATH: &str = "./kuma/non_relevant_events";
 pub const RELEVANT_EVENTS_PATH: &str = "./kuma/relevant_events";
@@ -232,6 +235,7 @@ pub fn create_ical(relevant_shifts: &Vec<Shift>, non_relevant_shifts: Vec<Shift>
         .append_property(("X-USER-NAME", name.as_str()))
         .append_property(("X-LAST-UPDATED", current_timestamp.as_secs().to_string().as_str()))
         .append_property(("X-UPDATE-INTERVAL-MINUTES", heartbeat_interval.to_string().as_str()))
+        .append_property(("X-CAL-VERSION", CALENDAR_VERSION.to_string().as_str()))
         .append_property(("METHOD", "PUBLISH"))
         .timezone("Europe/Amsterdam")
         .done();

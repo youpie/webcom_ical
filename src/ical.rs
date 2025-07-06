@@ -7,7 +7,6 @@ use icalendar::{
     Calendar, CalendarComponent, CalendarDateTime, Component, Event, EventLike,
     parser::{read_calendar, unfold},
 };
-use serde::{Deserialize, Serialize};
 use serde_json::from_str;
 use thiserror::Error;
 use time::{Date, OffsetDateTime, Time};
@@ -26,61 +25,34 @@ enum CalendarVersionError {
     #[error("Calendar version changed with a breaking change")]
     BreakingChange,
     #[error("Calendar version has changed, and welcome mail is requested")]
-    WelcomeChange,
-    #[error("Calendar version has changed, but minor")]
-    MinorChange
-}
-
-impl CalendarVersionError {
-    pub fn handle_error(error: Box<dyn std::error::Error>, ical_path: PathBuf) -> GenResult<()> {
-        return match error.downcast_ref::<CalendarVersionError>() {
-            // if change is breaking. welcome mail should not be sent. but calendar should not be used during creation of 
-            Some(ver_err) if ver_err == &CalendarVersionError::BreakingChange => Ok(()),
-            // if change is welcome. remove calendar so welcome mail gets send
-            Some(ver_err) if ver_err == &CalendarVersionError::WelcomeChange => {info!("Removing existing calendar file"); _=fs::remove_file(ical_path); Ok(())},
-            _ => Err(error)
-        };
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct RelevantShift {
-    shifts: Vec<Shift>,
-    version: String
-}
-
-fn check_calendar_version(version: &str) -> Option<CalendarVersionError> {
-    if version != CALENDAR_VERSION {
-        warn!("Calendar version has changed!");
-        if let Some(version_type) = CALENDAR_VERSION.chars().last() {
-            match version_type {
-                'B' => {
-                    warn!("Breaking change");
-                    return Some(CalendarVersionError::BreakingChange);
-                }
-                'W' => {
-                    warn!("Welcome change");
-                    return Some(CalendarVersionError::WelcomeChange)
-                }
-                _ => {
-                    info!("Non beaking change");
-                    return Some(CalendarVersionError::MinorChange)
-                }
-            }
-        }
-    }
-    None
+    WelcomeChange
 }
 
 pub fn load_ical_file(path: &Path) -> GenResult<Calendar> {
     let calendar_string = read_to_string(path)?;
     let calendar: Calendar = read_calendar(&unfold(&calendar_string))?.into();
     // Check if the calendar has changed, and if that change was breaking
-    match check_calendar_version(calendar.property_value("X-CAL-VERSION").unwrap_or_default()) {
-        Some(error) if error == CalendarVersionError::MinorChange => (),
-        Some(error) => {return Err(Box::new(error));},
-        None => (),
-    }
+    match calendar.property_value("X-CAL-VERSION").unwrap_or_default() {
+        version if version != CALENDAR_VERSION => {
+            warn!("Calendar version has changed!");
+            if let Some(version_type) = CALENDAR_VERSION.chars().last() {
+                match version_type {
+                    'B' => {
+                        warn!("Breaking change");
+                        return Err(Box::new(CalendarVersionError::BreakingChange));
+                    }
+                    'W' => {
+                        warn!("Welcome change");
+                        return Err(Box::new(CalendarVersionError::WelcomeChange))
+                    }
+                    _ => {
+                        info!("Non beaking change");
+                    }
+                }
+            }
+        },
+        _ => ()
+    };
     Ok(calendar)
 }
 
@@ -178,7 +150,7 @@ fn create_shift_hashmap(events: Vec<Event>) -> Vec<Shift> {
 
 // Save relevant shifts to disk
 pub fn save_relevant_shifts(relevant_shifts: &Vec<Shift>) -> GenResult<()> {
-    match write(RELEVANT_EVENTS_PATH, serde_json::to_string_pretty(&RelevantShift{version: CALENDAR_VERSION.to_owned(), shifts: relevant_shifts.clone()})?) {
+    match write(RELEVANT_EVENTS_PATH, serde_json::to_string_pretty(relevant_shifts)?) {
         Ok(_) => info!("Saving Relevant shifts to disk was succesful"),
         Err(err) => error!("Saving Relevant shifts to disk FAILED. ERROR: {}",err.to_string())
     };
@@ -216,10 +188,11 @@ pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
         let main_calendar = match load_ical_file(&main_ical_path) {
             Ok(calendar) => calendar,
             Err(err) => {
-                match CalendarVersionError::handle_error(err, main_ical_path) {
-                    Ok(_) => return Ok(None),
-                    Err(err) => return Err(err)
-                }
+                return match err.downcast_ref::<CalendarVersionError>() {
+                    Some(ver_err) if ver_err == &CalendarVersionError::BreakingChange => Ok(None),
+                    Some(ver_err) if ver_err == &CalendarVersionError::WelcomeChange => {info!("Removing existing calendar file"); _=fs::remove_file(main_ical_path); Ok(None)},
+                    _ => Err(err)
+                };
             }
         };
         let calendar_events = get_calendar_events(main_calendar);
@@ -238,16 +211,9 @@ pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
         info!("Calendar regeneration NOT needed");
         let relevant_shift_str = read_to_string(RELEVANT_EVENTS_PATH).unwrap();
         let irrelevant_shift_str = read_to_string(NON_RELEVANT_EVENTS_PATH).unwrap();
-        let previous_relevant_shifts: RelevantShift = serde_json::from_str(&relevant_shift_str).unwrap_or_default();
-        match check_calendar_version(&previous_relevant_shifts.version) {
-            Some(err) => match CalendarVersionError::handle_error(Box::new(err), main_ical_path) {
-                Ok(_) => return Ok(None),
-                Err(err) => return Err(err)
-            }
-            _ => ()
-        };
+        let previous_relevant_shifts: Vec<Shift> = serde_json::from_str(&relevant_shift_str).unwrap_or_default();
         // All relevant shifts MUST FIRST BE MARKED AS DELETED for deleted shift detection to work
-        let previous_relevant_shifts = previous_relevant_shifts.shifts.into_iter().map(|mut shift| {shift.state = ShiftState::Deleted; shift}).collect();
+        let previous_relevant_shifts = previous_relevant_shifts.into_iter().map(|mut shift| {shift.state = ShiftState::Deleted; shift}).collect();
         let previous_non_relevant_shifts: Vec<Shift> = serde_json::from_str(&irrelevant_shift_str).unwrap_or_default();
         Ok(Some(PreviousShiftInformation {
             previous_relevant_shifts,

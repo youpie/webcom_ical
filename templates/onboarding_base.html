@@ -1,19 +1,14 @@
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:Arial,sans-serif;font-size:15px;color:#333;line-height:1.6;">
+<table width="100%" cellpadding="0" cellspacing="0" borders="0" style="font-family:Arial,sans-serif;font-size:15px;color:#333;line-height:1.6;">
   <tr>
-    <td style="font-size:20px;font-weight:bold;padding-bottom:15px;">
-      Welkom bij Webcom Ical, {name}!
+    <td style="font-size:20px;padding-bottom:15px;">
+      Welkom bij Webcom Ical, <strong>{name}!</strong>
     </td>
   </tr>
 
   <!-- Agenda info -->
   <tr>
-    <td style="font-size:16px;font-weight:bold;padding-bottom:10px;">
-      📅 Diensten toevoegen aan je agenda
-    </td>
-  </tr>
-  <tr>
     <td style="padding-bottom:15px;">
-      Je shifts zijn succesvol ingeladen. Ze zijn beschikbaar op het onderstaande adres:
+      Je diensten zijn succesvol ingeladen. Ze zijn opgeslagen op het onderstaande adres:
     </td>
   </tr>
   <tr>
@@ -21,35 +16,55 @@
       <a href="{agenda_url_webcal}" style="word-break:break-all;color:#1a73e8;text-decoration:none;"><strong>{agenda_url}</strong></a>
     </td>
   </tr>
-  <tr>
-    <td style="padding-bottom:10px;">
-      <strong>Gebruik je Apple Agenda?</strong><br>
-      Klik simpelweg op de link hierboven om de diensten aan je agenda toe te voegen. Werkt dat niet? Kopieer dan de onderstaande link en open deze in je browser:<br>
-      {agenda_url_webcal}
+    <tr>
+    <td style="font-size:16px;font-weight:bold;padding-bottom:10px;">
+      📅 Diensten toevoegen aan je agenda
     </td>
   </tr>
   <tr>
-    <td style="padding-bottom:20px;">
+    <td style="padding-bottom:25px;">
+      <strong>Gebruik je Apple Agenda?</strong><br>
+      Klik simpelweg op de link hierboven om de diensten aan je agenda toe te voegen<br>
+      <a href="{agenda_url_webcal}" style="margin-top: 10px;display:inline-block;padding:10px 18px;background-color:#333333;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:bold;">
+        Toevoegen aan Apple Agenda
+    </a><br>
+    </td>
+    
+  </tr>
+  <tr>
+    <td style="padding-bottom:25px;">
       <strong>Gebruik je Google Calendar?</strong><br>
       Gebruik onderstaande knop om de diensten toe te voegen aan je agenda.
-      <br><br>
-      <a href="https://calendar.google.com/calendar/u/0/r?cid={agenda_url_webcal}" style="display:inline-block;padding:10px 18px;background-color:#34a853;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:bold;">
-        Toevoegen aan Google Calendar
-      </a>
+      <br>
+      <a href="https://calendar.google.com/calendar/u/0/r?cid={agenda_url_webcal}" style="margin-top: 10px;display:inline-block;padding:10px 18px;background-color:#34a853;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:bold;">
+        Toevoegen aan Google Agenda
+      </a><br>
     </td>
   </tr>
   <tr>
-    <td style="padding-bottom:10px;">
-      Gebruik je geen Apple of Google Agenda? Zoek online op termen als <em>webcal</em> of <em>iCal</em> voor instructies om de link handmatig toe te voegen.
+    <td style="padding-bottom:25px;">
+      <strong>Gebruik je iets anders?</strong><br>
+      Gebruik je geen Apple of Google Agenda maar bijvoorbeeld Samsung Agenda? Dan kan je de app <a href="https://play.google.com/store/apps/details?id=at.bitfire.icsdroid">ICSx⁵</a> gebruiken, deze app kost in de Play Store echter wel geld. Na het downloaden van de app moet je op de onderstaande knop klikken om de diensten in te laden.<br>
+      Tip voor de gevorderde: ICSx⁵ is gratis (wel legaal en velig) te downloaden via <a href="https://f-droid.org/en/packages/at.bitfire.icsdroid/">F-Droid</a>.<br>
+      <a href="{agenda_url_webcal}" style="margin-top: 10px;display:inline-block;padding:10px 18px;background-color:#039BE2;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:bold;">
+        Toevoegen met ICSx⁵
+    </a>
     </td>
   </tr>
   <tr>
-    <td style="padding-bottom:5px;">
-      ⚠️ <strong> Let wel op! </strong> Webcom ical kan fouten maken of voor langere tijd je diensten niet in kunnen laden. Als je een dienst mist of te laat komt door foutive informatie op webcom is dat je eigen schuld. Gebruik je koppie en controlleer zo nu en dan Webcomm zelf. <br>
+    
+    <td style="padding-bottom:20px;">
+      <strong>Werkt een knop niet?</strong><br>
+      Werkt een knop niet? Probeer dan de volgende link te kopieren en te plakken in je browser: {agenda_url_webcal}
     </td>
-
-    <td style="padding-bottom: 25px;">
-      Als webcom ical een storing heeft ontvang je hierover meestal een email van {kuma_mail} deze mail in de spam kan belanden.
+  </tr>
+  <!-- Warning & Outage Info -->
+  <tr>
+    <td>
+      <div style="background-color:#fff4e5;border-left:4px solid #fbbc04;padding:15px;border-radius:4px;margin-bottom:25px;">
+        <strong>Let op:</strong> Webcom Ical kan soms vertraging hebben bij het bijwerken van je diensten. Controleer af en toe Webcomm zelf voor de meest actuele informatie. <br>
+        Als Webcom Ical een storing heeft ontvang je meestal een mail van <em>{kuma_mail}</em> (deze kan in je spam belanden!), op <a href="{kuma_site}" style="color:#d97706;text-decoration:none;">{kuma_site}</a> kan je de actuele status van Webcom Ical bekijken.
+      </div>
     </td>
   </tr>
   <!-- Login info -->
@@ -60,7 +75,7 @@
   </tr>
   <tr>
     <td style="padding-bottom:10px;">
-      <strong>Bussie 🚍️</strong><br>
+      <strong>Nieuw! Bussie 🚍️</strong><br>
       Bussie is de app om je diensten digitaal te bekijken. Probeer het uit door op de onderstaande knop te drukken!<br>
       <a href="https://bussie.app/shifts/{agenda_url}" target="_blank" style="all: unset;">
           <button style=" background-color: #edf0fe;  

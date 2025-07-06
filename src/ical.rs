@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs::{read_to_string, write}, path::{Path, PathBuf}, time::{Duration, SystemTime, UNIX_EPOCH}};
+use std::{collections::HashMap, fs::{self, read_to_string, write}, path::{Path, PathBuf}, time::{Duration, SystemTime, UNIX_EPOCH}};
 
 use crate::{create_ical_filename, create_shift_link, set_get_name, GenResult, Shift, ShiftState};
 use chrono::{Datelike, Local, Months, NaiveDate, NaiveDateTime, NaiveTime};
@@ -8,18 +8,52 @@ use icalendar::{
     parser::{read_calendar, unfold},
 };
 use serde_json::from_str;
+use thiserror::Error;
 use time::{Date, OffsetDateTime, Time};
 
 // UPDATE THIS WHENEVER ANYTHING CHANGES IN THE ICAL
-const CALENDAR_VERSION: usize = 2;
+// Add B if it modifies of removes an already existing value
+// Add W if it is wanted to resend the welcome mail
+const CALENDAR_VERSION: &str = "2W";
 
 const PREVIOUS_EXECUTION_DATE_PATH: &str = "./kuma/previous_execution_date";
 pub const NON_RELEVANT_EVENTS_PATH: &str = "./kuma/non_relevant_events";
 pub const RELEVANT_EVENTS_PATH: &str = "./kuma/relevant_events";
 
+#[derive(Debug, Error, Clone, PartialEq)]
+enum CalendarVersionError {
+    #[error("Calendar version changed with a breaking change")]
+    BreakingChange,
+    #[error("Calendar version has changed, and welcome mail is requested")]
+    WelcomeChange
+}
+
 pub fn load_ical_file(path: &Path) -> GenResult<Calendar> {
     let calendar_string = read_to_string(path)?;
-    Ok(read_calendar(&unfold(&calendar_string))?.into())
+    let calendar: Calendar = read_calendar(&unfold(&calendar_string))?.into();
+    // Check if the calendar has changed, and if that change was breaking
+    match calendar.property_value("X-CAL-VERSION").unwrap_or_default() {
+        version if version != CALENDAR_VERSION => {
+            warn!("Calendar version has changed!");
+            if let Some(version_type) = CALENDAR_VERSION.chars().last() {
+                match version_type {
+                    'B' => {
+                        warn!("Breaking change");
+                        return Err(Box::new(CalendarVersionError::BreakingChange));
+                    }
+                    'W' => {
+                        warn!("Welcome change");
+                        return Err(Box::new(CalendarVersionError::WelcomeChange))
+                    }
+                    _ => {
+                        info!("Non beaking change");
+                    }
+                }
+            }
+        },
+        _ => ()
+    };
+    Ok(calendar)
 }
 
 pub fn get_calendar_events(calendar: Calendar) -> Vec<Event> {
@@ -33,7 +67,7 @@ pub fn get_calendar_events(calendar: Calendar) -> Vec<Event> {
     events
 }
 
-// Returns two vecs of events, one of shifts more than 28 days ago, one of less than that
+// Returns two vecs of events, one of shifts more than one month, one of less than that
 // Only the shifts less than a month ago are actually used
 // 1st element is relevant, second element is non-relevant. If it returns none, something went wrong getting the current date
 fn split_calendar(events: Vec<Event>) -> (Vec<Event>, Option<Vec<Event>>) {
@@ -151,14 +185,19 @@ pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
         if !main_ical_path.exists() {
             return Ok(None);
         }
-        let main_calendar = load_ical_file(&main_ical_path)?;
+        let main_calendar = match load_ical_file(&main_ical_path) {
+            Ok(calendar) => calendar,
+            Err(err) => {
+                return match err.downcast_ref::<CalendarVersionError>() {
+                    Some(ver_err) if ver_err == &CalendarVersionError::BreakingChange => Ok(None),
+                    Some(ver_err) if ver_err == &CalendarVersionError::WelcomeChange => {info!("Removing existing calendar file"); _=fs::remove_file(main_ical_path); Ok(None)},
+                    _ => Err(err)
+                };
+            }
+        };
         let calendar_events = get_calendar_events(main_calendar);
         let calendar_split = split_calendar(calendar_events);
         let previous_shifts_hash = create_shift_hashmap(calendar_split.0);
-        // match write(RELEVANT_EVENTS_PATH, toml::to_string_pretty(&previous_shifts_hash).unwrap()) {
-        //     Ok(_) => debug!("Saving relevant shifts to disk was succesful"),
-        //     Err(err) => error!("Saving relevant shifts to disk FAILED. ERROR: {}",err.to_string())
-        // };
         let previous_non_relevant_shifts: Vec<Shift> = create_shift_hashmap(calendar_split.1.unwrap_or_default());
         match write(NON_RELEVANT_EVENTS_PATH, serde_json::to_string_pretty(&previous_non_relevant_shifts)?) {
             Ok(_) => debug!("Saving non-relevant shifts to disk was succesful"),
@@ -234,7 +273,7 @@ pub fn create_ical(relevant_shifts: &Vec<Shift>, non_relevant_shifts: Vec<Shift>
         .name(&format!("Hermes rooster - {}", name))
         .append_property(("X-USER-NAME", name.as_str()))
         .append_property(("X-LAST-UPDATED", current_timestamp.as_secs().to_string().as_str()))
-        .append_property(("X-UPDATE-INTERVAL-MINUTES", heartbeat_interval.to_string().as_str()))
+        .append_property(("X-UPDATE-INTERVAL-SECONDS", heartbeat_interval.to_string().as_str()))
         .append_property(("X-CAL-VERSION", CALENDAR_VERSION.to_string().as_str()))
         .append_property(("METHOD", "PUBLISH"))
         .timezone("Europe/Amsterdam")

@@ -445,6 +445,11 @@ pub fn send_welcome_mail(
 
     let agenda_url = create_footer(true);
     let agenda_url_webcal = agenda_url.clone().replace("https", "webcals");
+    let kuma_info = if let Ok(kuma_url) = var("KUMA-URL") {
+        format!("Als Webcom Ical een storing heeft ontvang je meestal een mail van <em>{}</em> (deze kan in je spam belanden!), op <a href=\"{kuma_url}\" style=\"color:#d97706;text-decoration:none;\">{kuma_url}</a> kan je de actuele status van Webcom Ical bekijken.",var("KUMA_MAIL_FROM").unwrap_or(ERROR_VALUE.to_owned()))
+    } else {
+        "".to_owned()
+    };
     let donation_text = var("DONATION_TEXT").unwrap_or(ERROR_VALUE.to_owned());
     let donation_service = var("DONATION_SERVICE").unwrap_or(ERROR_VALUE.to_owned());
     let donation_link = var("DONATION_LINK").unwrap();
@@ -454,6 +459,7 @@ pub fn send_welcome_mail(
         name => name.clone(),
         agenda_url,
         agenda_url_webcal,
+        kuma_info,
         donation_service,
         donation_text,
         donation_link,

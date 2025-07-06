@@ -2,12 +2,16 @@ name: webcom_${USERNAME}
 services:
   webcom_ical:
     image: docker.io/library/webcom_ical
+    user:
+      - 1000:1000
     volumes:
       - .env:/usr/src/webcom_ical/.env
       - {{save_target}}:/usr/src/webcom_ical/calendar/
       - ./kuma/:/usr/src/webcom_ical/kuma/
     depends_on:
       - gecko_driver
+    environment:
+      - RUST_LOG=warn
   gecko_driver:
     image: docker.io/library/gecko_driver
     restart: on-failure

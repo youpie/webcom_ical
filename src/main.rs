@@ -7,6 +7,7 @@ use email::send_errors;
 use email::send_welcome_mail;
 use reqwest;
 use serde::{Deserialize, Serialize};
+use std::default;
 use std::fs;
 use std::fs::File;
 use std::fs::write;
@@ -43,7 +44,7 @@ const BASE_DIRECTORY: &str = "kuma/";
 const FALLBACK_URL: [&str;2] = ["https://dmz-wbc-web01.connexxion.nl/WebComm/default.aspx","https://dmz-wbc-web02.connexxion.nl/WebComm/default.aspx"];
 static NAME: LazyLock<RwLock<Option<String>>> = LazyLock::new(|| RwLock::new(None));
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone,Default)]
 pub struct IncorrectCredentialsCount {
     retry_count: usize,
     error: Option<SignInFailure>,
@@ -343,7 +344,10 @@ fn sign_in_failed_update(
     failure_type: Option<SignInFailure>,
 ) -> GenResult<()> {
     let path = Path::new("./sign_in_failure_count.toml");
-    let mut failure_counter = load_sign_in_failure_count(path)?;
+    let mut failure_counter = match load_sign_in_failure_count(path) {
+        Ok(failure) => failure,
+        Err(_) => IncorrectCredentialsCount::default()
+    };
     if let Ok(current_password_hash) = get_password_hash() {
         debug!("Got current password hash: {current_password_hash}");
         failure_counter.previous_password_hash = Some(current_password_hash);

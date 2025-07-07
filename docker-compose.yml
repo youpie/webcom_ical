@@ -8,6 +8,8 @@ services:
       - ./kuma/:/usr/src/webcom_ical/kuma/
     depends_on:
       - gecko_driver
+    environment:
+      - RUST_LOG=info
   gecko_driver:
     image: docker.io/library/gecko_driver
     restart: on-failure

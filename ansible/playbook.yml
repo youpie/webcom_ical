@@ -16,6 +16,11 @@
     - name: mail_to
       prompt: "Waar moet de email naartoe"
       private: no
+
+    - name: timeout_time_hrs
+      prompt: "How often should shifts be parsed"
+      private: no
+      default: "1"
     
     - name: use_email
       prompt: "Use email (true/false)"
@@ -29,11 +34,6 @@
 
     - name: update_shift
       prompt: "Mail on updated shifts (true/false)"
-      private: no
-      default: "true"
-      
-    - name: welcome_mail
-      prompt: "Mail on first use (true/false)"
       private: no
       default: "true"
 
@@ -52,9 +52,13 @@
       set_fact:
         my_uuid: "{{ lookup('community.general.random_string', length=12, special=false, upper=false, digits=true, lower=true) }}"
 
-    - name: Set environment variable
+    - name: Set environment variables
       set_fact:
         random_filename: "{{ my_uuid }}"
+
+    - name: Set environment variables
+      set_fact:
+        timeout_time: "{{ timeout_time_hrs | int * 3600 + 400 }}"
 
     - name: Create user directory
       ansible.builtin.file:
@@ -73,13 +77,13 @@
 
     - name: Start Docker containers
       community.docker.docker_compose_v2:
-        project_src: "~/Services/Webcom/{{ personeelsnummer }}"
+       project_src: "~/Services/Webcom/{{ personeelsnummer }}"
 
     - name: Add cron job to start Docker container every hour
       ansible.builtin.cron:
         name: "Start Docker container for {{ personeelsnummer }}"
         user: "{{remote_username}}"
         minute: "{{59 | random}}"
-        hour: "*/1"
+        hour: "*/{{timeout_time_hrs}}"
         job: "docker start webcom_{{personeelsnummer}}-webcom_ical-1 >/dev/null 2>&1"
       when: remote_username != ""

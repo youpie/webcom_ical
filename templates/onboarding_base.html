@@ -1,16 +1,151 @@
-<table width="100%" cellpadding="5" cellspacing="0" border="0" style="margin-bottom:20px;">
+<table width="100%" cellpadding="0" cellspacing="0" borders="0" style="font-family:Arial,sans-serif;font-size:15px;color:#333;line-height:1.6;">
+  <tr>
+    <td style="font-size:20px;padding-bottom:15px;">
+      Welkom bij Webcom Ical, <strong>{name}!</strong>
+    </td>
+  </tr>
+
+  <!-- Agenda info -->
+  <tr>
+    <td style="padding-bottom:15px;">
+      Je diensten zijn succesvol ingeladen. Ze zijn opgeslagen op het onderstaande adres:
+    </td>
+  </tr>
+  <tr>
+    <td style="padding-bottom:20px;">
+      <a href="{agenda_url}" style="word-break:break-all;color:#1a73e8;text-decoration:none;"><strong>{agenda_url}</strong></a>
+    </td>
+  </tr>
     <tr>
-      <td style="font-size:16px; font-weight:bold; padding-bottom:10px;">Welkom bij Webcom Ical {name}!</td>
-    </tr>
+    <td style="font-size:16px;font-weight:bold;padding-bottom:10px;">
+      📅 Diensten toevoegen aan je agenda
+    </td>
+  </tr>
+  <tr>
+    <td style="padding-bottom:25px;">
+      <strong>Gebruik je Apple Agenda?</strong><br>
+      Klik simpelweg op de link hieronder om de diensten aan je agenda toe te voegen<br>
+      <a href="{webcal_rewrite_url}" style="margin-top: 10px;display:inline-block;padding:10px 18px;background-color:#333333;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:bold;">
+        Toevoegen aan Apple Agenda
+    </a><br>
+    </td>
+    
+  </tr>
+  <tr>
+    <td style="padding-bottom:25px;">
+      <strong>Gebruik je Google Calendar?</strong><br>
+      Gebruik onderstaande knop om de diensten toe te voegen aan je agenda.
+      <br>
+      <a href="https://calendar.google.com/calendar/u/0/r?cid={agenda_url_webcal}" style="margin-top: 10px;display:inline-block;padding:10px 18px;background-color:#34a853;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:bold;">
+        Toevoegen aan Google Agenda
+      </a><br>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding-bottom:25px;">
+      <strong>Gebruik je iets anders?</strong><br>
+      Gebruik je geen Apple of Google Agenda maar bijvoorbeeld Samsung Agenda? Dan kan je de app <a href="https://play.google.com/store/apps/details?id=at.bitfire.icsdroid">ICSx⁵</a> gebruiken, deze app kost in de Play Store echter wel geld. Na het downloaden van de app moet je op de onderstaande knop klikken om de diensten in te laden.<br>
+      Tip voor de gevorderde: ICSx⁵ is gratis (wel legaal en velig) te downloaden via <a href="https://f-droid.org/en/packages/at.bitfire.icsdroid/">F-Droid</a>.<br>
+      <a href="{webcal_rewrite_url}" style="margin-top: 10px;display:inline-block;padding:10px 18px;background-color:#039BE2;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:bold;">
+        Toevoegen met ICSx⁵
+    </a>
+    </td>
+  </tr>
+  <tr>
+    
+    <td style="padding-bottom:20px;">
+      <strong>Werkt een knop niet?</strong><br>
+      Werkt een knop niet? Probeer dan de volgende link te kopieren en te plakken in je browser: {agenda_url_webcal}
+    </td>
+  </tr>
+  <!-- Warning & Outage Info -->
+  <tr>
+    <td>
+      <div style="background-color:#fff4e5;border-left:4px solid #fbbc04;padding:15px;border-radius:4px;margin-bottom:25px;">
+        <strong>Let op:</strong> Webcom Ical is niet verantwoordelijk als jij diensten mist of te laat komt door foutieve of achterhaalde informatie van Webcom Ical. Gebruik altijd je koppie en controleer af en toe Webcomm zelf. <br><br>
+        {kuma_info}
+      </div>
+    </td>
+  </tr>
+  <!-- Login info -->
+  <tr>
+    <td style="padding-bottom:25px;">
+      {auth_credentials}
+    </td>
+  </tr>
+  <tr>
+    <td style="padding-bottom:10px;">
+      <strong>Nieuw! Bussie 🚍️</strong><br>
+      Bussie is de app om je diensten digitaal te bekijken. Probeer het uit door op de onderstaande knop te drukken!<br>
+      <a href="https://bussie.app/loginlink/{agenda_url}" target="_blank" style="all: unset;">
+          <button style=" background-color: #edf0fe;  
+              font-size: 14px;
+              font-weight: bold;
+              color: #422ad5;
+              border: none;
+              border-radius: 6px;
+              padding: 0.8em;
+              display: flex;
+              justify-content: center;
+              gap: 0.5em;
+              align-items: center;
+              cursor: pointer;"
+                  onmouseover="this.style.backgroundColor='#3b25c1'; this.style.color='#e0e7ff'; this.style.boxShadow='0 2px 4px #3a25c1b2';"
+                  onmouseout="this.style.backgroundColor='#edf0fe'; this.style.color='#422ad5'; this.style.boxShadow='none';"
+                  onmousedown="this.style.translate='0 0.5px';" onmouseup="this.style.translate='0 0';">
+                  <img src="https://raw.githubusercontent.com/gist/tcBorek2002/e7f4794010a504e7e02314694c483826/raw/26bcb66f701c0fe2538f343f5d5676e8dc6608c6/bus.svg" alt="Bus" class="custom-image" style="    height: 1.6em;" />
+                  Voeg mijn diensten toe aan Bussie
+          </button>
+      </a>
+    </td>
+  </tr>
+  </tr>
+  <!-- Scheiding -->
+  <tr>
+    <td style="border-top:1px solid #ccc;padding-top:25px;padding-bottom:10px;"></td>
+  </tr>
+
+  <!-- Donatie info -->
+  <tr>
+    <td style="font-size:16px;font-weight:bold;padding-bottom:10px;">
+      ❤️ Ondersteun Webcom Ical
+    </td>
+  </tr>
+  <tr>
+    <td style="padding-bottom:15px;">
+      Webcom Ical is een gratis dienst. Wil je bijdragen aan het onderhoud en de verdere ontwikkeling? Overweeg dan een donatie.
+    </td>
+  </tr>
+  <tr>
+    <td style="padding-bottom:15px;">
+      <strong>Doneren met {donation_service}:</strong><br>
+      {donation_text}<br>
+      <a href="{donation_link}" style="display:inline-block;padding:10px 18px;background-color:#1a73e8;color:#ffffff;text-decoration:none;border-radius:4px;font-weight:bold;">
+        Doneren
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding-bottom:20px;">
+      <strong>Doneren via bankoverschrijving:</strong><br>
+      IBAN: <code>{iban}</code><br>
+      Ten name van: <em>{iban_name}</em><br>
+      Periodieke donaties worden zeer gewaardeerd voor het dekken van serverkosten.
+    </td>
+  </tr>
+    <!-- Scheiding -->
+  <tr>
+    <td style="border-top:1px solid #ccc;padding-top:25px;padding-bottom:10px;"></td>
+  </tr>
+  <tr>
+    <td style="font-size:16px;font-weight:bold;padding-bottom:10px;">
+      ❓️ Vragen of onduidelijkheden
+    </td>
     <tr>
-      <td style="padding-bottom:10px;">Je shifts zijn voor het eerst succesvol ingeladen. De link om deze in je agenda te laden is:</td>
-    </tr>
-    <tr>
-      <!-- Plain text link for easy copy/paste -->
-      <td style="padding-bottom:10px; word-break: break-all;">{agenda_url}</td>
-    </tr>
-    <tr>
-      <td style="padding-bottom:10px;">Ooit staat hier ook een uitleg om deze link toe te voegen aan je agenda, maar voor nu moet je het zelf uitzoeken 🙂</td>
-    </tr>
-    {auth_credentials}
-  </table>
+    <td style="padding-bottom:15px;">
+      Is iets niet helemaal duidelijk, of komen de diensten in je agenda niet overeen met webcom. Voel je vrij om contact op te nemen met het onderstaande adres <br>
+      <em>{admin_email}</em>
+    </td>
+  </tr>
+  </tr>
+</table>

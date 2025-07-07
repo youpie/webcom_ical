@@ -1,0 +1,236 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/26.1.1 Chrome/132.0.6834.210 Electron/34.3.3 Safari/537.36" version="26.1.1">
+  <diagram name="Pagina-1" id="-gbmmKOFgerlawYip4s0">
+    <mxGraphModel dx="2261" dy="839" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-1" target="T44ZDMxPfbIAiHcCGsCe-3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-1" value="Load full calendar" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="110" y="310" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-2" target="T44ZDMxPfbIAiHcCGsCe-3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-6" value="No" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="T44ZDMxPfbIAiHcCGsCe-5">
+          <mxGeometry x="0.2808" y="-2" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-2" target="T44ZDMxPfbIAiHcCGsCe-7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-2" value="!&amp;lt;1month ago" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="440" y="300" width="100" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.25;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-3" target="T44ZDMxPfbIAiHcCGsCe-14">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="309.78787878787875" y="469.9999999999999" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-3" value="Get event" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="310" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-11" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-7" target="T44ZDMxPfbIAiHcCGsCe-10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-77" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-7">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="810" y="340" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-7" value="Add to hashmap" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="610" y="310" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-10" target="T44ZDMxPfbIAiHcCGsCe-3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-10" value="Remove event" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="610" y="410" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-16" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-14" target="T44ZDMxPfbIAiHcCGsCe-15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-14" value="Keep altered calendar in memory" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="249.78787878787875" y="459.9999999999999" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-18" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-15" target="T44ZDMxPfbIAiHcCGsCe-17">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-83" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.25;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-15" target="T44ZDMxPfbIAiHcCGsCe-82">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-84" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.25;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-15" target="T44ZDMxPfbIAiHcCGsCe-49">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-15" value="Get shift from webcom" style="whiteSpace=wrap;html=1;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="439.99787878787873" y="539.9999999999999" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-20" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-17" target="T44ZDMxPfbIAiHcCGsCe-19">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-17" value="find key of event from hash from webcom shift" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="640" y="540" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-22" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-19" target="T44ZDMxPfbIAiHcCGsCe-21">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-24" value="Yes" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="T44ZDMxPfbIAiHcCGsCe-22">
+          <mxGeometry x="-0.1685" y="2" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-26" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-19" target="T44ZDMxPfbIAiHcCGsCe-25">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-19" value="Match found" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="660" y="630" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-23" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-21" target="T44ZDMxPfbIAiHcCGsCe-15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-73" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-21" target="T44ZDMxPfbIAiHcCGsCe-72">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-21" value="Do nothing" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="640" y="760" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-28" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-25" target="T44ZDMxPfbIAiHcCGsCe-27">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-25" value="Search for matching date in shift list using for loop" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="810" y="640" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-30" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-27" target="T44ZDMxPfbIAiHcCGsCe-29">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-31" value="No" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="T44ZDMxPfbIAiHcCGsCe-30">
+          <mxGeometry x="0.1917" y="-3" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-34" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-27" target="T44ZDMxPfbIAiHcCGsCe-33">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-35" value="yes" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="T44ZDMxPfbIAiHcCGsCe-34">
+          <mxGeometry x="0.0255" y="-3" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-27" value="Match found" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="830" y="750" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-32" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;jumpStyle=gap;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-29" target="T44ZDMxPfbIAiHcCGsCe-15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-67" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-29" target="T44ZDMxPfbIAiHcCGsCe-66">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-29" value="It&#39;s a new shift. add it to the hashmap" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="990" y="760" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-36" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.75;entryY=1;entryDx=0;entryDy=0;jumpStyle=gap;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-33" target="T44ZDMxPfbIAiHcCGsCe-15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-71" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-33" target="T44ZDMxPfbIAiHcCGsCe-70">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-33" value="Remove current match from hashmap and add new one" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="810" y="880" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-40" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-37" target="T44ZDMxPfbIAiHcCGsCe-38">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-37" value="Combine calendar and hashmap" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="400" y="860" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-38" value="Save calendar to disk" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="400" y="970" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-44" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-43" target="T44ZDMxPfbIAiHcCGsCe-1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-51" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-43" target="T44ZDMxPfbIAiHcCGsCe-50">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-43" value="Current date of execution &amp;gt; Previous?" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="-80" y="310" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-48" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-45" target="T44ZDMxPfbIAiHcCGsCe-15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-45" value="Load relevant calendar part" style="rounded=0;whiteSpace=wrap;html=1;shape=cylinder3;boundedLbl=1;backgroundOutline=1;size=15;" vertex="1" parent="1">
+          <mxGeometry x="-80" y="460" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-46" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-43" target="T44ZDMxPfbIAiHcCGsCe-45">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-52" value="No" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="T44ZDMxPfbIAiHcCGsCe-46">
+          <mxGeometry x="-0.3556" y="-3" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-53" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-49" target="T44ZDMxPfbIAiHcCGsCe-37">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-54" value="Yes" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="T44ZDMxPfbIAiHcCGsCe-53">
+          <mxGeometry x="-0.0704" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-49" value="Full update flag set" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="430" y="720" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-50" value="Full update flag" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-80" y="210" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-61" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-56" target="T44ZDMxPfbIAiHcCGsCe-60">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-56" value="Load non-relevant calendar" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" vertex="1" parent="1">
+          <mxGeometry x="100" y="720" width="90" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-57" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-49" target="T44ZDMxPfbIAiHcCGsCe-56">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-58" value="Save relevant and non-relevant calendar also" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" vertex="1" parent="1">
+          <mxGeometry x="269.78999999999996" y="960" width="110" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-59" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;entryPerimeter=0;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-37" target="T44ZDMxPfbIAiHcCGsCe-58">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-63" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-60" target="T44ZDMxPfbIAiHcCGsCe-62">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-65" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.25;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="T44ZDMxPfbIAiHcCGsCe-60" target="T44ZDMxPfbIAiHcCGsCe-64">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-60" value="Combine hashmap and non-relevant calendar" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="85" y="850" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-62" value="Save new relevant calendar" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" vertex="1" parent="1">
+          <mxGeometry x="145" y="950" width="60" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-64" value="Save combined calendar to disk" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="10" y="960" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-66" value="Mark shift as new" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1010" y="650" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-70" value="Mark shift as updated" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="960" y="880" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-72" value="Mark shift as not&amp;nbsp;&lt;div&gt;changed&lt;/div&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="625" y="930" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-78" value="Mark shift as new" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="800" y="310" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="T44ZDMxPfbIAiHcCGsCe-82" value="Shift change notifier logic" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="150" y="610" width="120" height="80" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

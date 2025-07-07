@@ -3,16 +3,16 @@ use lettre::{
     message::header::ContentType, transport::smtp::authentication::Credentials, Message,
     SmtpTransport, Transport,
 };
+use thiserror::Error;
 use std::{
-    fs,
-    path::{Path, PathBuf},
+    collections::HashMap, fs, path::PathBuf
 };
 use strfmt::strfmt;
-use thirtyfour::error::WebDriverResult;
+use thirtyfour::error::{WebDriverErrorInfo, WebDriverResult};
 use time::{macros::format_description, Date};
-use crate::BASE_DIRECTORY;
+use crate::ShiftState;
 
-use crate::{create_ical_filename, create_shift_link, set_get_name, IncorrectCredentialsCount, Shift, Shifts, SignInFailure};
+use crate::{create_ical_filename, create_shift_link, set_get_name, IncorrectCredentialsCount, Shift, SignInFailure};
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -20,7 +20,7 @@ const ERROR_VALUE: &str = "HIER HOORT WAT ANDERS DAN DEZE TEKST TE STAAN, CONFIG
 const SENDER_NAME: &str = "Peter";
 const TIME_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
     format_description!("[hour]:[minute]");
-const DATE_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
+pub const DATE_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
     format_description!("[day]-[month]-[year]");
 
 const COLOR_BLUE: &str = "#1a5fb4";
@@ -40,6 +40,14 @@ impl StrikethroughString for String {
     }
 }
 
+#[derive(Error, Debug, PartialEq)]
+pub enum PreviousShiftsError {
+    #[error("Parsing of previous shifts has failed. Error: {0}")]
+    Generic(String),
+    #[error("Previous shifts file IO error. Error: {0}")]
+    Io(String)
+}
+
 pub struct EnvMailVariables {
     pub smtp_server: String,
     pub smtp_username: String,
@@ -55,6 +63,7 @@ pub struct EnvMailVariables {
 /*
 Loads all env variables needed for sending mails
 Does not load defaults if they are not found and will just error
+If kuma is true, it adds KUMA_ to the var names to find ones specific for KUMA
 */
 impl EnvMailVariables {
     pub fn new(kuma: bool) -> GenResult<Self> {
@@ -94,19 +103,18 @@ impl EnvMailVariables {
 Main function for sending mails, it will always be called and will individually check if that function needs to be called
 If loading previous shifts fails for whatever it will not error but just do an early return.
 Because if the previous shifts file is not, it will just not send mails that time
+Returns the list of previously known shifts, updated with new shits
 */
-pub fn send_emails(current_shifts: &Vec<Shift>) -> GenResult<()> {
+pub fn send_emails(current_shifts: &mut Vec<Shift>, previous_shifts: &Vec<Shift>) -> GenResult<Vec<Shift>> {
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
-    let previous_shifts = match load_previous_shifts() {
-        Ok(x) => x,
-        _ => {
-            println!("ERROR LOADING PREVIOUS SHIFTS HAS FAILED!!!");
-            return Ok(());
-        } //If there is any error loading previous shifts, just do an early return..
-    };
-    find_send_shift_mails(&mailer, &previous_shifts, current_shifts, &env)?;
-    Ok(())
+    if previous_shifts.is_empty() {
+        // if the previous were empty, just return the list of current shifts as all new
+        error!("!!! PREVIOUS SHIFTS WAS EMPTY. SKIPPING !!!");
+        return Ok(current_shifts.iter().cloned().map(|mut shift| {shift.state = ShiftState::New; shift}).collect());
+    }
+    Ok(find_send_shift_mails(&mailer, previous_shifts, current_shifts, &env)?)
+    
 }
 
 // Creates SMTPtransport from username, password and server found in env
@@ -118,80 +126,94 @@ fn load_mailer(env: &EnvMailVariables) -> GenResult<SmtpTransport> {
     Ok(mailer)
 }
 
-// Loads shifts from last time this program was run
-fn load_previous_shifts() -> GenResult<Vec<Shift>> {
-    let path_str = format!("./{BASE_DIRECTORY}previous_shifts.toml");
-    let path = Path::new(&path_str);
-    let shifts_toml = std::fs::read_to_string(path)?;
-    let shifts: Shifts = toml::from_str(&shifts_toml)?;
-    Ok(shifts.shifts)
-}
-
 /*
-A really ugly function that often displays weird behaviour
 Will search for new shifts given previous shifts.
 Will be ran twice, If provided new shifts, it will look for updated shifts instead
 Will send an email is send_mail is true
+It doesn't make a lot of sense that this function is in Email
 */
 fn find_send_shift_mails(
     mailer: &SmtpTransport,
     previous_shifts: &Vec<Shift>,
-    current_shifts: &Vec<Shift>,
+    current_shifts: &mut Vec<Shift>,
     env: &EnvMailVariables,
 ) -> GenResult<Vec<Shift>> {
-    let mut updated_shifts = Vec::new();
-    let mut new_shifts_list = Vec::new();
     let current_date: Date = Date::parse(
         &chrono::offset::Local::now().format("%d-%m-%Y").to_string(),
         DATE_DESCRIPTION,
     )?;
-
-    // Track shifts by start date
-    let previous_shifts_by_start_date: std::collections::HashMap<_, _> = previous_shifts
-        .iter()
-        .map(|shift| (shift.date, shift))
-        .collect();
-    let mut removed_shifts_dict = previous_shifts_by_start_date.clone();
+    let mut current_shifts_map  = previous_shifts.iter().cloned().map(|shift| {(shift.magic_number,shift)}).collect::<HashMap<i64,Shift>>();
     // Iterate through the current shifts to check for updates or new shifts
-    for current_shift in current_shifts {
-        if current_shift.date < current_date {
-            removed_shifts_dict.remove_entry(&current_shift.date);
-            continue; // Skip old shifts
-        }
 
-        match previous_shifts_by_start_date.get(&current_shift.date) {
-            Some(previous_shift) => {
-                // If the shift exists, compare its full details for updates
-                if current_shift.magic_number != previous_shift.magic_number {
-                    updated_shifts.push(current_shift.clone());
+    // We start with a list of previously valid shifts. All marked as deleted
+    // we will then loop over a list of newly loaded shifts from the website
+    for current_shift in &mut *current_shifts { 
+        // If the hash of this current shift is found in the previously valid shift list,
+        // we know this shift has remained unchanged. So mark it as such
+        if let Some(previous_shift) = current_shifts_map.get_mut(&current_shift.magic_number) {
+            previous_shift.state = ShiftState::Unchanged;
+        } else {
+            // if it is not found, we loop over the list of previously known shifts
+            for previous_shift in current_shifts_map.clone() {
+                // if during the loop, we find a previously valid shift with the same starting date as the current shift
+                // whereby we assume only 1 shift can be active per day
+                // we know it must have changed, as if it hadn't it would have been found from its hash
+                // so it can be marked as changed
+                // We must first remove the old shift, then add the new shift
+                if previous_shift.1.date == current_shift.date {
+                    match current_shifts_map.remove(&previous_shift.0) {
+                        Some(_) => (),
+                        None => warn!("Tried to remove shift {} as it has been updated, but that failed", previous_shift.1.number)
+                    };
+                    current_shift.state = ShiftState::Changed;
+                    current_shifts_map.insert(current_shift.magic_number, current_shift.clone());
+                    break;
                 }
-                removed_shifts_dict.remove_entry(&current_shift.date);
             }
-            None => {
-                // It's a new shift
-                new_shifts_list.push(current_shift.clone());
+            // If after that loop, no previously known shift with the same start date as the new shift was found
+            // we know it is a new shift, so we mark it as such and add it to the list of known shifts
+            // I THINK this currently marks all removed shifts as new, so check that when i have the brain capacity 
+            if current_shift.state != ShiftState::Changed {
+                current_shift.state = ShiftState::New;
+                current_shifts_map.insert(current_shift.magic_number, current_shift.clone());
             }
+            
         }
-    }
 
-    if !new_shifts_list.is_empty() && env.send_email_new_shift {
-        println!("Found {} new shifts, sending email", new_shifts_list.len());
-        create_send_new_email(mailer, &new_shifts_list, env, false)?;
     }
-
+    let current_shift_vec: Vec<Shift> = current_shifts_map.values().cloned().collect();
+    let mut new_shifts: Vec<&Shift> = current_shift_vec.iter().filter(|item| {
+        item.state == ShiftState::New
+    }).collect();
+    let mut updated_shifts: Vec<&Shift> = current_shift_vec.iter().filter(|item| {
+        item.state == ShiftState::Changed
+    }).collect();
+    let mut removed_shifts: Vec<&Shift> = current_shift_vec.iter().filter(|item| {
+        item.state == ShiftState::Deleted
+    }).collect();
+    // debug!("shift vec : {:#?}",current_shift_vec);
+    debug!("Removed shift vec size: {}", removed_shifts.len());
+    new_shifts.retain(|shift| shift.date >= current_date);
+    if !new_shifts.is_empty() && env.send_email_new_shift {
+        info!("Found {} new shifts, sending email", new_shifts.len());
+        create_send_new_email(mailer, new_shifts, env, false)?;
+    }
+    updated_shifts.retain(|shift| shift.date >= current_date);
     if !updated_shifts.is_empty() && env.send_mail_updated_shift {
-        println!("Found {} updated shifts, sending email", updated_shifts.len());
-        create_send_new_email(mailer, &updated_shifts, env, true)?;
+        info!("Found {} updated shifts, sending email", updated_shifts.len());
+        create_send_new_email(mailer, updated_shifts, env, true)?;
     }
-    let mut removed_shifts: Vec<Shift> = removed_shifts_dict.values().cloned().cloned().collect();
-    removed_shifts.retain(|shift| shift.date >= current_date);
     if !removed_shifts.is_empty() && env.send_mail_updated_shift {
-        println!("Removing {} shifts", removed_shifts.len());
+        info!("Removing {} shifts", removed_shifts.len());
         removed_shifts.retain(|shift| shift.date >= current_date);
-        send_removed_shifts_mail(mailer, env, &removed_shifts)?;
+        if !removed_shifts.is_empty() {
+            send_removed_shifts_mail(mailer, env, removed_shifts)?;
+        }
+        
     }
-
-    Ok(updated_shifts)
+    // At last remove all shifts marked as removed from the vec
+    let current_shift_vec = current_shift_vec.into_iter().filter(|shift| shift.state != ShiftState::Deleted).collect();
+    Ok(current_shift_vec)
 }
 
 /*
@@ -201,7 +223,7 @@ Will always send under the name of Peter
 */
 fn create_send_new_email(
     mailer: &SmtpTransport,
-    new_shifts: &Vec<Shift>,
+    new_shifts: Vec<&Shift>,
     env: &EnvMailVariables,
     update: bool,
 ) -> GenResult<()> {
@@ -216,7 +238,7 @@ fn create_send_new_email(
     };
 
     let mut shift_tables = String::new();
-    for shift in new_shifts {
+    for shift in &new_shifts {
         let shift_table_clone = strfmt!(&shift_table,
             shift_number => shift.number.clone(),
             shift_date => shift.date.format(DATE_DESCRIPTION)?.to_string(),
@@ -224,7 +246,7 @@ fn create_send_new_email(
             shift_end => shift.end.format(TIME_DESCRIPTION)?.to_string(),
             shift_duration_hour => shift.duration.whole_hours().to_string(),
             shift_duration_minute => (shift.duration.whole_minutes() % 60).to_string(),
-            shift_link => create_shift_link(shift)?
+            shift_link => create_shift_link(shift, false)?
         )?;
         shift_tables.push_str(&shift_table_clone);
     }
@@ -266,26 +288,32 @@ fn create_footer(only_url:bool) -> String {
       <td style="background-color:#FFFFFF; text-align:center;font-size:12px;padding-bottom:10px;">
         <a href="{footer_url}" style="color:#9a9996;">{footer_url}</a>
       </td>
+      <tr>
+      <td style="background-color:#FFFFFF; text-align:center;font-size:12px;padding-bottom:10px;">
+        <a style="color:#9a9996;">{admin_email_comment}</a>
+      </td>
       </tr>"#;
     let domain = var("DOMAIN").unwrap_or(ERROR_VALUE.to_string());
     let url = format!("{}/{}", domain, create_ical_filename().unwrap_or(ERROR_VALUE.to_owned()));
+    let admin_email = var("MAIL_ERROR_TO").ok();
     match only_url {
         true => url,
         false => strfmt!(footer_text,
-    footer_text => "Je agenda link:",
-    footer_url => url).unwrap_or("".to_owned())
+            footer_text => "Je agenda link:",
+            footer_url => url,
+            admin_email_comment => if let Some(email) = admin_email {format!("Vragen of opmerkingen? Neem contact op met {email}")} else {"".to_owned()}).unwrap_or("".to_owned()),
         }
 }
 
 fn send_removed_shifts_mail(
     mailer: &SmtpTransport,
     env: &EnvMailVariables,
-    removed_shifts: &Vec<Shift>,
+    removed_shifts: Vec<&Shift>,
 ) -> GenResult<()> {
     let base_html = fs::read_to_string("./templates/email_base.html").unwrap();
     let removed_shift_html = fs::read_to_string("./templates/removed_shift_base.html").unwrap();
     let shift_table = fs::read_to_string("./templates/shift_table.html").unwrap();
-    println!("Sending removed shifts mail");
+    info!("Sending removed shifts mail");
     let enkelvoud_meervoud = if removed_shifts.len() == 1 {
         "is"
     } else {
@@ -294,7 +322,7 @@ fn send_removed_shifts_mail(
     let email_shift_s = if removed_shifts.len() == 1 { "" } else { "en" };
     let name = set_get_name(None);
     let mut shift_tables = String::new();
-    for shift in removed_shifts {
+    for shift in &removed_shifts {
         let shift_table_clone = strfmt!(&shift_table,
             shift_number => shift.number.clone().strikethrough(),
             shift_date => shift.date.format(DATE_DESCRIPTION)?.to_string().strikethrough(),
@@ -302,7 +330,7 @@ fn send_removed_shifts_mail(
             shift_end => shift.end.format(TIME_DESCRIPTION)?.to_string().strikethrough(),
             shift_duration_hour => shift.duration.whole_hours().to_string().strikethrough(),
             shift_duration_minute => (shift.duration.whole_minutes() % 60).to_string().strikethrough(),
-            shift_link => create_shift_link(shift)?
+            shift_link => create_shift_link(shift, false)?
         )?;
         shift_tables.push_str(&shift_table_clone);
     }
@@ -337,14 +365,14 @@ fn send_removed_shifts_mail(
 Composes and sends email of found errors, in plaintext
 List of errors can be as long as possible, but for now is always 3
 */
-pub fn send_errors(errors: Vec<Box<dyn std::error::Error>>, name: &str) -> GenResult<()> {
+pub fn send_errors(errors: &Vec<Box<dyn std::error::Error>>, name: &str) -> GenResult<()> {
     let env = EnvMailVariables::new(false)?;
     if !env.send_error_mail {
-        println!("tried to send error mail, but is disabled");
+        info!("tried to send error mail, but is disabled");
         return Ok(());
     }
-    println!(
-        "Er zijn fouten gebeurt, mailtje met fouten wordt gestuurd naar {}",
+    warn!(
+        "Er zijn fouten opgetreden, mailtje met fouten wordt gestuurd naar {}",
         &env.mail_error_to
     );
     let mailer = load_mailer(&env)?;
@@ -365,14 +393,14 @@ pub fn send_errors(errors: Vec<Box<dyn std::error::Error>>, name: &str) -> GenRe
 pub fn send_gecko_error_mail<T: std::fmt::Debug>(error: WebDriverResult<T>) -> GenResult<()> {
     let env = EnvMailVariables::new(false)?;
     if !env.send_error_mail {
-        println!("tried to send error mail, but is disabled");
+        info!("tried to send GECKO error mail, but is disabled");
         return Ok(());
     }
     let mailer = load_mailer(&env)?;
     let mut email_errors = "!!! KAN NIET VERBINDEN MET GECKO !!!\n".to_string();
     email_errors.push_str(&format!(
         "Error: \n{}\n\n",
-        error.err().unwrap().to_string()
+        error.err().unwrap_or(thirtyfour::error::WebDriverError::UnknownError(WebDriverErrorInfo::new("Unknown".to_owned()))).to_string()
     ));
     let email = Message::builder()
         .from(format!("Foutje Berichtmans <{}>", &env.mail_from).parse()?)
@@ -386,15 +414,16 @@ pub fn send_gecko_error_mail<T: std::fmt::Debug>(error: WebDriverResult<T>) -> G
 
 pub fn send_welcome_mail(
     path: &PathBuf,
-    updated_link: bool,
 ) -> GenResult<()> {
-    if path.exists() && !updated_link {
+    if path.exists() {
         return Ok(());
     }
     let send_welcome_mail =
         EnvMailVariables::str_to_bool(&var("SEND_WELCOME_MAIL").unwrap_or("false".to_string()));
 
     if !send_welcome_mail {
+        debug!("{:?}",var("SEND_WELCOME_MAIL"));
+        info!("Wanted to send welcome mail. But it is disabled");
         return Ok(());
     }
 
@@ -404,7 +433,7 @@ pub fn send_welcome_mail(
 
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
-    let ical_username = var("ICAL_USER").unwrap_or(ERROR_VALUE.to_string());
+    let ical_username = var("ICAL_USER").unwrap_or("".to_owned());
     let ical_password = var("ICAL_PASS").unwrap_or(ERROR_VALUE.to_string());
 
     let name = set_get_name(None);
@@ -413,26 +442,49 @@ pub fn send_welcome_mail(
         auth_username => ical_username.clone(), 
         auth_password => ical_password.clone(), 
         admin_email => env.mail_error_to.clone())?;
+
+    let agenda_url = create_footer(true);
+    let agenda_url_webcal = agenda_url.clone().replace("https", "webcal");
+    // A lot of email clients don't want to open webcal links. So by pointing to a website which returns a 302 to a webcal link it tricks the email client
+    let rewrite_url = var("WEBCAL_REWRITE_URL").unwrap_or_default();
+    let webcal_rewrite_url = format!("{rewrite_url}{}",if !rewrite_url.is_empty() {create_ical_filename().unwrap_or_default()} else{agenda_url_webcal.clone()});
+    let kuma_info = if let Ok(kuma_url) = var("KUMA_URL") {
+        let extracted_kuma_mail = var("KUMA_MAIL_FROM").unwrap_or(ERROR_VALUE.to_owned()).split("<").last().unwrap_or_default().replace(">", "");
+        format!("Als Webcom Ical een storing heeft ontvang je meestal een mail van <em>{}</em> (deze kan in je spam belanden!), op <a href=\"{kuma_url}\" style=\"color:#d97706;text-decoration:none;\">{kuma_url}</a> kan je de actuele status van Webcom Ical bekijken.",
+            extracted_kuma_mail)
+    } else {
+        "".to_owned()
+    };
+    let donation_text = var("DONATION_TEXT").unwrap_or(ERROR_VALUE.to_owned());
+    let donation_service = var("DONATION_SERVICE").unwrap_or(ERROR_VALUE.to_owned());
+    let donation_link = var("DONATION_LINK").unwrap();
+    let iban = var("IBAN").unwrap_or(ERROR_VALUE.to_owned());
+    let iban_name = var("IBAN_NAME").unwrap_or(ERROR_VALUE.to_owned());
+    let admin_email = var("MAIL_ERROR_TO").unwrap_or_default();
     let onboarding_html = strfmt!(&onboarding_html, 
         name => name.clone(),
-        agenda_url => create_footer(true),
-        auth_credentials => if ical_username.is_empty() {String::new()} else {auth_html}
+        agenda_url,
+        agenda_url_webcal,
+        webcal_rewrite_url,
+        kuma_info,
+        donation_service,
+        donation_text,
+        donation_link,
+        iban,
+        iban_name,
+        auth_credentials => if ical_username.is_empty() {"".to_owned()} else {auth_html},
+        admin_email
     )?;
     let email_body_html = strfmt!(&base_html,
         content => onboarding_html,
         banner_color => COLOR_BLUE,
         footer => "".to_owned()
     )?;
-
-    let subject = match updated_link {
-        true => "Je Webcom Ical agenda link is veranderd",
-        false => &format!("Welkom bij Webcom Ical {}!", &name),
-    };
-    println!("welkom mail sturen");
+    warn!("welkom mail sturen");
     let email = Message::builder()
         .from(format!("{} <{}>",SENDER_NAME, &env.mail_from).parse()?)
         .to(format!("{} <{}>", name, &env.mail_to).parse()?)
-        .subject(subject)
+        .subject(format!("Welkom bij Webcom Ical {}!", &name))
         .header(ContentType::TEXT_HTML)
         .body(email_body_html)?;
     mailer.send(&email)?;
@@ -454,7 +506,7 @@ pub fn send_failed_signin_mail(
     let base_html = fs::read_to_string("./templates/email_base.html").unwrap();
     let login_failure_html = fs::read_to_string("./templates/failed_signin.html").unwrap();
 
-    println!("Sending failed sign in mail");
+    info!("Sending failed sign in mail");
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
     let still_not_working_modifier = if first_time { "" } else { "nog steeds " };
@@ -464,7 +516,7 @@ pub fn send_failed_signin_mail(
         Some(SignInFailure::IncorrectCredentials) => {
             "Incorrecte inloggegevens, heb je misschien je wachtwoord veranderd?"
         }
-        Some(SignInFailure::TooManyTries) => "Te veel incorrecte inlogpogingen...",
+        Some(SignInFailure::TooManyTries) => "Te veel incorrecte inlogpogingen…",
         Some(SignInFailure::WebcomDown) => "Webcom heeft op dit moment een storing",
         Some(SignInFailure::Other(fault)) => fault,
     };
@@ -502,7 +554,7 @@ pub fn send_sign_in_succesful(name: &str) -> GenResult<()> {
     let base_html = fs::read_to_string("./templates/email_base.html").unwrap();
     let login_success_html = fs::read_to_string("./templates/signin_succesful.html").unwrap();
 
-    println!("Sending succesful sign in mail");
+    info!("Sending succesful sign in mail");
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
     let email_body_html = strfmt!(&base_html, 

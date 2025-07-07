@@ -1,4 +1,4 @@
-use crate::{GenResult, Shift};
+use crate::{shift::ShiftState, GenResult, Shift};
 use async_recursion::async_recursion;
 use dotenvy::var;
 use thirtyfour::{
@@ -18,41 +18,41 @@ Does not return most errors as there are a few valid reason this function fails
 */
 pub async fn gebroken_diensten_laden(
     driver: &WebDriver,
-    shifts: &Vec<Shift>,
-) -> WebDriverResult<Vec<Shift>> {
-    let mut new_shifts: Vec<Shift> = vec![];
-    for shift in shifts {
-        if shift.is_broken {
-            println!("Creating broken shift: {}", shift.number);
+    all_shifts: &mut Vec<Shift>,
+) -> WebDriverResult<()> {
+    for shift in all_shifts {
+        if shift.is_broken && (shift.state == ShiftState::Changed || shift.state == ShiftState::New) {
+            info!("Creating broken shift: {}", shift.number);
+
             match get_broken_shift_time(driver, shift).await {
-                Ok(x) => {
-                    new_shifts.extend(x);
+                Ok(_) => {
+                    info!("Added broken shift time to shift {}",shift.number);
                 }
                 Err(x) => {
-                    println!(
+                    warn!(
                         "An error occured creating a broken shift: {:?}",
                         x
                     );
-                    new_shifts.push(shift.clone());
                 }
             };
             navigate_to_subdirectory(driver, "/WebComm/roster.aspx").await?; //Ga terug naar de rooster pagina, anders laden de gebroken shifts niet goed
-            wait_for_response(driver, By::ClassName("calDay"), false).await?;
-        } else {
-            new_shifts.push(shift.clone());
+            wait_for_response(driver, By::ClassName("calDay"), false).await?
+        } else if shift.is_broken && shift.state == ShiftState::Unchanged {
+            info!("Shift {} is broken, but unchanged from last check", shift.number);
         }
     }
-    Ok(new_shifts)
+    info!("Done generating broken shifts");
+    Ok(())
 }
 
 /*
 A small function to combine the three functions needed for creating a broken shift into one match statement
 */
-async fn get_broken_shift_time(driver: &WebDriver, shift: &Shift) -> GenResult<Vec<Shift>> {
+async fn get_broken_shift_time(driver: &WebDriver, shift: &mut Shift) -> GenResult<()> {
     let broken_diensten = load_broken_dienst_page(driver, &shift).await?;
     let between_times = find_broken_start_stop_time(broken_diensten).await?;
-    let broken_shifts = Shift::new_from_existing(between_times, shift, false);
-    Ok(broken_shifts)
+    shift.broken_period = Some(between_times);
+    Ok(())
 }
 
 /*
@@ -117,11 +117,11 @@ pub async fn find_broken_start_stop_time(
     for row in shift_rows {
         let shift_columns = row.query(By::Tag("td")).all_from_selector().await?;
         if shift_columns.last().unwrap().text().await? == "Afstaptijd" {
-            //println!("afstaptijd {}", shift_columns[3].text().await?);
+            debug!("afstaptijd {}", shift_columns[3].text().await?);
             afstaptijden.push(shift_columns[1].text().await?);
         }
         if shift_columns.last().unwrap().text().await? == "Opstaptijd" {
-            //println!("opstaptijd {}", shift_columns[1].text().await?);
+            debug!("opstaptijd {}", shift_columns[1].text().await?);
             opstaptijden.push(shift_columns[1].text().await?);
         }
     }
@@ -147,6 +147,25 @@ pub async fn navigate_to_subdirectory(driver: &WebDriver, subdirectory: &str) ->
     let script = format!("window.location.href = '{}';", subdirectory);
     driver.execute(&script, vec![]).await?;
     Ok(())
+}
+
+// This function clones a vec of shifts and splits broken shifts, if that value is set
+pub fn split_broken_shifts(shifts: Vec<Shift>) -> GenResult<Vec<Shift>> {
+    let mut shifts_clone = shifts.clone();
+    let mut shifts_to_append = vec![];
+    let vec_len = shifts_clone.len() -1;
+    for shift in shifts.iter().rev().enumerate() {
+        let position = vec_len - shift.0;
+        if shift.1.broken_period.is_some() {
+            if let Some(mut shifts_split) = shift.1.split_broken() {
+                debug!("Broken shift {} has broken shift times of {:?}", shift.1.number, shift.1.broken_period);
+                shifts_clone.remove(position);
+                shifts_to_append.append(&mut shifts_split);
+            }
+        }
+    }
+    shifts_clone.append(&mut shifts_to_append);
+    Ok(shifts_clone)
 }
 
 /*

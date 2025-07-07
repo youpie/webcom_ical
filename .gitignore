@@ -8,11 +8,10 @@ sign_in_failure_count.toml
 /ansible/group_vars/all.yml
 /ansible/inventory.ini
 previous_domain
+non_relevant_events
+previous_execution_date
+relevant_events
 kuma_data.toml
 .env.old
 Error_bestanden
 *.bkp
-non_relevant_events
-previous_execution_date
-relevant_events
-*.json

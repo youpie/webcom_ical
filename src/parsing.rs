@@ -1,3 +1,4 @@
+use async_recursion::async_recursion;
 use thirtyfour::error::{WebDriverError, WebDriverResult};
 use thirtyfour::{By, WebDriver};
 use time::{Date, Month};
@@ -29,16 +30,16 @@ async fn get_elements(
             }
         };
         if !text.is_empty() && text.contains("Dienstduur") {
-            // println!("Loading shift: {:?}", &text);
+            debug!("Loading shift: {:?}", &text);
             let dag_text = element.find(By::Tag("strong")).await?.text().await?;
             let dag_text_split = dag_text.split_whitespace().next().unwrap();
 
-            // println!("dag {}", &dag_text);
+            debug!("dag {}", &dag_text);
             let dag: u8 = dag_text_split.parse().unwrap();
             let date = Date::from_calendar_date(year, month, dag).unwrap();
             let new_shift = Shift::new(text, date);
             temp_emlements.push(new_shift.clone());
-            println!("Found Shift {}", &new_shift.number);
+            debug!("Found Shift {}", &new_shift.number);
         }
     }
     Ok(temp_emlements)
@@ -47,25 +48,42 @@ async fn get_elements(
 /*
 Just presses the previous button in webcom to load the previous month
 */
+#[async_recursion]
 pub async fn load_previous_month_shifts(
     driver: &WebDriver,
-) -> WebDriverResult<Vec<Shift>> {
-    println!("Loading Previous Month..");
+    extra_months_back: usize
+) -> GenResult<Vec<Shift>> {
+    debug!("Loading Previous Month..");
     let now = time::OffsetDateTime::now_utc();
     let today = now.date();
-    let new_month = today.month().previous();
-    let new_year = if new_month == Month::December {
-        today.year() - 1
-    } else {
-        today.year()
-    };
+    let mut new_month = today.month().previous();
+    let mut new_year = if new_month == Month::December {
+            today.year() - 1
+        } else {
+            today.year()
+        };
+    for _ in 0..extra_months_back {
+        info!("Going way back");
+        new_month = new_month.previous();
+
+        new_year = if new_month == Month::December {
+            new_year - 1
+        } else {
+            new_year
+        };
+    }
+    let mut shifts = vec![]; 
+    if extra_months_back > 0 {
+        shifts.append(&mut load_previous_month_shifts(driver, extra_months_back - 1).await?)
+    }
     navigate_to_subdirectory(
         &driver,
         &format!("roster.aspx?{}-{}-01", new_year, new_month as u8),
     )
         .await?;
     wait_until_loaded(&driver).await.unwrap();
-    Ok(get_elements(&driver, new_month, new_year).await?)
+    shifts.append(&mut get_elements(&driver, new_month, new_year).await?);
+    Ok(shifts)
 }
 
 /*
@@ -73,7 +91,7 @@ Just presses the next button in webcom twice to load the next month.
 Only works correctly if the previous month function has been ran before
 */
 pub async fn load_next_month_shifts(driver: &WebDriver) -> WebDriverResult<Vec<Shift>> {
-    println!("Loading Next Month..");
+    debug!("Loading Next Month..");
     let now = time::OffsetDateTime::now_utc();
     let today = now.date();
     let new_month = today.month().next();
@@ -102,7 +120,7 @@ Logs into webcom, has no logic for when the login fails.
 It will also find and return the first name of the user, this will fail if the login is unsuccesful
 */
 pub async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> GenResult<()> {
-    println!("Logging in..");
+    info!("Logging in..");
     sign_in_webcom(driver, user, pass).await?;
     //wait_until_loaded(&driver).await?;
 
@@ -110,7 +128,7 @@ pub async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> GenRes
     // let rooster_knop = driver.query(By::LinkText("Rooster")).first().await?;
     // rooster_knop.wait_until().displayed().await?;
     // rooster_knop.click().await?;
-    println!("Loading rooster..");
+    info!("Loading rooster..");
     navigate_to_subdirectory(driver, "roster.aspx").await?;
     Ok(())
 }
@@ -140,10 +158,10 @@ async fn sign_in_webcom(driver: &WebDriver, user: &str, pass: &str) -> GenResult
         .await?
         .click()
         .await?;
-    println!("waiting until loaded");
+    debug!("waiting until login page is loaded");
     //wait_until_loaded(&driver).await?;
     let _ = wait_for_response(&driver, By::Tag("h3"), false).await;
-    println!("loaded");
+    debug!("login page is loaded");
     let name_text = match driver.find(By::Tag("h3")).await {
         Ok(element) => element.text().await?,
         Err(_) => {

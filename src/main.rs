@@ -261,15 +261,15 @@ async fn heartbeat(
 
 // Loads the sign in failure counter. Creates it if it does not exist
 fn load_sign_in_failure_count(path: &str) -> GenResult<IncorrectCredentialsCount> {
-    let failure_count_toml = std::fs::read_to_string(path)?;
-    let failure_counter: IncorrectCredentialsCount = toml::from_str(&failure_count_toml)?;
+    let failure_count_json = std::fs::read_to_string(path)?;
+    let failure_counter: IncorrectCredentialsCount = serde_json::from_str(&failure_count_json)?;
     Ok(failure_counter)
 }
 
 // Save the sign in faulure count file
 fn save_sign_in_failure_count(path: &str, counter: &IncorrectCredentialsCount) -> GenResult<()> {
-    let failure_counter_serialised = toml::to_string(counter)?;
-    let mut output = File::create(path).unwrap();
+    let failure_counter_serialised = serde_json::to_string(counter)?;
+    let mut output = File::create(path)?;
     write!(output, "{}", failure_counter_serialised)?;
     Ok(())
 }
@@ -291,7 +291,7 @@ fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>> {
         .unwrap_or("2".to_string())
         .parse()
         .unwrap_or(1);
-    let path = format!("./{BASE_DIRECTORY}sign_in_failure_count.toml");
+    let path = format!("./{BASE_DIRECTORY}sign_in_failure_count.json");
     // Load the existing failure counter, create a new one if one doesn't exist yet
     let mut failure_counter = match load_sign_in_failure_count(&path) {
         Ok(value) => value,
@@ -343,7 +343,7 @@ fn sign_in_failed_update(
     failed: bool,
     failure_type: Option<SignInFailure>,
 ) -> GenResult<()> {
-    let path = format!("./{BASE_DIRECTORY}sign_in_failure_count.toml");
+    let path = format!("./{BASE_DIRECTORY}sign_in_failure_count.json");
     let mut failure_counter = match load_sign_in_failure_count(&path) {
         Ok(failure) => failure,
         Err(_) => IncorrectCredentialsCount::default()

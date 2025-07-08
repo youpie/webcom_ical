@@ -36,6 +36,7 @@ pub mod shift;
 mod ical;
 pub mod kuma;
 mod parsing;
+mod health;
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -73,7 +74,7 @@ enum SignInFailure {
     Other(String),
 }
 
-#[derive(Debug, Error, PartialEq, Clone)]
+#[derive(Debug, Error, PartialEq, Clone, Serialize, Deserialize)]
 enum FailureType {
     #[error("Webcom ical was niet in staat na meerdere pogingen diensten correct in te laden")]
     TriesExceeded,

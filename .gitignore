@@ -2,7 +2,7 @@
 .env
 *.ics
 previous_shifts.toml
-sign_in_failure_count.toml
+sign_in_failure_count.json
 /calendar/*
 *.pdf
 /ansible/group_vars/all.yml

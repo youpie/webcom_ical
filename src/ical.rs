@@ -242,7 +242,7 @@ let previous_execution_date = match Date::parse(&read_to_string(PREVIOUS_EXECUTI
 fn create_event(shift: &Shift, metadata: Option<&Shift>) -> Event {
     let shift_link = create_shift_link(shift, true).unwrap_or("ERROR".to_owned());
     Event::new()
-                .summary(&format!("Shift - {}", shift.number))
+                .summary(&format!("Dienst - {}", shift.number))
                 .description(&format!(
                     "Dienstsoort • {}
 Duur • {} uur {} minuten

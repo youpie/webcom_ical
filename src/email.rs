@@ -135,53 +135,53 @@ It doesn't make a lot of sense that this function is in Email
 fn find_send_shift_mails(
     mailer: &SmtpTransport,
     previous_shifts: &Vec<Shift>,
-    current_shifts: &mut Vec<Shift>,
+    new_shifts: &mut Vec<Shift>,
     env: &EnvMailVariables,
 ) -> GenResult<Vec<Shift>> {
     let current_date: Date = Date::parse(
         &chrono::offset::Local::now().format("%d-%m-%Y").to_string(),
         DATE_DESCRIPTION,
     )?;
-    let mut current_shifts_map  = previous_shifts.iter().cloned().map(|shift| {(shift.magic_number,shift)}).collect::<HashMap<i64,Shift>>();
+    let mut previous_shifts_map  = previous_shifts.iter().cloned().map(|shift| {(shift.magic_number,shift)}).collect::<HashMap<i64,Shift>>();
     // Iterate through the current shifts to check for updates or new shifts
 
     // We start with a list of previously valid shifts. All marked as deleted
     // we will then loop over a list of newly loaded shifts from the website
-    for current_shift in &mut *current_shifts { 
+    for new_shift in &mut *new_shifts { 
         // If the hash of this current shift is found in the previously valid shift list,
         // we know this shift has remained unchanged. So mark it as such
-        if let Some(previous_shift) = current_shifts_map.get_mut(&current_shift.magic_number) {
+        if let Some(previous_shift) = previous_shifts_map.get_mut(&new_shift.magic_number) {
             previous_shift.state = ShiftState::Unchanged;
         } else {
             // if it is not found, we loop over the list of previously known shifts
-            for previous_shift in current_shifts_map.clone() {
+            for previous_shift in previous_shifts_map.clone() {
                 // if during the loop, we find a previously valid shift with the same starting date as the current shift
                 // whereby we assume only 1 shift can be active per day
                 // we know it must have changed, as if it hadn't it would have been found from its hash
                 // so it can be marked as changed
                 // We must first remove the old shift, then add the new shift
-                if previous_shift.1.date == current_shift.date {
-                    match current_shifts_map.remove(&previous_shift.0) {
+                if previous_shift.1.date == new_shift.date {
+                    match previous_shifts_map.remove(&previous_shift.0) {
                         Some(_) => (),
                         None => warn!("Tried to remove shift {} as it has been updated, but that failed", previous_shift.1.number)
                     };
-                    current_shift.state = ShiftState::Changed;
-                    current_shifts_map.insert(current_shift.magic_number, current_shift.clone());
+                    new_shift.state = ShiftState::Changed;
+                    previous_shifts_map.insert(new_shift.magic_number, new_shift.clone());
                     break;
                 }
             }
             // If after that loop, no previously known shift with the same start date as the new shift was found
             // we know it is a new shift, so we mark it as such and add it to the list of known shifts
             // I THINK this currently marks all removed shifts as new, so check that when i have the brain capacity 
-            if current_shift.state != ShiftState::Changed {
-                current_shift.state = ShiftState::New;
-                current_shifts_map.insert(current_shift.magic_number, current_shift.clone());
+            if new_shift.state != ShiftState::Changed {
+                new_shift.state = ShiftState::New;
+                previous_shifts_map.insert(new_shift.magic_number, new_shift.clone());
             }
             
         }
 
     }
-    let current_shift_vec: Vec<Shift> = current_shifts_map.values().cloned().collect();
+    let current_shift_vec: Vec<Shift> = previous_shifts_map.values().cloned().collect();
     let mut new_shifts: Vec<&Shift> = current_shift_vec.iter().filter(|item| {
         item.state == ShiftState::New
     }).collect();

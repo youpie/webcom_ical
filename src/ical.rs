@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs::{self, read_to_string, write}, path::{Path, PathBuf}, time::{Duration, SystemTime, UNIX_EPOCH}};
 
-use crate::{create_ical_filename, create_shift_link, ical, set_get_name, FailureType, GenResult, Shift, ShiftState};
+use crate::{create_ical_filename, create_shift_link, set_get_name, FailureType, GenResult, Shift, ShiftState};
 use chrono::{Datelike, Local, Months, NaiveDate, NaiveDateTime, NaiveTime};
 use dotenvy::var;
 use icalendar::{
@@ -175,8 +175,10 @@ impl PreviousShiftInformation {
 }
 
 pub fn get_ical_path() -> GenResult<PathBuf> {
-    let mut ical_path = PathBuf::from(var("SAVE_TARGET")?);
-    ical_path.set_file_name(create_ical_filename()?);
+    // var("SAVE_TARGET")?
+    let mut ical_path = PathBuf::new();
+    ical_path.push(var("SAVE_TARGET")?);
+    ical_path.push(create_ical_filename()?);
     Ok(ical_path)
 }
 

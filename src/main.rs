@@ -7,7 +7,6 @@ use email::send_errors;
 use email::send_welcome_mail;
 use reqwest;
 use serde::{Deserialize, Serialize};
-use std::default;
 use std::fs;
 use std::fs::File;
 use std::fs::write;
@@ -15,6 +14,7 @@ use std::hash::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::io::Write;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::sync::RwLock;
@@ -436,7 +436,6 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
     }
     new_shifts.append(&mut load_next_month_shifts(&driver).await?);
     info!("Found {} shifts", new_shifts.len());
-    
     let non_relevant_shifts = previous_shifts_information.previous_non_relevant_shifts;
     let mut previous_shifts = previous_shifts_information.previous_relevant_shifts;
     // The main send email function will return the broken shifts that are new or have changed.

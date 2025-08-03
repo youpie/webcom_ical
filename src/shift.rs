@@ -31,7 +31,7 @@ pub struct Shift {
     pub broken_period: Option<(Time, Time)>,
     pub magic_number: i64,
     // This field is not always needed. Especially when serializing.
-    #[serde(skip, default)]
+    #[serde(skip_deserializing, default)]
     pub state: ShiftState
 }
 
@@ -76,7 +76,8 @@ impl Shift {
         let mut is_broken = false;
         let shift_type = number.chars().nth(0).unwrap();
         let mut hasher = DefaultHasher::new();
-        text.hash(&mut hasher);
+        let hash_list = (date,&number);
+        hash_list.hash(&mut hasher);
         let magic_number = (hasher.finish() as i128 - i64::MAX as i128) as i64;
         if shift_type == 'g' || shift_type == 'G' {
             is_broken = true;

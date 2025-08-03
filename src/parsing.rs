@@ -30,11 +30,11 @@ async fn get_elements(
             }
         };
         if !text.is_empty() && text.contains("Dienstduur") {
-            debug!("Loading shift: {:?}", &text);
+            //debug!("Loading shift: {:?}", &text);
             let dag_text = element.find(By::Tag("strong")).await?.text().await?;
             let dag_text_split = dag_text.split_whitespace().next().unwrap();
 
-            debug!("dag {}", &dag_text);
+            debug!("dag {}", &dag_text_split);
             let dag: u8 = dag_text_split.parse().unwrap();
             let date = Date::from_calendar_date(year, month, dag).unwrap();
             let new_shift = Shift::new(text, date);

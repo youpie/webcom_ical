@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs::{self, read_to_string, write}, path::{Path, PathBuf}, time::{Duration, SystemTime, UNIX_EPOCH}};
 
-use crate::{create_ical_filename, create_shift_link, set_get_name, GenResult, Shift, ShiftState};
+use crate::{create_ical_filename, create_shift_link, set_get_name, FailureType, GenResult, Shift, ShiftState};
 use chrono::{Datelike, Local, Months, NaiveDate, NaiveDateTime, NaiveTime};
 use dotenvy::var;
 use icalendar::{
@@ -14,7 +14,7 @@ use time::{Date, OffsetDateTime, Time};
 // UPDATE THIS WHENEVER ANYTHING CHANGES IN THE ICAL
 // Add B if it modifies of removes an already existing value
 // Add W if it is wanted to resend the welcome mail
-const CALENDAR_VERSION: &str = "2W";
+const CALENDAR_VERSION: &str = "3";
 
 const PREVIOUS_EXECUTION_DATE_PATH: &str = "./kuma/previous_execution_date";
 pub const NON_RELEVANT_EVENTS_PATH: &str = "./kuma/non_relevant_events";
@@ -161,25 +161,31 @@ pub fn save_relevant_shifts(relevant_shifts: &Vec<Shift>) -> GenResult<()> {
 pub struct PreviousShiftInformation {
     pub previous_relevant_shifts: Vec<Shift>,
     pub previous_non_relevant_shifts: Vec<Shift>,
+    pub previous_exit_code: FailureType
 }
 
 impl PreviousShiftInformation {
     pub fn new() -> Self {
         Self {
             previous_non_relevant_shifts: vec![],
-            previous_relevant_shifts: vec![]
+            previous_relevant_shifts: vec![],
+            previous_exit_code: FailureType::default()
         }
     }
+}
+
+pub fn get_ical_path() -> GenResult<PathBuf> {
+    // var("SAVE_TARGET")?
+    let mut ical_path = PathBuf::new();
+    ical_path.push(var("SAVE_TARGET")?);
+    ical_path.push(create_ical_filename()?);
+    Ok(ical_path)
 }
 
 pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
     let relevant_events_exist = Path::new(RELEVANT_EVENTS_PATH).exists();
     let non_relevant_events_exist = Path::new(NON_RELEVANT_EVENTS_PATH).exists();
-    let main_ical_path = PathBuf::from(&format!(
-        "{}{}",
-        var("SAVE_TARGET").unwrap(),
-        create_ical_filename()?
-    ));
+    let main_ical_path = get_ical_path()?;
     if is_partial_calendar_regeneration_needed().is_none_or(|needed| needed) || !(relevant_events_exist && non_relevant_events_exist) {
         info!("calendar regeneration needed");
         if !main_ical_path.exists() {
@@ -195,6 +201,7 @@ pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
                 };
             }
         };
+        let previous_exit_code: FailureType = serde_json::from_str(main_calendar.property_value("X-EXIT-CODE").unwrap_or_default()).unwrap_or_default();
         let calendar_events = get_calendar_events(main_calendar);
         let calendar_split = split_calendar(calendar_events);
         let previous_shifts_hash = create_shift_hashmap(calendar_split.0);
@@ -206,6 +213,7 @@ pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
         Ok(Some(PreviousShiftInformation {
             previous_relevant_shifts: previous_shifts_hash,
             previous_non_relevant_shifts,
+            previous_exit_code
         }))
     } else {
         info!("Calendar regeneration NOT needed");
@@ -218,6 +226,7 @@ pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
         Ok(Some(PreviousShiftInformation {
             previous_relevant_shifts,
             previous_non_relevant_shifts,
+            previous_exit_code: FailureType::default()
         }))
     }
     
@@ -233,7 +242,7 @@ let previous_execution_date = match Date::parse(&read_to_string(PREVIOUS_EXECUTI
 fn create_event(shift: &Shift, metadata: Option<&Shift>) -> Event {
     let shift_link = create_shift_link(shift, true).unwrap_or("ERROR".to_owned());
     Event::new()
-                .summary(&format!("Shift - {}", shift.number))
+                .summary(&format!("Dienst - {}", shift.number))
                 .description(&format!(
                     "Dienstsoort • {}
 Duur • {} uur {} minuten
@@ -258,13 +267,14 @@ Shift sheet • {}",
 /*
 Creates the ICAL file to add to the calendar
 */
-pub fn create_ical(relevant_shifts: &Vec<Shift>, non_relevant_shifts: Vec<Shift>, metadata: Vec<Shift>) -> String {
+pub fn create_ical(relevant_shifts: &Vec<Shift>, non_relevant_shifts: Vec<Shift>, metadata: Vec<Shift>, previous_exit_code: FailureType) -> String {
     let mut shifts = non_relevant_shifts;
     let metadata_shifts_hashmap: HashMap<i64, Shift> = metadata.into_iter()
         .map(|x| (x.magic_number, x)) // Replace `operation(x)` with your specific operation
         .collect();
     shifts.append(&mut relevant_shifts.clone());
     let name = set_get_name(None);
+    let admin_email = var("MAIL_ERROR_TO").unwrap_or_default();
     // get the current systemtime as a unix timestamp
     let current_timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::from_secs(0));
     let heartbeat_interval: i32 = var("KUMA_HEARTBEAT_INTERVAL").unwrap_or("0".to_owned()).parse().unwrap_or(0);
@@ -275,6 +285,8 @@ pub fn create_ical(relevant_shifts: &Vec<Shift>, non_relevant_shifts: Vec<Shift>
         .append_property(("X-LAST-UPDATED", current_timestamp.as_secs().to_string().as_str()))
         .append_property(("X-UPDATE-INTERVAL-SECONDS", heartbeat_interval.to_string().as_str()))
         .append_property(("X-CAL-VERSION", CALENDAR_VERSION.to_string().as_str()))
+        .append_property(("X-ADMIN-EMAIL",admin_email.as_str()))
+        .append_property(("X-EXIT-CODE", serde_json::to_string(&previous_exit_code).unwrap_or("OK".to_owned()).as_str()))
         .append_property(("METHOD", "PUBLISH"))
         .timezone("Europe/Amsterdam")
         .done();

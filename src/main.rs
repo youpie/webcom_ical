@@ -7,7 +7,6 @@ use email::send_errors;
 use email::send_welcome_mail;
 use reqwest;
 use serde::{Deserialize, Serialize};
-use std::default;
 use std::fs;
 use std::fs::File;
 use std::fs::write;
@@ -36,6 +35,7 @@ pub mod shift;
 mod ical;
 pub mod kuma;
 mod parsing;
+mod health;
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -73,7 +73,7 @@ enum SignInFailure {
     Other(String),
 }
 
-#[derive(Debug, Error, PartialEq, Clone)]
+#[derive(Debug, Error, PartialEq, Clone, Serialize, Deserialize, Default)]
 enum FailureType {
     #[error("Webcom ical was niet in staat na meerdere pogingen diensten correct in te laden")]
     TriesExceeded,
@@ -86,6 +86,7 @@ enum FailureType {
     #[error("Een niet-specifieke fout is opgetreden: {0}")]
     Other(String),
     #[error("Ok")]
+    #[default]
     OK,
 }
 
@@ -236,11 +237,11 @@ async fn wait_untill_redirect(driver: &WebDriver) -> GenResult<()> {
 }
 
 async fn heartbeat(
-    reason: FailureType,
+    reason: &FailureType,
     url: Option<String>,
     personeelsnummer: &str,
 ) -> GenResult<()> {
-    if url.is_none() || reason == FailureType::TriesExceeded {
+    if url.is_none() || reason == &FailureType::TriesExceeded {
         info!("no heartbeat URL");
         return Ok(());
     }
@@ -401,7 +402,7 @@ fn set_get_name(new_name_option: Option<String>) -> String {
 }
 
 // Main program logic that has to run, if it fails it will all be reran.
-async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_count: usize) -> GenResult<()> {
+async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_count: usize) -> GenResult<FailureType> {
     driver.delete_all_cookies().await?;
     let main_url = "webcom.connexxion.nl";
     info!("Loading site: {}..", main_url);
@@ -418,11 +419,7 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
     load_calendar(&driver, &username, &password).await?;
     wait_until_loaded(&driver).await?;
     let mut new_shifts = load_current_month_shifts(&driver).await?;
-    let ical_path = PathBuf::from(&format!(
-        "{}{}",
-        var("SAVE_TARGET")?,
-        create_ical_filename()?
-    ));
+    let ical_path = get_ical_path()?;
     if !ical_path.exists() {
         info!("An existing calendar file has not been found, adding two extra months of shifts, also removing partial calendars");
         match || -> GenResult<()> {fs::remove_file(PathBuf::from(NON_RELEVANT_EVENTS_PATH))?;
@@ -439,7 +436,6 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
     }
     new_shifts.append(&mut load_next_month_shifts(&driver).await?);
     info!("Found {} shifts", new_shifts.len());
-    
     let non_relevant_shifts = previous_shifts_information.previous_non_relevant_shifts;
     let mut previous_shifts = previous_shifts_information.previous_relevant_shifts;
     // The main send email function will return the broken shifts that are new or have changed.
@@ -454,12 +450,12 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
     let mut current_shifts_modified = gebroken_shifts::split_night_shift(&current_shifts_modified);
     current_shifts_modified.sort_by_key(|shift| shift.magic_number);
     current_shifts_modified.dedup();
-    let calendar = create_ical(&current_shifts_modified, non_relevant_shifts, current_shifts);
+    let calendar = create_ical(&current_shifts_modified, non_relevant_shifts, current_shifts,previous_shifts_information.previous_exit_code.clone());
     send_welcome_mail(&ical_path)?;
     let mut output = File::create(&ical_path)?;
     info!("Writing to: {:?}", &ical_path);
     write!(output, "{}", calendar)?;
-    Ok(())
+    Ok(previous_shifts_information.previous_exit_code)
 }
 
 async fn initiate_webdriver() -> GenResult<WebDriver> {
@@ -490,7 +486,7 @@ async fn main() -> WebDriverResult<()> {
             error!("Kon driver niet opstarten: {:?}", &error);
             send_errors(&vec![error], &name).unwrap();
             error_reason = FailureType::GeckoEngine;
-            heartbeat(error_reason, kuma_url, &username).await.unwrap();
+            heartbeat(&error_reason, kuma_url, &username).await.unwrap();
             return Err(WebDriverError::FatalError("driver fout".to_string()));
         }
     };
@@ -512,13 +508,15 @@ async fn main() -> WebDriverResult<()> {
     }
     // Check if the program is allowed to run, or not due to failed sign-in
     let sign_in_check: Option<SignInFailure> = sign_in_failed_check(&name).unwrap();
+    let mut previous_exit_code = FailureType::default();
     if let Some(failure) = sign_in_check {
         retry_count = max_retry_count;
         error_reason = FailureType::SignInFailed(failure);
     }
     while retry_count <= max_retry_count - 1 {
         match main_program(&driver, &username, &password, retry_count).await {
-            Ok(_) => {
+            Ok(last_exit_code) => {
+                previous_exit_code = last_exit_code;
                 match sign_in_failed_update(&name, false, None) {
                     Ok(_) => (),
                     Err(err) => error!("Sign in failure check failed. error {err}")
@@ -579,7 +577,17 @@ async fn main() -> WebDriverResult<()> {
             }
         } 
     if error_reason != FailureType::TriesExceeded {
-        heartbeat(error_reason, kuma_url, &username).await.unwrap();
+        heartbeat(&error_reason, kuma_url, &username).await.unwrap();
+    }
+    // Update the exit code in the calendar if it is not equal to the previous value
+    if previous_exit_code != error_reason {
+        warn!("Previous exit code was different than current, need to update");
+        let ical_path = get_ical_path().unwrap();
+        let calendar = load_ical_file(&ical_path).unwrap().to_string();
+        let formatted_previous_exit_code = serde_json::to_string(&previous_exit_code).unwrap_or("OK".to_owned());
+        let formatted_current_exit_code = serde_json::to_string(&error_reason).unwrap_or("OK".to_owned());
+        let calendar = calendar.replace(&format!("X-EXIT-CODE:{formatted_previous_exit_code}"), &format!("X-EXIT-CODE:{formatted_current_exit_code}"));
+        _ = write(ical_path, calendar.to_string().as_bytes());
     }
     driver.quit().await?;
     Ok(())

@@ -14,7 +14,6 @@ use std::hash::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::io::Write;
-use std::path::Path;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::sync::RwLock;
@@ -440,17 +439,17 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
     let mut previous_shifts = previous_shifts_information.previous_relevant_shifts;
     // The main send email function will return the broken shifts that are new or have changed.
     // This is because the send email functions uses the previous shifts and scanns for new shifts
-    let mut current_shifts = match email::send_emails(&mut new_shifts, &mut previous_shifts) {
+    let shifts = match email::send_emails(&mut new_shifts, &mut previous_shifts) {
         Ok(shifts) => shifts,
         Err(err) => return Err(err),
     };
-    gebroken_shifts::gebroken_diensten_laden(&driver, &mut current_shifts).await?; // Replace the shifts with the newly created list of broken shifts
-    ical::save_relevant_shifts(&current_shifts)?;
-    let current_shifts_modified = gebroken_shifts::split_broken_shifts(current_shifts.clone())?;
-    let mut current_shifts_modified = gebroken_shifts::split_night_shift(&current_shifts_modified);
-    current_shifts_modified.sort_by_key(|shift| shift.magic_number);
-    current_shifts_modified.dedup();
-    let calendar = create_ical(&current_shifts_modified, non_relevant_shifts, current_shifts,previous_shifts_information.previous_exit_code.clone());
+    let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
+    ical::save_relevant_shifts(&shifts)?;
+    let shifts_modified = gebroken_shifts::split_broken_shifts(shifts.clone())?;
+    let mut shifts_modified = gebroken_shifts::split_night_shift(&shifts_modified);
+    shifts_modified.sort_by_key(|shift| shift.magic_number);
+    shifts_modified.dedup();
+    let calendar = create_ical(&shifts_modified, non_relevant_shifts, shifts,previous_shifts_information.previous_exit_code.clone());
     send_welcome_mail(&ical_path)?;
     let mut output = File::create(&ical_path)?;
     info!("Writing to: {:?}", &ical_path);

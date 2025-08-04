@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::fs::read_to_string;
 use url::Url;
 
-use crate::email;
+use crate::{email, set_get_name};
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -72,6 +72,7 @@ async fn create_notification(kuma_client: &Client, personeelsnummer: &str, kuma_
 
     let body_online = strfmt!(&base_html,
         content => strfmt!(&online_html,
+            name => set_get_name(None),
             kuma_url => kuma_url.to_string()
         )?,
         banner_color => COLOR_GREEN,
@@ -79,6 +80,7 @@ async fn create_notification(kuma_client: &Client, personeelsnummer: &str, kuma_
     )?;
     let body_offline = strfmt!(&base_html,
         content => strfmt!(&offline_html,
+            name => set_get_name(None),
             kuma_url => kuma_url.to_string(),
             msg => "{{msg}}"
         )?,

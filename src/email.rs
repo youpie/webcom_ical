@@ -172,7 +172,6 @@ fn find_send_shift_mails(
             }
             // If after that loop, no previously known shift with the same start date as the new shift was found
             // we know it is a new shift, so we mark it as such and add it to the list of known shifts
-            // I THINK this currently marks all removed shifts as new, so check that when i have the brain capacity 
             if new_shift.state != ShiftState::Changed {
                 new_shift.state = ShiftState::New;
                 previous_shifts_map.insert(new_shift.magic_number, new_shift.clone());
@@ -230,7 +229,7 @@ fn create_send_new_email(
     let base_html = fs::read_to_string("./templates/email_base.html").unwrap();
     let mut changed_mail_html = fs::read_to_string("./templates/changed_shift.html").unwrap();
     let shift_table = fs::read_to_string("./templates/shift_table.html").unwrap();
-    let email_shift_s = if new_shifts.len() != 1 { "en" } else { "" };
+    let enkel_meervoud = if new_shifts.len() != 1 { "en" } else { "" };
     let name = set_get_name(None);
     let new_update_text = match update {
         true => "geupdate",
@@ -246,7 +245,8 @@ fn create_send_new_email(
             shift_end => shift.end.format(TIME_DESCRIPTION)?.to_string(),
             shift_duration_hour => shift.duration.whole_hours().to_string(),
             shift_duration_minute => (shift.duration.whole_minutes() % 60).to_string(),
-            shift_link => create_shift_link(shift, false)?
+            shift_link => create_shift_link(shift, false).unwrap_or_default(),
+            bussie_login => if let Ok(url) = create_footer(true) {format!("/loginlink/{url}")} else {String::new()}
         )?;
         shift_tables.push_str(&shift_table_clone);
     }
@@ -255,13 +255,13 @@ fn create_send_new_email(
         name => name.clone(),
         shift_changed_ammount => new_shifts.len().to_string(),
         new_update => new_update_text.to_string(),
-        single_plural => email_shift_s.to_string(),
+        single_plural => enkel_meervoud.to_string(),
         shift_tables => shift_tables.to_string()
     )?;
     let email_body_html = strfmt!(&base_html, 
         content => changed_mail_html,
         banner_color => COLOR_BLUE,
-        footer => create_footer(false)
+        footer => create_footer(false).unwrap_or(ERROR_VALUE.to_owned())
     )?;
 
     let email = Message::builder()
@@ -271,7 +271,7 @@ fn create_send_new_email(
             "Je hebt {} {} dienst{}",
             &new_shifts.len(),
             new_update_text,
-            email_shift_s
+            enkel_meervoud
         ))
         .header(ContentType::TEXT_HTML)
         .body(email_body_html)?;
@@ -279,7 +279,7 @@ fn create_send_new_email(
     Ok(())
 }
 
-fn create_footer(only_url:bool) -> String {
+fn create_footer(only_url:bool) -> GenResult<String> {
     let footer_text = r#"<tr>
       <td style="background-color:#FFFFFF; text-align:center; padding-top:0px;font-size:12px;">
         <a style="color:#9a9996;">{footer_text}
@@ -294,15 +294,16 @@ fn create_footer(only_url:bool) -> String {
       </td>
       </tr>"#;
     let domain = var("DOMAIN").unwrap_or(ERROR_VALUE.to_string());
-    let url = format!("{}/{}", domain, create_ical_filename().unwrap_or(ERROR_VALUE.to_owned()));
+    let url = format!("{}/{}", domain, create_ical_filename()?);
     let admin_email = var("MAIL_ERROR_TO").ok();
-    match only_url {
+    let return_value = match only_url {
         true => url,
         false => strfmt!(footer_text,
             footer_text => "Je agenda link:",
             footer_url => url,
             admin_email_comment => if let Some(email) = admin_email {format!("Vragen of opmerkingen? Neem contact op met {email}")} else {"".to_owned()}).unwrap_or("".to_owned()),
-        }
+        };
+    Ok(return_value)
 }
 
 fn send_removed_shifts_mail(
@@ -330,7 +331,7 @@ fn send_removed_shifts_mail(
             shift_end => shift.end.format(TIME_DESCRIPTION)?.to_string().strikethrough(),
             shift_duration_hour => shift.duration.whole_hours().to_string().strikethrough(),
             shift_duration_minute => (shift.duration.whole_minutes() % 60).to_string().strikethrough(),
-            shift_link => create_shift_link(shift, false)?
+            shift_link => create_shift_link(shift, false).unwrap_or_default()
         )?;
         shift_tables.push_str(&shift_table_clone);
     }
@@ -344,7 +345,7 @@ fn send_removed_shifts_mail(
     let email_body_html = strfmt!(&base_html, 
         content => removed_shift_html,
         banner_color => COLOR_BLUE,
-        footer => create_footer(false)
+        footer => create_footer(false).unwrap_or_default()
     )?;
     let email = Message::builder()
         .from(format!("{} <{}>",SENDER_NAME, &env.mail_from).parse()?)
@@ -433,7 +434,7 @@ pub fn send_welcome_mail(
 
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
-    let ical_username = var("ICAL_USER").unwrap_or("".to_owned());
+    let ical_username = var("ICAL_USER").unwrap_or_default();
     let ical_password = var("ICAL_PASS").unwrap_or(ERROR_VALUE.to_string());
 
     let name = set_get_name(None);
@@ -443,7 +444,7 @@ pub fn send_welcome_mail(
         auth_password => ical_password.clone(), 
         admin_email => env.mail_error_to.clone())?;
 
-    let agenda_url = create_footer(true);
+    let agenda_url = create_footer(true).unwrap_or(ERROR_VALUE.to_owned());
     let agenda_url_webcal = agenda_url.clone().replace("https", "webcal");
     // A lot of email clients don't want to open webcal links. So by pointing to a website which returns a 302 to a webcal link it tricks the email client
     let rewrite_url = var("WEBCAL_REWRITE_URL").unwrap_or_default();
@@ -472,7 +473,7 @@ pub fn send_welcome_mail(
         donation_link,
         iban,
         iban_name,
-        auth_credentials => if ical_username.is_empty() {"".to_owned()} else {auth_html},
+        auth_credentials => if ical_username.is_empty() {String::new()} else {auth_html},
         admin_email
     )?;
     let email_body_html = strfmt!(&base_html,
@@ -523,6 +524,7 @@ pub fn send_failed_signin_mail(
 
     let login_failure_html = strfmt!(&login_failure_html, 
         still_not_working_modifier,
+        name => set_get_name(None),
         retry_counter => error.retry_count,
         signin_error => verbose_error.to_string(),
         admin_email => env.mail_error_to.clone()
@@ -530,7 +532,7 @@ pub fn send_failed_signin_mail(
     let email_body_html = strfmt!(&base_html, 
         content => login_failure_html,
         banner_color => COLOR_RED,
-        footer => create_footer(false)
+        footer => create_footer(false).unwrap_or_default()
     )?;
 
     let email = Message::builder()
@@ -558,9 +560,10 @@ pub fn send_sign_in_succesful(name: &str) -> GenResult<()> {
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
     let email_body_html = strfmt!(&base_html, 
+        name => set_get_name(None),
         content => login_success_html,
         banner_color => COLOR_GREEN,
-        footer => create_footer(false)
+        footer => create_footer(false).unwrap_or_default()
     )?;
     
     let email = Message::builder()

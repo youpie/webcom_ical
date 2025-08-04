@@ -18,9 +18,10 @@ Does not return most errors as there are a few valid reason this function fails
 */
 pub async fn gebroken_diensten_laden(
     driver: &WebDriver,
-    all_shifts: &mut Vec<Shift>,
-) -> WebDriverResult<()> {
-    for shift in all_shifts {
+    all_shifts: &Vec<Shift>,
+) -> WebDriverResult<Vec<Shift>> {
+    let mut shifts_clone = all_shifts.clone();
+    for shift in shifts_clone.iter_mut() {
         if shift.is_broken && (shift.state == ShiftState::Changed || shift.state == ShiftState::New) {
             info!("Creating broken shift: {}", shift.number);
 
@@ -42,7 +43,7 @@ pub async fn gebroken_diensten_laden(
         }
     }
     info!("Done generating broken shifts");
-    Ok(())
+    Ok(shifts_clone)
 }
 
 /*

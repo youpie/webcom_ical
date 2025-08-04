@@ -34,9 +34,9 @@ trait StrikethroughString {
 impl StrikethroughString for String {
     fn strikethrough(&self) -> String {
     self
-            .chars()
-            .map(|c| format!("{}{}", c, '\u{0336}'))
-            .collect()
+        .chars()
+        .map(|c| format!("{}{}", c, '\u{0336}'))
+        .collect()
     }
 }
 
@@ -246,7 +246,8 @@ fn create_send_new_email(
             shift_duration_hour => shift.duration.whole_hours().to_string(),
             shift_duration_minute => (shift.duration.whole_minutes() % 60).to_string(),
             shift_link => create_shift_link(shift, false).unwrap_or_default(),
-            bussie_login => if let Ok(url) = create_footer(true) {format!("/loginlink/{url}")} else {String::new()}
+            bussie_login => if let Ok(url) = create_footer(true) {format!("/loginlink/{url}")} else {String::new()},
+            shift_link_pdf => create_shift_link(shift, true).unwrap_or_default()
         )?;
         shift_tables.push_str(&shift_table_clone);
     }
@@ -331,7 +332,9 @@ fn send_removed_shifts_mail(
             shift_end => shift.end.format(TIME_DESCRIPTION)?.to_string().strikethrough(),
             shift_duration_hour => shift.duration.whole_hours().to_string().strikethrough(),
             shift_duration_minute => (shift.duration.whole_minutes() % 60).to_string().strikethrough(),
-            shift_link => create_shift_link(shift, false).unwrap_or_default()
+            shift_link => create_shift_link(shift, false).unwrap_or_default(),
+            bussie_login => if let Ok(url) = create_footer(true) {format!("/loginlink/{url}")} else {String::new()},
+            shift_link_pdf => create_shift_link(shift, true).unwrap_or_default()
         )?;
         shift_tables.push_str(&shift_table_clone);
     }

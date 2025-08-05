@@ -282,7 +282,7 @@ fn get_password_hash() -> GenResult<u64> {
 }
 
 // If returning true, continue execution
-fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>> {
+fn sign_in_failed_check() -> GenResult<Option<SignInFailure>> {
     let resend_error_mail_count: usize = var("SIGNIN_FAIL_MAIL_REPEAT")
         .unwrap_or("24".to_string())
         .parse()
@@ -330,7 +330,7 @@ fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>> {
 
     if failure_counter.retry_count % resend_error_mail_count == 0 && failure_counter.error.is_some()
     {
-        email::send_failed_signin_mail(username, &failure_counter, false)?;
+        email::send_failed_signin_mail(&failure_counter, false)?;
     }
     save_sign_in_failure_count(&path, &failure_counter)?;
     Ok(return_value)
@@ -339,7 +339,6 @@ fn sign_in_failed_check(username: &str) -> GenResult<Option<SignInFailure>> {
 
 
 fn sign_in_failed_update(
-    username: &str,
     failed: bool,
     failure_type: Option<SignInFailure>,
 ) -> GenResult<()> {
@@ -357,14 +356,14 @@ fn sign_in_failed_update(
         failure_counter.error = failure_type;
         if failure_counter.retry_count == 0 {
             failure_counter.retry_count += 1;
-            email::send_failed_signin_mail(username, &failure_counter, true)?;
+            email::send_failed_signin_mail(&failure_counter, true)?;
         }
     }
     // if failed == false, reset counter
     else if failed == false {
         if failure_counter.error.is_some() {
             info!("Sign in succesful again!");
-            email::send_sign_in_succesful(username)?;
+            email::send_sign_in_succesful()?;
         }
         failure_counter.retry_count = 0;
         failure_counter.error = None;
@@ -506,7 +505,7 @@ async fn main() -> WebDriverResult<()> {
         }
     }
     // Check if the program is allowed to run, or not due to failed sign-in
-    let sign_in_check: Option<SignInFailure> = sign_in_failed_check(&name).unwrap();
+    let sign_in_check: Option<SignInFailure> = sign_in_failed_check().unwrap();
     let mut previous_exit_code = FailureType::default();
     if let Some(failure) = sign_in_check {
         retry_count = max_retry_count;
@@ -516,7 +515,7 @@ async fn main() -> WebDriverResult<()> {
         match main_program(&driver, &username, &password, retry_count).await {
             Ok(last_exit_code) => {
                 previous_exit_code = last_exit_code;
-                match sign_in_failed_update(&name, false, None) {
+                match sign_in_failed_update(false, None) {
                     Ok(_) => (),
                     Err(err) => error!("Sign in failure check failed. error {err}")
                 };
@@ -533,7 +532,7 @@ async fn main() -> WebDriverResult<()> {
                             )
                         } else {
                             retry_count = max_retry_count;
-                            sign_in_failed_update(&name, true, Some(y.clone())).unwrap();
+                            sign_in_failed_update(true, Some(y.clone())).unwrap();
                             error_reason = FailureType::SignInFailed(y.to_owned());
                             error!("Inloggen niet succesvol, fout: {:?}", y)
                         }

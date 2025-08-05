@@ -280,12 +280,6 @@ fn create_send_new_email(
     Ok(())
 }
 
-#[test]
-fn new_mail(){
-    let shift = Shift::new("Dienst: V2309 •  • Geldig vanaf: 29.06.2025 •  • Tijd: 06:14 - 13:54 •  • Dienstduur: 07:40 Uren •  • Loonuren: 07:40 Uren •  • Dagsoort:  • Donderdag •  • Dienstsoort:  • Rijdienst •  • Startplaats:  • ehvgas, Einhoven garage streek •  • Omschrijving:  • V".to_owned(),Date::from_calendar_date(2025, time::Month::June, 29).unwrap());
-    create_send_new_email(mailer, new_shifts, env, update)
-}
-
 fn create_footer(only_url:bool) -> GenResult<String> {
     let footer_text = r#"<tr>
       <td style="background-color:#FFFFFF; text-align:center; padding-top:0px;font-size:12px;">
@@ -436,7 +430,6 @@ pub fn send_welcome_mail(
         info!("Wanted to send welcome mail. But it is disabled");
         return Ok(());
     }
-
     let base_html = fs::read_to_string("./templates/email_base.html").unwrap();
     let onboarding_html = fs::read_to_string("./templates/onboarding_base.html").unwrap();
     let auth_html = fs::read_to_string("./templates/onboarding_auth.html").unwrap();
@@ -502,7 +495,6 @@ pub fn send_welcome_mail(
 }
 
 pub fn send_failed_signin_mail(
-    name: &str,
     error: &IncorrectCredentialsCount,
     first_time: bool,
 ) -> GenResult<()> {
@@ -520,7 +512,7 @@ pub fn send_failed_signin_mail(
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
     let still_not_working_modifier = if first_time { "" } else { "nog steeds " };
-
+    let name = set_get_name(None);
     let verbose_error = match &error.error {
         None => "Een onbekende fout...",
         Some(SignInFailure::IncorrectCredentials) => {
@@ -536,7 +528,8 @@ pub fn send_failed_signin_mail(
         name => set_get_name(None),
         retry_counter => error.retry_count,
         signin_error => verbose_error.to_string(),
-        admin_email => env.mail_error_to.clone()
+        admin_email => env.mail_error_to.clone(),
+        name => name.clone()
     )?;
     let email_body_html = strfmt!(&base_html, 
         content => login_failure_html,
@@ -546,7 +539,7 @@ pub fn send_failed_signin_mail(
 
     let email = Message::builder()
         .from(format!("WEBCOM ICAL <{}>", &env.mail_from).parse()?)
-        .to(format!("{} <{}>", name, &env.mail_to).parse()?)
+        .to(format!("{} <{}>", &name, &env.mail_to).parse()?)
         .subject("INLOGGEN WEBCOM NIET GELUKT!")
         .header(ContentType::TEXT_HTML)
         .body(email_body_html)?;
@@ -554,7 +547,7 @@ pub fn send_failed_signin_mail(
     Ok(())
 }
 
-pub fn send_sign_in_succesful(name: &str) -> GenResult<()> {
+pub fn send_sign_in_succesful() -> GenResult<()> {
     let send_failed_sign_in = EnvMailVariables::str_to_bool(
         &var("SEND_MAIL_SIGNIN_FAILED").unwrap_or("true".to_string()),
     );
@@ -564,13 +557,15 @@ pub fn send_sign_in_succesful(name: &str) -> GenResult<()> {
 
     let base_html = fs::read_to_string("./templates/email_base.html").unwrap();
     let login_success_html = fs::read_to_string("./templates/signin_succesful.html").unwrap();
-
+    let name = set_get_name(None);
     info!("Sending succesful sign in mail");
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
+    let sign_in_email_html = strfmt!(&login_success_html,
+        name => name.clone()
+    )?;
     let email_body_html = strfmt!(&base_html, 
-        name => set_get_name(None),
-        content => login_success_html,
+        content => sign_in_email_html,
         banner_color => COLOR_GREEN,
         footer => create_footer(false).unwrap_or_default()
     )?;
@@ -583,4 +578,59 @@ pub fn send_sign_in_succesful(name: &str) -> GenResult<()> {
         .body(email_body_html)?;
     mailer.send(&email)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn send_new_shift_mail() -> GenResult<()>{
+        let shift = create_example_shift();
+        let (env, mailer) = get_mailer()?;
+        create_send_new_email(&mailer, vec![&shift, &shift], &env, false)
+    }
+
+    #[test]
+    fn send_updated_shift_mail() -> GenResult<()>{
+        let shift = create_example_shift();
+        let (env, mailer) = get_mailer()?;
+        create_send_new_email(&mailer, vec![&shift, &shift], &env, true)
+    }
+
+    #[test]
+    fn send_deleted_shift_mail() -> GenResult<()>{
+        let shift = create_example_shift();
+        let (env, mailer) = get_mailer()?;
+        send_removed_shifts_mail(&mailer, &env,vec![&shift, &shift])
+    }
+
+    #[test]
+    fn send_welcome_mail_test() -> GenResult<()>{
+        send_welcome_mail(&PathBuf::new())
+    }
+
+    #[test]
+    fn send_failed_signin_test() -> GenResult<()> {
+        let credential_error = IncorrectCredentialsCount{
+            retry_count: 30,
+            error: Some(SignInFailure::IncorrectCredentials),
+            previous_password_hash: None
+        };
+        send_failed_signin_mail(&credential_error, false)
+    }
+
+    #[test]
+    fn send_succesful_sign_in() -> GenResult<()> {
+        send_sign_in_succesful()
+    }
+
+    fn create_example_shift() -> Shift {
+        Shift::new("Dienst: V2309 •  • Geldig vanaf: 29.06.2025 •  • Tijd: 06:14 - 13:54 •  • Dienstduur: 07:40 Uren •  • Loonuren: 07:40 Uren •  • Dagsoort:  • Donderdag •  • Dienstsoort:  • Rijdienst •  • Startplaats:  • ehvgas, Einhoven garage streek •  • Omschrijving:  • V".to_owned(),Date::from_calendar_date(2025, time::Month::June, 29).unwrap())
+    }
+
+    fn get_mailer() -> GenResult<(EnvMailVariables,SmtpTransport)> {
+        let env = EnvMailVariables::new(false)?;
+        let mailer = load_mailer(&env)?;
+        Ok((env, mailer))
+    }
 }

@@ -280,6 +280,12 @@ fn create_send_new_email(
     Ok(())
 }
 
+#[test]
+fn new_mail(){
+    let shift = Shift::new("Dienst: V2309 •  • Geldig vanaf: 29.06.2025 •  • Tijd: 06:14 - 13:54 •  • Dienstduur: 07:40 Uren •  • Loonuren: 07:40 Uren •  • Dagsoort:  • Donderdag •  • Dienstsoort:  • Rijdienst •  • Startplaats:  • ehvgas, Einhoven garage streek •  • Omschrijving:  • V".to_owned(),Date::from_calendar_date(2025, time::Month::June, 29).unwrap());
+    create_send_new_email(mailer, new_shifts, env, update)
+}
+
 fn create_footer(only_url:bool) -> GenResult<String> {
     let footer_text = r#"<tr>
       <td style="background-color:#FFFFFF; text-align:center; padding-top:0px;font-size:12px;">

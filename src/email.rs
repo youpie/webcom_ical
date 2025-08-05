@@ -18,7 +18,7 @@ type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 const ERROR_VALUE: &str = "HIER HOORT WAT ANDERS DAN DEZE TEKST TE STAAN, CONFIGURATIE INCORRECT";
 const SENDER_NAME: &str = "Peter";
-const TIME_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
+pub const TIME_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
     format_description!("[hour]:[minute]");
 pub const DATE_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
     format_description!("[day]-[month]-[year]");

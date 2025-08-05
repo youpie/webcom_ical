@@ -32,6 +32,7 @@ pub struct Shift {
     pub is_broken: bool,
     // If the shift is broken, between what time is the user free
     pub broken_period: Option<(Time, Time)>,
+    pub original_end_time: Option<Time>,
     pub magic_number: i64,
     // This field is not always needed. Especially when serializing.
     #[serde(skip_deserializing, default)]
@@ -120,6 +121,7 @@ impl Shift {
             description,
             is_broken,
             broken_period: None,
+            original_end_time: None,
             magic_number,
             state: ShiftState::Unknown,
         }

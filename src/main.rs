@@ -468,8 +468,9 @@ async fn main_program(
     };
     let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
     ical::save_relevant_shifts(&shifts)?;
-    let shifts_modified = gebroken_shifts::split_broken_shifts(shifts.clone())?;
-    let mut shifts_modified = gebroken_shifts::split_night_shift(&shifts_modified);
+    let shifts = gebroken_shifts::split_broken_shifts(shifts.clone())?;
+    let shifts = gebroken_shifts::stop_shift_at_midnight(&shifts.clone());
+    let mut shifts_modified = gebroken_shifts::split_night_shift(&shifts);
     shifts_modified.sort_by_key(|shift| shift.magic_number);
     shifts_modified.dedup();
     let calendar = create_ical(

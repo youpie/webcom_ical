@@ -5,6 +5,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use crate::email::TIME_DESCRIPTION;
 use crate::{
     FailureType, GenResult, Shift, ShiftState, create_ical_filename, create_shift_link,
     set_get_name,
@@ -287,8 +288,16 @@ let previous_execution_date = match Date::parse(&read_to_string(PREVIOUS_EXECUTI
 
 fn create_event(shift: &Shift, metadata: Option<&Shift>) -> Event {
     let shift_link = create_shift_link(shift, true).unwrap_or("ERROR".to_owned());
+    let cut_off_end_time = if let Some(end_time) = shift.original_end_time {
+        format!(
+            " ⏺ \nEindtijd - {}",
+            end_time.format(TIME_DESCRIPTION).unwrap()
+        )
+    } else {
+        String::new()
+    };
     Event::new()
-        .summary(&format!("Dienst - {}", shift.number))
+        .summary(&format!("Dienst - {}{cut_off_end_time}", shift.number))
         .description(&format!(
             "Dienstsoort • {}
 Duur • {} uur {} minuten

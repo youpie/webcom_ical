@@ -142,7 +142,7 @@ async fn check_sign_in_error(driver: &WebDriver) -> GenResult<FailureType> {
             return Ok(FailureType::SignInFailed(sign_in_error_type));
         }
         Err(_) => {
-            info!("Geen fount banner gevonden");
+            info!("Geen fout banner gevonden");
         }
     };
     Ok(FailureType::SignInFailed(SignInFailure::Other(

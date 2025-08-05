@@ -1,5 +1,6 @@
 extern crate pretty_env_logger;
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 
 use dotenvy::dotenv_override;
 use dotenvy::var;
@@ -30,24 +31,27 @@ use time::Time;
 
 pub mod email;
 pub mod gebroken_shifts;
-pub mod shift;
+mod health;
 mod ical;
 pub mod kuma;
 mod parsing;
-mod health;
+pub mod shift;
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 const BASE_DIRECTORY: &str = "kuma/";
 // the ;x should be equal to the ammount of fallback URLs
-const FALLBACK_URL: [&str;2] = ["https://dmz-wbc-web01.connexxion.nl/WebComm/default.aspx","https://dmz-wbc-web02.connexxion.nl/WebComm/default.aspx"];
+const FALLBACK_URL: [&str; 2] = [
+    "https://dmz-wbc-web01.connexxion.nl/WebComm/default.aspx",
+    "https://dmz-wbc-web02.connexxion.nl/WebComm/default.aspx",
+];
 static NAME: LazyLock<RwLock<Option<String>>> = LazyLock::new(|| RwLock::new(None));
 
-#[derive(Debug, Serialize, Deserialize, Clone,Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct IncorrectCredentialsCount {
     retry_count: usize,
     error: Option<SignInFailure>,
-    previous_password_hash: Option<u64>
+    previous_password_hash: Option<u64>,
 }
 
 impl IncorrectCredentialsCount {
@@ -55,7 +59,7 @@ impl IncorrectCredentialsCount {
         Self {
             retry_count: 0,
             error: None,
-            previous_password_hash: None
+            previous_password_hash: None,
         }
     }
 }
@@ -102,7 +106,7 @@ fn create_shift_link(shift: &Shift, include_domain: bool) -> GenResult<String> {
     let formatted_date = shift.date.format(date_format)?;
     let domain = match include_domain {
         true => var("PDF_SHIFT_DOMAIN").unwrap_or("https://emphisia.nl/shift/".to_string()),
-        false => "".to_owned()
+        false => "".to_owned(),
     };
     if domain.is_empty() && include_domain == true {
         return Ok(format!(
@@ -110,9 +114,9 @@ fn create_shift_link(shift: &Shift, include_domain: bool) -> GenResult<String> {
             &formatted_date
         ));
     }
-    let shift_number_bare = match shift.number.split("-").next(){
+    let shift_number_bare = match shift.number.split("-").next() {
         Some(shift_number) => shift_number,
-        None => return Err("Could not get shift number".into())
+        None => return Err("Could not get shift number".into()),
     };
     Ok(format!(
         "{domain}{shift_number_bare}?date={}",
@@ -250,7 +254,14 @@ async fn heartbeat(
         "status={}&msg={}&ping=",
         match reason.clone() {
             FailureType::GeckoEngine => "down",
-            FailureType::SignInFailed(failure) if matches!(failure, SignInFailure::WebcomDown | SignInFailure::TooManyTries | SignInFailure::Other(_)) => "down",
+            FailureType::SignInFailed(failure)
+                if matches!(
+                    failure,
+                    SignInFailure::WebcomDown
+                        | SignInFailure::TooManyTries
+                        | SignInFailure::Other(_)
+                ) =>
+                "down",
             _ => "up",
         },
         reason.to_string()
@@ -305,12 +316,12 @@ fn sign_in_failed_check() -> GenResult<Option<SignInFailure>> {
     if let Some(previous_password_hash) = failure_counter.previous_password_hash {
         if let Ok(current_password_hash) = get_password_hash() {
             if previous_password_hash != current_password_hash {
-                info!("Password hash has changed, resuming execution"); 
+                info!("Password hash has changed, resuming execution");
                 return Ok(None);
-            }    
+            }
         }
     }
-    
+
     // else check if retry counter == reduce_ammount, if not, stop running
     if failure_counter.retry_count == 0 {
         return_value = None;
@@ -321,8 +332,7 @@ fn sign_in_failed_check() -> GenResult<Option<SignInFailure>> {
         );
         failure_counter.retry_count += 1;
         return_value = None;
-    }
-    else {
+    } else {
         warn!("Skipped execution due to previous sign in error");
         failure_counter.retry_count += 1;
         return_value = Some(failure_counter.error.clone().unwrap());
@@ -336,16 +346,11 @@ fn sign_in_failed_check() -> GenResult<Option<SignInFailure>> {
     Ok(return_value)
 }
 
-
-
-fn sign_in_failed_update(
-    failed: bool,
-    failure_type: Option<SignInFailure>,
-) -> GenResult<()> {
+fn sign_in_failed_update(failed: bool, failure_type: Option<SignInFailure>) -> GenResult<()> {
     let path = format!("./{BASE_DIRECTORY}sign_in_failure_count.json");
     let mut failure_counter = match load_sign_in_failure_count(&path) {
         Ok(failure) => failure,
-        Err(_) => IncorrectCredentialsCount::default()
+        Err(_) => IncorrectCredentialsCount::default(),
     };
     if let Ok(current_password_hash) = get_password_hash() {
         debug!("Got current password hash: {current_password_hash}");
@@ -400,37 +405,56 @@ fn set_get_name(new_name_option: Option<String>) -> String {
 }
 
 // Main program logic that has to run, if it fails it will all be reran.
-async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_count: usize) -> GenResult<FailureType> {
+async fn main_program(
+    driver: &WebDriver,
+    username: &str,
+    password: &str,
+    retry_count: usize,
+) -> GenResult<FailureType> {
     driver.delete_all_cookies().await?;
     let main_url = "webcom.connexxion.nl";
     info!("Loading site: {}..", main_url);
     match driver.goto(main_url).await {
         Ok(_) => wait_untill_redirect(&driver).await?,
-        Err(_) => {error!("Failed waiting for redirect. Going to fallback {}",FALLBACK_URL[retry_count%FALLBACK_URL.len()]);
-        driver.goto(FALLBACK_URL[retry_count%FALLBACK_URL.len()]).await.map_err(|_| {Box::new(FailureType::ConnectError)})? }
+        Err(_) => {
+            error!(
+                "Failed waiting for redirect. Going to fallback {}",
+                FALLBACK_URL[retry_count % FALLBACK_URL.len()]
+            );
+            driver
+                .goto(FALLBACK_URL[retry_count % FALLBACK_URL.len()])
+                .await
+                .map_err(|_| Box::new(FailureType::ConnectError))?
+        }
     };
     // If getting previous shift information failed, just create an empty one. Because it will cause a new calendar to be created
     let previous_shifts_information = match get_previous_shifts()? {
         Some(previous_shifts) => previous_shifts,
-        None => PreviousShiftInformation::new()
+        None => PreviousShiftInformation::new(),
     };
     load_calendar(&driver, &username, &password).await?;
     wait_until_loaded(&driver).await?;
     let mut new_shifts = load_current_month_shifts(&driver).await?;
     let ical_path = get_ical_path()?;
     if !ical_path.exists() {
-        info!("An existing calendar file has not been found, adding two extra months of shifts, also removing partial calendars");
-        match || -> GenResult<()> {fs::remove_file(PathBuf::from(NON_RELEVANT_EVENTS_PATH))?;
-        Ok(fs::remove_file(PathBuf::from(RELEVANT_EVENTS_PATH))?)}() {
+        info!(
+            "An existing calendar file has not been found, adding two extra months of shifts, also removing partial calendars"
+        );
+        match || -> GenResult<()> {
+            fs::remove_file(PathBuf::from(NON_RELEVANT_EVENTS_PATH))?;
+            Ok(fs::remove_file(PathBuf::from(RELEVANT_EVENTS_PATH))?)
+        }() {
             Ok(_) => info!("Removing files succesful"),
-            Err(err) => warn!("Removing partial calendar files failed. Error: {}", err.to_string())
+            Err(err) => warn!(
+                "Removing partial calendar files failed. Error: {}",
+                err.to_string()
+            ),
         };
-        
-        new_shifts.append(&mut load_previous_month_shifts(&driver,2).await?);
-    }
-    else {
+
+        new_shifts.append(&mut load_previous_month_shifts(&driver, 2).await?);
+    } else {
         debug!("Existing calendar file found");
-        new_shifts.append(&mut load_previous_month_shifts(&driver,0).await?);
+        new_shifts.append(&mut load_previous_month_shifts(&driver, 0).await?);
     }
     new_shifts.append(&mut load_next_month_shifts(&driver).await?);
     info!("Found {} shifts", new_shifts.len());
@@ -448,7 +472,12 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
     let mut shifts_modified = gebroken_shifts::split_night_shift(&shifts_modified);
     shifts_modified.sort_by_key(|shift| shift.magic_number);
     shifts_modified.dedup();
-    let calendar = create_ical(&shifts_modified, non_relevant_shifts, shifts,previous_shifts_information.previous_exit_code.clone());
+    let calendar = create_ical(
+        &shifts_modified,
+        non_relevant_shifts,
+        shifts,
+        previous_shifts_information.previous_exit_code.clone(),
+    );
     send_welcome_mail(&ical_path)?;
     let mut output = File::create(&ical_path)?;
     info!("Writing to: {:?}", &ical_path);
@@ -500,7 +529,7 @@ async fn main() -> WebDriverResult<()> {
             debug!("Checking if kuma needs to be created");
             match kuma::first_run(&url_unwrap, &username).await {
                 Ok(_) => debug!("Kuma run was succesful"),
-                Err(err) => warn!("Kuma run was not succesful. Error: {}",err.to_string())
+                Err(err) => warn!("Kuma run was not succesful. Error: {}", err.to_string()),
             }
         }
     }
@@ -517,7 +546,7 @@ async fn main() -> WebDriverResult<()> {
                 previous_exit_code = last_exit_code;
                 match sign_in_failed_update(false, None) {
                     Ok(_) => (),
-                    Err(err) => error!("Sign in failure check failed. error {err}")
+                    Err(err) => error!("Sign in failure check failed. error {err}"),
                 };
                 retry_count = max_retry_count;
             }
@@ -567,13 +596,13 @@ async fn main() -> WebDriverResult<()> {
     // But that is for later
     // This currently informs the user if webcom is down
     if let Some(last_error) = running_errors.last() {
-            if let Some(failure_type) = last_error.downcast_ref::<FailureType>() {
-                if failure_type == &FailureType::ConnectError {
-                    info!("Failure reason is because webcom is down");
-                    error_reason = FailureType::ConnectError;
-                } 
+        if let Some(failure_type) = last_error.downcast_ref::<FailureType>() {
+            if failure_type == &FailureType::ConnectError {
+                info!("Failure reason is because webcom is down");
+                error_reason = FailureType::ConnectError;
             }
-        } 
+        }
+    }
     if error_reason != FailureType::TriesExceeded {
         heartbeat(&error_reason, kuma_url, &username).await.unwrap();
     }
@@ -582,9 +611,14 @@ async fn main() -> WebDriverResult<()> {
         warn!("Previous exit code was different than current, need to update");
         let ical_path = get_ical_path().unwrap();
         let calendar = load_ical_file(&ical_path).unwrap().to_string();
-        let formatted_previous_exit_code = serde_json::to_string(&previous_exit_code).unwrap_or("OK".to_owned());
-        let formatted_current_exit_code = serde_json::to_string(&error_reason).unwrap_or("OK".to_owned());
-        let calendar = calendar.replace(&format!("X-EXIT-CODE:{formatted_previous_exit_code}"), &format!("X-EXIT-CODE:{formatted_current_exit_code}"));
+        let formatted_previous_exit_code =
+            serde_json::to_string(&previous_exit_code).unwrap_or("OK".to_owned());
+        let formatted_current_exit_code =
+            serde_json::to_string(&error_reason).unwrap_or("OK".to_owned());
+        let calendar = calendar.replace(
+            &format!("X-EXIT-CODE:{formatted_previous_exit_code}"),
+            &format!("X-EXIT-CODE:{formatted_current_exit_code}"),
+        );
         _ = write(ical_path, calendar.to_string().as_bytes());
     }
     driver.quit().await?;

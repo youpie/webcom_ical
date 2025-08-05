@@ -1,12 +1,12 @@
-use crate::{shift::ShiftState, GenResult, Shift};
+use crate::{GenResult, Shift, shift::ShiftState};
 use async_recursion::async_recursion;
 use dotenvy::var;
 use thirtyfour::{
+    WebDriver, WebElement,
     error::{WebDriverError, WebDriverResult},
     prelude::*,
-    WebDriver, WebElement,
 };
-use time::{macros::format_description, Time};
+use time::{Time, macros::format_description};
 
 /*
 Main function for loading broken shifts
@@ -22,24 +22,25 @@ pub async fn gebroken_diensten_laden(
 ) -> WebDriverResult<Vec<Shift>> {
     let mut shifts_clone = all_shifts.clone();
     for shift in shifts_clone.iter_mut() {
-        if shift.is_broken && (shift.state == ShiftState::Changed || shift.state == ShiftState::New) {
+        if shift.is_broken && (shift.state == ShiftState::Changed || shift.state == ShiftState::New)
+        {
             info!("Creating broken shift: {}", shift.number);
 
             match get_broken_shift_time(driver, shift).await {
                 Ok(_) => {
-                    info!("Added broken shift time to shift {}",shift.number);
+                    info!("Added broken shift time to shift {}", shift.number);
                 }
                 Err(x) => {
-                    warn!(
-                        "An error occured creating a broken shift: {:?}",
-                        x
-                    );
+                    warn!("An error occured creating a broken shift: {:?}", x);
                 }
             };
             navigate_to_subdirectory(driver, "/WebComm/roster.aspx").await?; //Ga terug naar de rooster pagina, anders laden de gebroken shifts niet goed
             wait_for_response(driver, By::ClassName("calDay"), false).await?
         } else if shift.is_broken && shift.state == ShiftState::Unchanged {
-            info!("Shift {} is broken, but unchanged from last check", shift.number);
+            info!(
+                "Shift {} is broken, but unchanged from last check",
+                shift.number
+            );
         }
     }
     info!("Done generating broken shifts");
@@ -144,7 +145,10 @@ pub async fn find_broken_start_stop_time(
 A function to navigate to a subdirectory of the current URL
 Needed because if the while url is entered, the cookies will be lost and you will have to log in again
 */
-pub async fn navigate_to_subdirectory(driver: &WebDriver, subdirectory: &str) -> WebDriverResult<()> {
+pub async fn navigate_to_subdirectory(
+    driver: &WebDriver,
+    subdirectory: &str,
+) -> WebDriverResult<()> {
     let script = format!("window.location.href = '{}';", subdirectory);
     driver.execute(&script, vec![]).await?;
     Ok(())
@@ -154,12 +158,15 @@ pub async fn navigate_to_subdirectory(driver: &WebDriver, subdirectory: &str) ->
 pub fn split_broken_shifts(shifts: Vec<Shift>) -> GenResult<Vec<Shift>> {
     let mut shifts_clone = shifts.clone();
     let mut shifts_to_append = vec![];
-    let vec_len = shifts_clone.len() -1;
+    let vec_len = shifts_clone.len() - 1;
     for shift in shifts.iter().rev().enumerate() {
         let position = vec_len - shift.0;
         if shift.1.broken_period.is_some() {
             if let Some(mut shifts_split) = shift.1.split_broken() {
-                debug!("Broken shift {} has broken shift times of {:?}", shift.1.number, shift.1.broken_period);
+                debug!(
+                    "Broken shift {} has broken shift times of {:?}",
+                    shift.1.number, shift.1.broken_period
+                );
                 shifts_clone.remove(position);
                 shifts_to_append.append(&mut shifts_split);
             }

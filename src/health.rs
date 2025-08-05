@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{FailureType};
+use crate::FailureType;
 
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq, Clone)]
 struct ApplicationLogbook {
@@ -8,7 +8,7 @@ struct ApplicationLogbook {
     // How long the application has been in the same state
     occuring_since: usize,
     entries: Vec<LogbookEntry>,
-    application_state: ApplicationState
+    application_state: ApplicationState,
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq, Clone)]
@@ -33,7 +33,7 @@ enum FailureStateType {
 struct LogbookEntry {
     state: FailureStateType,
     location: Option<String>,
-    additional_info: Option<String>
+    additional_info: Option<String>,
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq, Clone)]

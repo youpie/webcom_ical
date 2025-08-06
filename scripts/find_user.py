@@ -137,7 +137,7 @@ def main():
 
     write_tmp(folder if folder else "")
     if not email:
-        env = dotenv_values(folder)
+        env = dotenv_values(f"{folder}/.env")
         email = env.get("MAIL_TO", "")
         print(email)
     sys.exit(0 if folder else 1)

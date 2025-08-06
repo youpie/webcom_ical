@@ -90,11 +90,12 @@ def main():
 
     email_map, user_map = collect_env_maps(BASE_DIR)
     name_map = collect_name_map(BASE_DIR)
-
+    email = False
     matches = []
     # 1) email
     if "@" in q:
         matches = email_map.get(lc, [])
+        email = True
     # 2) username
     elif q and q[0].isdigit():
         matches = user_map.get(lc, [])
@@ -135,9 +136,10 @@ def main():
             folder = None  # do not auto-cd on fallback
 
     write_tmp(folder if folder else "")
-    env = dotenv_values(Path().resolve())
-    email = env.get("EMAIL_TO", 0)
-    print(email)
+    if email:
+        env = dotenv_values(Path().resolve())
+        email = env.get("MAIL_TO", "")
+        print(email)
     sys.exit(0 if folder else 1)
 
 if __name__=="__main__":

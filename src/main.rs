@@ -474,11 +474,11 @@ Loads the main logic, and retries if it fails
 */
 #[tokio::main]
 async fn main() -> WebDriverResult<()> {
-    let mut logbook = ApplicationLogbook::load();
     dotenv_override().ok();
     pretty_env_logger::init();
     let version = var("CARGO_PKG_VERSION").unwrap_or("onbekend".to_string());
     warn!("Starting Webcom Ical version {version}");
+    let mut logbook = ApplicationLogbook::load();
     let mut error_reason = FailureType::OK;
     let name = set_get_name(None);
     let kuma_url = var("KUMA_URL").ok();

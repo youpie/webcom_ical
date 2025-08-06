@@ -136,8 +136,8 @@ def main():
             folder = None  # do not auto-cd on fallback
 
     write_tmp(folder if folder else "")
-    if email:
-        env = dotenv_values(Path().resolve())
+    if not email:
+        env = dotenv_values(folder)
         email = env.get("MAIL_TO", "")
         print(email)
     sys.exit(0 if folder else 1)

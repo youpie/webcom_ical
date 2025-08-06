@@ -75,16 +75,17 @@ def main(include_hidden: bool, only_failed: bool, single_user: bool, condensed: 
 
     if not single_user:
         if failures:
-            console.print("[bold red]Failing applications:[/]")
+            console.print("[bold red]Failed Users:[/]")
             for f in failures:
                 console.print(f" • {f}")
         else:
-            console.print("[bold green]All applications are OK![/]")
+            console.print("[bold green]All Users are OK![/]")
 
 def get_user(path, table, failures, only_failed, skip_docker):
     compose = path / "docker-compose.yml"
     kuma = path / "kuma"
     logbook = kuma / "logbook.json"
+    previous_execution_date = kuma / "previous_execution_date"
     envfile = path / ".env"
 
     # user’s display name
@@ -103,11 +104,24 @@ def get_user(path, table, failures, only_failed, skip_docker):
     window = "–"
     last_run = "–"
 
-    if logbook.exists() and envfile.exists():
-        # last run from file mtime
+    # last run from file mtime
+    ts = 0.0
+    long_offline = False
+    if logbook.exists():
         ts = logbook.stat().st_mtime
-        last_run = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+    elif previous_execution_date.exists():
+        ts = previous_execution_date.stat().st_mtime
+    if ts != 0.0:
+        last_run_time = datetime.fromtimestamp(ts)
+        last_run = "[blink][red]"
+        last_run += last_run_time.strftime("%Y-%m-%d %H:%M")
+        
+        if last_run_time + timedelta(days=2) < datetime.now():
+            long_offline = True
+    
 
+    if logbook.exists() and envfile.exists():
+        
         data = json.loads(logbook.read_text())
         raw_state = data.get("state", "Unknown")
         state = normalize_state(raw_state)
@@ -119,16 +133,20 @@ def get_user(path, table, failures, only_failed, skip_docker):
         calver = app.get("calendar_version", "–")
 
         env = dotenv_values(envfile)
-        parse_int = int(env.get("PARSE_INTERVAL", 0))
+        parse_int = int(env.get("PARSE_INTERVAL", 14400))
         window = human_duration(parse_int * rc)
     failed = False
     # colorize state
     if state.upper() == "OK":
         state_text = Text(state, style="green")
-    elif state != "–":
+    elif state != "–" or long_offline:
         failed = True
         state_text = Text(state, style="bold red")
-        failures.append(f"{uname} - {path.name} ⏺ {state_text}")
+        text = "[red][blink]" if long_offline else ""
+        text += f"{uname}"
+        text += f" - {path.name}" if path.name != uname else ""
+        text += f"  ~ {state_text}" if skip_docker and logbook.exists() else ""
+        failures.append(text)
     else:
         state_text = Text(state, style="dim")
     if failed or not only_failed:

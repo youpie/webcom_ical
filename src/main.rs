@@ -602,11 +602,12 @@ async fn main() -> WebDriverResult<()> {
     if error_reason != FailureType::TriesExceeded {
         heartbeat(&error_reason, kuma_url, &username).await.unwrap();
     }
+    _ = logbook.save(&error_reason);
     // Update the exit code in the calendar if it is not equal to the previous value
     if previous_exit_code != error_reason {
         warn!("Previous exit code was different than current, need to update");
         let ical_path = get_ical_path().unwrap();
-        let calendar = load_ical_file(&ical_path).unwrap().to_string();
+        let calendar = load_ical_file(&ical_path).unwrap_or_default().to_string();
         let formatted_previous_exit_code =
             serde_json::to_string(&previous_exit_code).unwrap_or("OK".to_owned());
         let formatted_current_exit_code =
@@ -617,7 +618,6 @@ async fn main() -> WebDriverResult<()> {
         );
         _ = write(ical_path, calendar.to_string().as_bytes());
     }
-    logbook.save(error_reason).unwrap();
     driver.quit().await?;
     Ok(())
 }

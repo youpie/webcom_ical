@@ -39,13 +39,13 @@ impl ApplicationLogbook {
     }
 
     // Populate the logbook values and save it to disk
-    pub fn save(&mut self, state: FailureType) -> GenResult<()> {
+    pub fn save(&mut self, state: &FailureType) -> GenResult<()> {
         let path = ApplicationLogbook::create_path();
         let execution_time = SystemTime::now().duration_since(self.application_state.system_time.ok_or("Previous system time not set!")?).and_then(|duration| Ok(duration.as_millis() as usize)).unwrap_or_default();
         self.application_state.execution_time_ms = execution_time;
-        self.repeat_count = if self.state == state {self.repeat_count + 1} else {0};
+        self.repeat_count = if self.state == *state {self.repeat_count + 1} else {0};
         self.application_state.calendar_version = CALENDAR_VERSION.to_owned();
-        self.state = state;
+        self.state = state.clone();
         write(path, serde_json::to_string_pretty(&self)?)?;
         Ok(())
     }

@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 import argparse
-import os
 import subprocess
 import json
 from pathlib import Path
-from datetime import timedelta
+from datetime import datetime, timedelta
 from dotenv import dotenv_values
 from rich.console import Console
 from rich.table import Table
@@ -12,10 +11,10 @@ from rich.text import Text
 
 def human_duration(seconds: int) -> str:
     td = timedelta(seconds=seconds)
-    weeks, rem = divmod(td.days, 7)
-    days = rem
-    hours, rem = divmod(td.seconds, 3600)
-    minutes = rem // 60
+    weeks, rem_days = divmod(td.days, 7)
+    days = rem_days
+    hours, rem_secs = divmod(td.seconds, 3600)
+    minutes = rem_secs // 60
     parts = []
     if weeks:
         parts.append(f"{weeks}w")
@@ -25,96 +24,108 @@ def human_duration(seconds: int) -> str:
         parts.append(f"{hours}h")
     if minutes:
         parts.append(f"{minutes}m")
-    return " ".join(parts) if parts else "0m"
+    return " ".join(parts) or "0m"
 
 def check_container_up(compose_file: Path) -> bool:
-    """Returns True if any container from this compose file is running."""
     try:
         result = subprocess.run(
-            ["docker-compose", "-f", str(compose_file), "ps", "--status", "running", "--quiet"],
-            capture_output=True,
-            text=True,
-            check=True,
+            ["docker", "compose", "-f", str(compose_file), "ps", "--status", "running", "--quiet"],
+            capture_output=True, text=True, check=True
         )
         return bool(result.stdout.strip())
     except subprocess.CalledProcessError:
         return False
 
-def main(include_hidden: bool):
+def normalize_state(raw_state):
+    if isinstance(raw_state, str):
+        return raw_state
+    if isinstance(raw_state, dict):
+        key, val = next(iter(raw_state.items()))
+        return f"{key}: {val}"
+    return str(raw_state)
+
+def main(include_hidden: bool, only_failed: bool):
     console = Console()
     table = Table(title="Application Status Overview", box=None, show_lines=True)
     table.add_column("User", style="bold")
-    table.add_column("Container Up?", justify="center")
+    table.add_column("Up?", justify="center")
     table.add_column("State")
-    table.add_column("Runs")
-    table.add_column("Exec (ms)")
-    table.add_column("Shifts")
-    table.add_column("Broken Shifts")
-    table.add_column("Cal Ver")
+    table.add_column("Runs", justify="right")
+    table.add_column("Exec (ms)", justify="right")
+    table.add_column("Shifts", justify="right")
+    table.add_column("Broken", justify="right")
+    table.add_column("CalVer")
     table.add_column("Window")
+    table.add_column("Last Run")
 
     failures = []
 
     root = Path(".")
     for d in sorted(root.iterdir()):
-        if not d.is_dir():
+        if not d.is_dir() or (d.name.startswith("_") and not include_hidden or d.name == "." or d.name == ".."):
             continue
-        name = d.name
-        if name.startswith("_") and not include_hidden:
-            continue
-
         compose = d / "docker-compose.yml"
-        kuma_dir = d / "kuma"
-        logbook = kuma_dir / "logbook.json"
+        kuma = d / "kuma"
+        logbook = kuma / "logbook.json"
         envfile = d / ".env"
 
-        if not (compose.exists() and logbook.exists() and envfile.exists()):
-            continue
-
-        # read username
-        uname = (kuma_dir / "name").read_text().strip() if (kuma_dir / "name").exists() else name
-
-        # parse logbook
-        data = json.loads(logbook.read_text())
-        state = data.get("state", "Unknown")
-        rc = data.get("repeat_count", 0)
-        app = data.get("application_state", {})
-        exec_ms = app.get("execution_time_ms", 0)
-        shifts = app.get("shifts", 0)
-        broken = app.get("broken_shifts", 0)
-        calver = app.get("calendar_version", "")
-
-        # parse interval
-        env = dotenv_values(envfile)
-        parse_int = int(env.get("PARSE_INTERVAL", 0))
-        total_seconds = parse_int * rc
-        window = human_duration(total_seconds)
+        # user’s display name
+        uname = (kuma / "name").read_text().strip() if (kuma / "name").exists() else d.name
 
         # container status
-        up = check_container_up(compose)
+        up = check_container_up(compose) if compose.exists() else False
         up_str = "[green]✔[/]" if up else "[red]✖[/]"
 
-        # color state
+        # defaults if no logbook
+        state = "–"
+        rc = exec_ms = shifts = broken = 0
+        calver = "–"
+        window = "–"
+        last_run = "–"
+
+        if logbook.exists() and envfile.exists():
+            # last run from file mtime
+            ts = logbook.stat().st_mtime
+            last_run = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+
+            data = json.loads(logbook.read_text())
+            raw_state = data.get("state", "Unknown")
+            state = normalize_state(raw_state)
+            rc = data.get("repeat_count", 0)
+            app = data.get("application_state", {})
+            exec_ms = app.get("execution_time_ms", 0)
+            shifts = app.get("shifts", 0)
+            broken = app.get("broken_shifts", 0)
+            calver = app.get("calendar_version", "–")
+
+            env = dotenv_values(envfile)
+            parse_int = int(env.get("PARSE_INTERVAL", 0))
+            window = human_duration(parse_int * rc)
+        failed = False
+        # colorize state
         if state.upper() == "OK":
             state_text = Text(state, style="green")
-        else:
+        elif state != "–":
+            failed = True
             state_text = Text(state, style="bold red")
             failures.append(uname)
-
-        table.add_row(
-            uname,
-            up_str,
-            state_text,
-            str(rc),
-            str(exec_ms),
-            str(shifts),
-            str(broken),
-            calver,
-            window,
-        )
+        else:
+            state_text = Text(state, style="dim")
+        if failed or not only_failed:
+            table.add_row(
+                uname,
+                up_str,
+                state_text,
+                str(rc) if logbook.exists() else "–",
+                str(exec_ms) if logbook.exists() else "–",
+                str(shifts) if logbook.exists() else "–",
+                str(broken) if logbook.exists() else "–",
+                calver,
+                window,
+                last_run,
+            )
 
     console.print(table)
-
     if failures:
         console.print("\n[bold red]Failing applications:[/]")
         for f in failures:
@@ -123,6 +134,7 @@ def main(include_hidden: bool):
         console.print("\n[bold green]All applications are OK![/]")
 
 if __name__ == "__main__":
+    import argparse
     parser = argparse.ArgumentParser(
         description="Check all user apps: container up, logbook state, and computed window."
     )
@@ -131,5 +143,10 @@ if __name__ == "__main__":
         action="store_true",
         help="also scan directories beginning with '_'"
     )
+    parser.add_argument(
+        "-f", "--only-failed",
+        action="store_true",
+        help="Only show failed dirs"
+    )
     args = parser.parse_args()
-    main(include_hidden=args.include_hidden)
+    main(include_hidden=args.include_hidden, only_failed=args.only_failed)

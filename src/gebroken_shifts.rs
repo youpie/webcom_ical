@@ -65,24 +65,24 @@ Not needed for most people
 pub fn split_night_shift(shifts: &Vec<Shift>) -> Vec<Shift> {
     let split_option = var("BREAK_UP_NIGHT_SHIFT").unwrap_or_default();
     let mut temp_shift: Vec<Shift> = vec![];
-    if split_option == "true" {
-        for shift in shifts {
-            if shift.end_date != shift.date {
-                let split_shift = Shift::new_from_existing(
-                    (
-                        Time::from_hms(0, 0, 0).unwrap(),
-                        Time::from_hms(0, 0, 0).unwrap(),
-                    ),
-                    shift,
-                    true,
-                );
-                temp_shift.extend(split_shift);
-            } else {
-                temp_shift.push(shift.clone());
-            }
-        }
-    } else {
+    if split_option != "true" {
         temp_shift = shifts.clone();
+        return temp_shift;
+    }
+    for shift in shifts {
+        if shift.end_date != shift.date {
+            let split_shift = Shift::new_from_existing(
+                (
+                    Time::from_hms(0, 0, 0).unwrap(),
+                    Time::from_hms(0, 0, 0).unwrap(),
+                ),
+                shift,
+                true,
+            );
+            temp_shift.extend(split_shift);
+        } else {
+            temp_shift.push(shift.clone());
+        }
     }
     temp_shift
 }
@@ -91,18 +91,17 @@ pub fn split_night_shift(shifts: &Vec<Shift>) -> Vec<Shift> {
 pub fn stop_shift_at_midnight(shifts: &Vec<Shift>) -> Vec<Shift> {
     let split_option = var("STOP_SHIFT_AT_MIDNIGHT").unwrap_or_default();
     let mut temp_shifts: Vec<Shift> = vec![];
-    if split_option == "true" {
-        for shift in shifts {
-            let mut shift_clone = shift.clone();
-            if shift.end < shift.start {
-                shift_clone.original_end_time = Some(shift_clone.end);
-                shift_clone.end = Time::from_hms(23, 59, 59).unwrap();
-                shift_clone.end_date = shift_clone.date; 
-            }
-            temp_shifts.push(shift_clone);
+    if split_option != "true" {
+        return shifts.clone();
+    }
+    for shift in shifts {
+        let mut shift_clone = shift.clone();
+        if shift.end_date != shift.date {
+            shift_clone.original_end_time = Some(shift_clone.end);
+            shift_clone.end = Time::from_hms(23, 59, 0).unwrap();
+            shift_clone.end_date = shift_clone.date; 
         }
-    } else {
-        temp_shifts = shifts.clone();
+        temp_shifts.push(shift_clone);
     }
     temp_shifts
 }

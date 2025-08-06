@@ -124,7 +124,7 @@ def get_user(path, table, failures, only_failed):
     elif state != "–":
         failed = True
         state_text = Text(state, style="bold red")
-        failures.append(f"{uname} - {d.name} ")
+        failures.append(f"{uname} - {path.name} ")
     else:
         state_text = Text(state, style="dim")
     if failed or not only_failed:

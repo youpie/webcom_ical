@@ -6,7 +6,18 @@ use thirtyfour::{
     error::{WebDriverError, WebDriverResult},
     prelude::*,
 };
+use thiserror::Error;
 use time::{Time, macros::format_description};
+
+#[derive(Debug, Error, Clone, PartialEq)]
+enum BrokenShiftErrorReason {
+    #[error("Niet volledige gebroken dienst")]
+    NotComplete,
+    #[error("Geen eerste afstaptijd")]
+    NoFirstAfstaptijd,
+    #[error("Geen tweede opstaptijd")]
+    NoSecondOpstaptijd,
+}
 
 /*
 Main function for loading broken shifts
@@ -30,8 +41,11 @@ pub async fn gebroken_diensten_laden(
                 Ok(_) => {
                     info!("Added broken shift time to shift {}", shift.number);
                 }
+                Err(x) if x.downcast_ref::<BrokenShiftErrorReason>() == Some(&BrokenShiftErrorReason::NotComplete) => {
+                    info!("An error occured creating a broken shift: {}", x.to_string());
+                }
                 Err(x) => {
-                    warn!("An error occured creating a broken shift: {:?}", x);
+                    warn!("An error occured creating a broken shift: {}", x.to_string());
                 }
             };
             navigate_to_subdirectory(driver, "/WebComm/roster.aspx").await?; //Ga terug naar de rooster pagina, anders laden de gebroken shifts niet goed
@@ -149,14 +163,12 @@ pub async fn find_broken_start_stop_time(
     let tijd_formaat = format_description!("[hour]:[minute]");
     match afstaptijden.len() {
         1 => {
-            return Err(Box::new(WebDriverError::FatalError(
-                "Not complete broken shift".to_string(),
-            )));
+            return Err(Box::new(BrokenShiftErrorReason::NotComplete));
         }
         _ => (),
     };
-    let afstaptijd = Time::parse(afstaptijden.first().ok_or("Geen eerste afstaptijd")?, tijd_formaat)?;
-    let opstaptijd = Time::parse(opstaptijden.last().ok_or("Geen tweede opstaptijd")?, tijd_formaat)?;
+    let afstaptijd = Time::parse(afstaptijden.first().ok_or(BrokenShiftErrorReason::NoFirstAfstaptijd)?, tijd_formaat)?;
+    let opstaptijd = Time::parse(opstaptijden.last().ok_or(BrokenShiftErrorReason::NoSecondOpstaptijd)?, tijd_formaat)?;
     Ok((afstaptijd, opstaptijd))
 }
 

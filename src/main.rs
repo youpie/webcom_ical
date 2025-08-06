@@ -495,8 +495,7 @@ Loads the main logic, and retries if it fails
 async fn main() -> WebDriverResult<()> {
     dotenv_override().ok();
     pretty_env_logger::init();
-    let version = var("CARGO_PKG_VERSION").unwrap_or("onbekend".to_string());
-    warn!("Starting Webcom Ical version {version}");
+    warn!("Starting Webcom Ical");
     let mut logbook = ApplicationLogbook::load();
     let mut error_reason = FailureType::OK;
     let name = set_get_name(None);

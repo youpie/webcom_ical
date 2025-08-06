@@ -57,12 +57,13 @@ def main(include_hidden: bool, only_failed: bool):
     table.add_column("CalVer")
     table.add_column("Window")
     table.add_column("Last Run")
+    table.add_column("Folder Name")
 
     failures = []
 
     root = Path(".")
     for d in sorted(root.iterdir()):
-        if not d.is_dir() or (d.name.startswith("_") and not include_hidden or d.name == "." or d.name == ".."):
+        if not d.is_dir() or (d.name.startswith("_") and not include_hidden or not (d/".env").exists()):
             continue
         compose = d / "docker-compose.yml"
         kuma = d / "kuma"
@@ -108,7 +109,7 @@ def main(include_hidden: bool, only_failed: bool):
         elif state != "–":
             failed = True
             state_text = Text(state, style="bold red")
-            failures.append(uname)
+            failures.append(f"{uname} - {d.name} ")
         else:
             state_text = Text(state, style="dim")
         if failed or not only_failed:
@@ -123,6 +124,7 @@ def main(include_hidden: bool, only_failed: bool):
                 calver,
                 window,
                 last_run,
+                d.name
             )
 
     console.print(table)

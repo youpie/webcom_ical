@@ -51,7 +51,7 @@ def main(include_hidden: bool, only_failed: bool):
     table.add_column("Up?", justify="center")
     table.add_column("State")
     table.add_column("Runs", justify="right")
-    table.add_column("Exec (ms)", justify="right")
+    table.add_column("Exec (s)", justify="right")
     table.add_column("Shifts", justify="right")
     table.add_column("Broken", justify="right")
     table.add_column("CalVer")
@@ -78,7 +78,7 @@ def main(include_hidden: bool, only_failed: bool):
 
         # defaults if no logbook
         state = "–"
-        rc = exec_ms = shifts = broken = 0
+        rc = exec_s = shifts = broken = 0
         calver = "–"
         window = "–"
         last_run = "–"
@@ -93,7 +93,7 @@ def main(include_hidden: bool, only_failed: bool):
             state = normalize_state(raw_state)
             rc = data.get("repeat_count", 0)
             app = data.get("application_state", {})
-            exec_ms = app.get("execution_time_ms", 0)
+            exec_s = round(app.get("execution_time_ms", 0)/1000,1)
             shifts = app.get("shifts", 0)
             broken = app.get("broken_shifts", 0)
             calver = app.get("calendar_version", "–")
@@ -117,7 +117,7 @@ def main(include_hidden: bool, only_failed: bool):
                 up_str,
                 state_text,
                 str(rc) if logbook.exists() else "–",
-                str(exec_ms) if logbook.exists() else "–",
+                str(exec_s) if logbook.exists() else "–",
                 str(shifts) if logbook.exists() else "–",
                 str(broken) if logbook.exists() else "–",
                 calver,

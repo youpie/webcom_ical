@@ -132,7 +132,7 @@ Returns error if only 1 opstap/afstaptijd is found, this is the case when you ge
 */
 pub async fn find_broken_start_stop_time(
     shift_rows: Vec<WebElement>,
-) -> WebDriverResult<(Time, Time)> {
+) -> GenResult<(Time, Time)> {
     let mut afstaptijden: Vec<String> = vec![];
     let mut opstaptijden: Vec<String> = vec![];
     for row in shift_rows {
@@ -149,14 +149,14 @@ pub async fn find_broken_start_stop_time(
     let tijd_formaat = format_description!("[hour]:[minute]");
     match afstaptijden.len() {
         1 => {
-            return Err(WebDriverError::FatalError(
+            return Err(Box::new(WebDriverError::FatalError(
                 "Not complete broken shift".to_string(),
-            ));
+            )));
         }
         _ => (),
     };
-    let afstaptijd = Time::parse(afstaptijden.first().unwrap(), tijd_formaat).unwrap();
-    let opstaptijd = Time::parse(opstaptijden.last().unwrap(), tijd_formaat).unwrap();
+    let afstaptijd = Time::parse(afstaptijden.first().ok_or("Geen eerste afstaptijd")?, tijd_formaat)?;
+    let opstaptijd = Time::parse(opstaptijden.last().ok_or("Geen tweede opstaptijd")?, tijd_formaat)?;
     Ok((afstaptijd, opstaptijd))
 }
 

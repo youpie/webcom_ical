@@ -23,6 +23,7 @@ use thiserror::Error;
 use time::macros::format_description;
 use url::Url;
 
+use crate::health::ApplicationLogbook;
 use crate::ical::*;
 use crate::parsing::*;
 use crate::shift::*;
@@ -405,12 +406,7 @@ fn set_get_name(new_name_option: Option<String>) -> String {
 }
 
 // Main program logic that has to run, if it fails it will all be reran.
-async fn main_program(
-    driver: &WebDriver,
-    username: &str,
-    password: &str,
-    retry_count: usize,
-) -> GenResult<FailureType> {
+async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_count: usize, logbook: &mut ApplicationLogbook) -> GenResult<FailureType> {
     driver.delete_all_cookies().await?;
     let main_url = "webcom.connexxion.nl";
     info!("Loading site: {}..", main_url);
@@ -466,23 +462,21 @@ async fn main_program(
         Ok(shifts) => shifts,
         Err(err) => return Err(err),
     };
-    let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
-    ical::save_relevant_shifts(&shifts)?;
+    gebroken_shifts::gebroken_diensten_laden(&driver, &mut current_shifts).await?; // Replace the shifts with the newly created list of broken shifts
+    ical::save_relevant_shifts(&current_shifts)?;
     let shifts = gebroken_shifts::split_broken_shifts(shifts.clone())?;
     let shifts = gebroken_shifts::stop_shift_at_midnight(&shifts.clone());
     let mut shifts_modified = gebroken_shifts::split_night_shift(&shifts);
     shifts_modified.sort_by_key(|shift| shift.magic_number);
     shifts_modified.dedup();
-    let calendar = create_ical(
-        &shifts_modified,
-        non_relevant_shifts,
-        shifts,
-        previous_shifts_information.previous_exit_code.clone(),
-    );
+    let mut all_shifts = shifts_modified.clone();
+    all_shifts.append(&mut non_relevant_shifts.clone());
+    let calendar = create_ical(&shifts_modified, current_shifts,&previous_shifts_information.previous_exit_code);
     send_welcome_mail(&ical_path)?;
     let mut output = File::create(&ical_path)?;
     info!("Writing to: {:?}", &ical_path);
     write!(output, "{}", calendar)?;
+    logbook.generate_shift_statistics(&all_shifts);
     Ok(previous_shifts_information.previous_exit_code)
 }
 
@@ -503,6 +497,7 @@ async fn main() -> WebDriverResult<()> {
     pretty_env_logger::init();
     let version = var("CARGO_PKG_VERSION").unwrap_or("onbekend".to_string());
     warn!("Starting Webcom Ical version {version}");
+    let mut logbook = ApplicationLogbook::load();
     let mut error_reason = FailureType::OK;
     let name = set_get_name(None);
     let kuma_url = var("KUMA_URL").ok();
@@ -542,7 +537,7 @@ async fn main() -> WebDriverResult<()> {
         error_reason = FailureType::SignInFailed(failure);
     }
     while retry_count <= max_retry_count - 1 {
-        match main_program(&driver, &username, &password, retry_count).await {
+        match main_program(&driver, &username, &password, retry_count, &mut logbook).await {
             Ok(last_exit_code) => {
                 previous_exit_code = last_exit_code;
                 match sign_in_failed_update(false, None) {
@@ -622,6 +617,7 @@ async fn main() -> WebDriverResult<()> {
         );
         _ = write(ical_path, calendar.to_string().as_bytes());
     }
+    logbook.save(error_reason).unwrap();
     driver.quit().await?;
     Ok(())
 }

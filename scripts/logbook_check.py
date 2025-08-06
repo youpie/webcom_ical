@@ -44,7 +44,7 @@ def normalize_state(raw_state):
         return f"{key}: {val}"
     return str(raw_state)
 
-def main(include_hidden: bool, only_failed: bool):
+def main(include_hidden: bool, only_failed: bool, single_user: bool):
     console = Console()
     table = Table(title="Application Status Overview", box=None, show_lines=True)
     table.add_column("User", style="bold")
@@ -62,78 +62,85 @@ def main(include_hidden: bool, only_failed: bool):
     failures = []
 
     root = Path(".")
-    for d in sorted(root.iterdir()):
-        if not d.is_dir() or (d.name.startswith("_") and not include_hidden or not (d/".env").exists()):
-            continue
-        compose = d / "docker-compose.yml"
-        kuma = d / "kuma"
-        logbook = kuma / "logbook.json"
-        envfile = d / ".env"
-
-        # user’s display name
-        uname = (kuma / "name").read_text().strip() if (kuma / "name").exists() else d.name
-
-        # container status
-        up = check_container_up(compose) if compose.exists() else False
-        up_str = "[green]✔[/]" if up else "[red]✖[/]"
-
-        # defaults if no logbook
-        state = "–"
-        rc = exec_s = shifts = broken = 0
-        calver = "–"
-        window = "–"
-        last_run = "–"
-
-        if logbook.exists() and envfile.exists():
-            # last run from file mtime
-            ts = logbook.stat().st_mtime
-            last_run = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
-
-            data = json.loads(logbook.read_text())
-            raw_state = data.get("state", "Unknown")
-            state = normalize_state(raw_state)
-            rc = data.get("repeat_count", 0)
-            app = data.get("application_state", {})
-            exec_s = round(app.get("execution_time_ms", 0)/1000,1)
-            shifts = app.get("shifts", 0)
-            broken = app.get("broken_shifts", 0)
-            calver = app.get("calendar_version", "–")
-
-            env = dotenv_values(envfile)
-            parse_int = int(env.get("PARSE_INTERVAL", 0))
-            window = human_duration(parse_int * rc)
-        failed = False
-        # colorize state
-        if state.upper() == "OK":
-            state_text = Text(state, style="green")
-        elif state != "–":
-            failed = True
-            state_text = Text(state, style="bold red")
-            failures.append(f"{uname} - {d.name} ")
-        else:
-            state_text = Text(state, style="dim")
-        if failed or not only_failed:
-            table.add_row(
-                uname,
-                up_str,
-                state_text,
-                str(rc) if logbook.exists() else "–",
-                str(exec_s) if logbook.exists() else "–",
-                str(shifts) if logbook.exists() else "–",
-                str(broken) if logbook.exists() else "–",
-                calver,
-                window,
-                last_run,
-                d.name
-            )
+    if not single_user: 
+        for d in sorted(root.iterdir()):
+            if not d.is_dir() or (d.name.startswith("_") and not include_hidden or not (d/"docker-compose.yml").exists()):
+                continue
+            get_user(d,table,failures,only_failed)
+    else:
+        get_user(Path().resolve(),table,failures,only_failed)
 
     console.print(table)
-    if failures:
-        console.print("\n[bold red]Failing applications:[/]")
-        for f in failures:
-            console.print(f" • {f}")
+    if not single_user:
+        if failures:
+            console.print("\n[bold red]Failing applications:[/]")
+            for f in failures:
+                console.print(f" • {f}")
+        else:
+            console.print("\n[bold green]All applications are OK![/]")
+
+def get_user(path, table, failures, only_failed):
+    compose = path / "docker-compose.yml"
+    kuma = path / "kuma"
+    logbook = kuma / "logbook.json"
+    envfile = path / ".env"
+
+    # user’s display name
+    uname = (kuma / "name").read_text().strip() if (kuma / "name").exists() else path.name
+
+    # container status
+    up = check_container_up(compose) if compose.exists() else False
+    up_str = "[green]✔[/]" if up else "[red]✖[/]"
+
+    # defaults if no logbook
+    state = "–"
+    rc = exec_s = shifts = broken = 0
+    calver = "–"
+    window = "–"
+    last_run = "–"
+
+    if logbook.exists() and envfile.exists():
+        # last run from file mtime
+        ts = logbook.stat().st_mtime
+        last_run = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+
+        data = json.loads(logbook.read_text())
+        raw_state = data.get("state", "Unknown")
+        state = normalize_state(raw_state)
+        rc = data.get("repeat_count", 0)
+        app = data.get("application_state", {})
+        exec_s = round(app.get("execution_time_ms", 0)/1000,1)
+        shifts = app.get("shifts", 0)
+        broken = app.get("broken_shifts", 0)
+        calver = app.get("calendar_version", "–")
+
+        env = dotenv_values(envfile)
+        parse_int = int(env.get("PARSE_INTERVAL", 0))
+        window = human_duration(parse_int * rc)
+    failed = False
+    # colorize state
+    if state.upper() == "OK":
+        state_text = Text(state, style="green")
+    elif state != "–":
+        failed = True
+        state_text = Text(state, style="bold red")
+        failures.append(f"{uname} - {d.name} ")
     else:
-        console.print("\n[bold green]All applications are OK![/]")
+        state_text = Text(state, style="dim")
+    if failed or not only_failed:
+        table.add_row(
+            uname,
+            up_str,
+            state_text,
+            str(rc) if logbook.exists() else "–",
+            str(exec_s) if logbook.exists() else "–",
+            str(shifts) if logbook.exists() else "–",
+            str(broken) if logbook.exists() else "–",
+            calver,
+            window,
+            last_run,
+            path.name
+        )
 
 if __name__ == "__main__":
     import argparse
@@ -150,5 +157,10 @@ if __name__ == "__main__":
         action="store_true",
         help="Only show failed dirs"
     )
+    parser.add_argument(
+        "-s", "--single-user",
+        action="store_true",
+        help="only execute for the current directory"
+    )
     args = parser.parse_args()
-    main(include_hidden=args.include_hidden, only_failed=args.only_failed)
+    main(include_hidden=args.include_hidden, only_failed=args.only_failed, single_user=args.single_user)

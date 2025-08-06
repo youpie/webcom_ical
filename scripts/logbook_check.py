@@ -44,9 +44,9 @@ def normalize_state(raw_state):
         return f"{key}: {val}"
     return str(raw_state)
 
-def main(include_hidden: bool, only_failed: bool, single_user: bool):
+def main(include_hidden: bool, only_failed: bool, single_user: bool, condensed: bool):
     console = Console()
-    table = Table(title="Application Status Overview", box=None, show_lines=True)
+    table = Table(box=None, show_lines=True)
     table.add_column("User", style="bold")
     table.add_column("Up?", justify="center")
     table.add_column("State")
@@ -66,20 +66,22 @@ def main(include_hidden: bool, only_failed: bool, single_user: bool):
         for d in sorted(root.iterdir()):
             if not d.is_dir() or (d.name.startswith("_") and not include_hidden or not (d/"docker-compose.yml").exists()):
                 continue
-            get_user(d,table,failures,only_failed)
+            get_user(d,table,failures,only_failed,False if not condensed else True)
     else:
-        get_user(Path().resolve(),table,failures,only_failed)
+        get_user(Path().resolve(),table,failures,only_failed,False)
+    if not condensed:
+        console.print(table)
+        console.print("\n")
 
-    console.print(table)
     if not single_user:
         if failures:
-            console.print("\n[bold red]Failing applications:[/]")
+            console.print("[bold red]Failing applications:[/]")
             for f in failures:
                 console.print(f" • {f}")
         else:
-            console.print("\n[bold green]All applications are OK![/]")
+            console.print("[bold green]All applications are OK![/]")
 
-def get_user(path, table, failures, only_failed):
+def get_user(path, table, failures, only_failed, skip_docker):
     compose = path / "docker-compose.yml"
     kuma = path / "kuma"
     logbook = kuma / "logbook.json"
@@ -89,9 +91,11 @@ def get_user(path, table, failures, only_failed):
     uname = (kuma / "name").read_text().strip() if (kuma / "name").exists() else path.name
 
     # container status
-    up = check_container_up(compose) if compose.exists() else False
-    up_str = "[green]✔[/]" if up else "[red]✖[/]"
-
+    if not skip_docker:
+        up = check_container_up(compose) if compose.exists() else False
+        up_str = "[green]✔[/]" if up else "[red]✖[/]"
+    else:
+        up_str = ""
     # defaults if no logbook
     state = "–"
     rc = exec_s = shifts = broken = 0
@@ -124,7 +128,7 @@ def get_user(path, table, failures, only_failed):
     elif state != "–":
         failed = True
         state_text = Text(state, style="bold red")
-        failures.append(f"{uname} - {path.name} ")
+        failures.append(f"{uname} - {path.name} ⏺ {state_text}")
     else:
         state_text = Text(state, style="dim")
     if failed or not only_failed:
@@ -162,5 +166,10 @@ if __name__ == "__main__":
         action="store_true",
         help="only execute for the current directory"
     )
+    parser.add_argument(
+        "-c", "--condensed",
+        action="store_true",
+        help="Only show failing applications"
+    )
     args = parser.parse_args()
-    main(include_hidden=args.include_hidden, only_failed=args.only_failed, single_user=args.single_user)
+    main(include_hidden=args.include_hidden, only_failed=args.only_failed, single_user=args.single_user, condensed=args.condensed)

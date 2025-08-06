@@ -26,106 +26,116 @@ def collect_env_maps(base):
         if not env_file.exists(): continue
         env = parse_env(env_file)
         if "MAIL_TO" in env:
-            email_map[str(folder)] = [e.strip() for e in env["MAIL_TO"].split(",")]
+            for e in env["MAIL_TO"].split(","):
+                email_map.setdefault(e.strip().lower(), []).append(str(folder))
         if "USERNAME" in env:
-            user_map[str(folder)] = env["USERNAME"]
+            user_map.setdefault(env["USERNAME"].lower(), []).append(str(folder))
     return email_map, user_map
 
 def collect_name_map(base):
     nm = {}
-    for dirpath, dirnames, filenames in os.walk(base, topdown=True):
-        # prune any paths deeper than 3 levels under BASE_DIR
+    for dirpath, dirnames, filenames in os.walk(base):
         rel = Path(dirpath).relative_to(base)
         if len(rel.parts) > 3:
             dirnames[:] = []
             continue
-        if "kuma" in dirnames:
-            kuma_dir = Path(dirpath) / "kuma"
-            name_file = kuma_dir / "name"
-            if name_file.exists():
-                folder = Path(dirpath)
-                nm[str(folder)] = name_file.read_text().strip()
+        kuma = Path(dirpath) / "kuma" / "name"
+        if kuma.exists():
+            nm.setdefault(kuma.read_text().strip().lower(), []).append(dirpath)
     return nm
 
-def write_tmp(result):
-    if result:
-        TMP_FILE.write_text(result)
-    else:
-        # remove if exists
-        try: TMP_FILE.unlink()
-        except: pass
+def levenshtein(s1, s2):
+    len1, len2 = len(s1), len(s2)
+    d = list(range(len2+1))
+    for i in range(1, len1+1):
+        prev, d[0] = d[0], i
+        for j in range(1, len2+1):
+            cur = d[j]
+            cost = 0 if s1[i-1]==s2[j-1] else 1
+            d[j] = min(prev+cost, d[j]+1, d[j-1]+1)
+            prev = cur
+    return d[len2]
+
+def choose_from_list(q, options):
+    print(f"Multiple matches for “{q}”:")
+    for i,d in enumerate(options,1):
+        print(f"  {i}) {d}")
+    choice = input(f"Choose [1-{len(options)}]: ")
+    try:
+        idx = int(choice)-1
+        if 0 <= idx < len(options):
+            return options[idx]
+    except:
+        pass
+    print("Invalid choice – aborting.")
+    return None
+
+def write_tmp(path_str):
+    if path_str:
+        TMP_FILE.write_text(path_str)
+    elif TMP_FILE.exists():
+        TMP_FILE.unlink()
 
 def main():
     if len(sys.argv) < 2:
         print("Usage: kuma_find.py \"search\"")
         sys.exit(1)
-
     q = sys.argv[1]
     lc = q.lower()
 
     email_map, user_map = collect_env_maps(BASE_DIR)
     name_map = collect_name_map(BASE_DIR)
 
-    # pick which map to search
     matches = []
+    # 1) email
     if "@" in q:
-        # email search
-        for folder, emails in email_map.items():
-            if any(e.lower() == lc for e in emails):
-                matches.append(folder)
+        matches = email_map.get(lc, [])
+    # 2) username
     elif q and q[0].isdigit():
-        # username search
-        for folder, user in user_map.items():
-            if user.lower() == lc:
-                matches.append(folder)
+        matches = user_map.get(lc, [])
+    # 3) regular name
     else:
-        # title‐case name search
-        for folder, name in name_map.items():
-            if name.lower() == lc:
-                matches.append(folder)
+        matches = name_map.get(lc, [])
 
-    # helper to auto-ignore underscore
-    def pick_two(ms):
-        us = [d for d in ms if Path(d).name.startswith("_")]
-        non = [d for d in ms if not Path(d).name.startswith("_")]
-        if len(ms)==2 and len(us)==1 and len(non)==1:
-            return non[0]
-        return None
+    # 2-match underscore rule
+    def auto_pick(ms):
+        us = [m for m in ms if Path(m).name.startswith("_")]
+        non = [m for m in ms if not Path(m).name.startswith("_")]
+        if len(ms)==2 and len(non)==1:
+            return non[0], us[0]
+        return None, None
 
     folder = None
-    cnt = len(matches)
-    if cnt == 1:
+    n = len(matches)
+    if n == 1:
         folder = matches[0]
         print(f"Found: {folder}")
-    elif cnt == 2:
-        auto = pick_two(matches)
-        if auto:
-            print(f"Ignored (leading underscore): { [d for d in matches if d!=auto][0] }")
-            print(f"Auto‐selected: {auto}")
-            folder = auto
-    elif cnt > 2:
-        print(f"Multiple matches for “{q}”:")
-        for i,d in enumerate(matches,1):
-            print(f"  {i}) {d}")
-        try:
-            choice = int(input(f"Choose [1-{cnt}]: "))
-            if 1 <= choice <= cnt:
-                folder = matches[choice-1]
-                print(f"You picked: {folder}")
-        except:
-            print("Invalid choice – aborting.")
-    else:
-        print(f"No exact match for “{q}”.")
-        # skip levenshtein for brevity
-        # could implement fallback here
+    elif n == 2:
+        sel, ignored = auto_pick(matches)
+        if sel:
+            print(f"Ignored (leading underscore): {ignored}")
+            print(f"Auto-selected: {sel}")
+            folder = sel
+    elif n > 2:
+        folder = choose_from_list(q, matches)
+        if folder:
+            print(f"You picked: {folder}")
 
-    # write to temp and exit
-    if folder:
-        write_tmp(folder)
-        sys.exit(0)
-    else:
-        write_tmp("")  # clear
-        sys.exit(1)
+    # 4) fallback via Levenshtein on names only if no folder yet
+    if not folder and "@" not in q and not (q and q[0].isdigit()):
+        best = None
+        best_dist = 1e9
+        for name, dirs in name_map.items():
+            dist = levenshtein(name, lc)
+            if dist < best_dist:
+                best_dist = dist
+                best = dirs[0]
+        if best:
+            print(f"No exact match for “{q}”. Closest: {best}")
+            folder = None  # do not auto-cd on fallback
+
+    write_tmp(folder if folder else "")
+    sys.exit(0 if folder else 1)
 
 if __name__=="__main__":
     main()

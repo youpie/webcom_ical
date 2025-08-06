@@ -22,9 +22,12 @@
                 <td style="background-color:#eeeeee;">{shift_duration_hour} uur {shift_duration_minute} minuten</td>
             </tr>
             <tr>
-                <td colspan="2" style="background-color:#ffffff; border: none;">
+                <td style="text-align:center;">
+                    <a href="{shift_link_pdf}" style="color:#003366; text-decoration:none; font-weight:bold; font-size: smaller;">Bekijk PDF</a>
+                </td>  
+                <td style="background-color:#ffffff;">
                     <div style="display: flex; justify-content: center;">
-                    <a href="https://bussie.app/shifts/{shift_link}" target="_blank" style="all: unset;">
+                    <a href="https://bussie.app/shifts/{shift_link}{bussie_login}" target="_blank" style="all: unset;">
                         <button style=" background-color: #edf0fe;  
                             font-size: 14px;
                             font-weight: bold;
@@ -46,7 +49,6 @@
                     </a>
                     </div>
                 </td>
-                    
             </tr>
         </table>
     </td>

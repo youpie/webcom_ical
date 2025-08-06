@@ -1,20 +1,19 @@
+use crate::gebroken_shifts::{navigate_to_subdirectory, wait_for_response};
+use crate::{
+    FailureType, GenResult, Shift, check_if_webcom_unavailable, check_sign_in_error, set_get_name,
+    wait_until_loaded,
+};
 use async_recursion::async_recursion;
 use thirtyfour::error::{WebDriverError, WebDriverResult};
+use thirtyfour::prelude::ElementQueryable;
 use thirtyfour::{By, WebDriver};
 use time::{Date, Month};
-use thirtyfour::prelude::ElementQueryable;
-use crate::gebroken_shifts::{navigate_to_subdirectory, wait_for_response};
-use crate::{check_if_webcom_unavailable, check_sign_in_error, set_get_name, wait_until_loaded, FailureType, GenResult, Shift};
 
 /*
 Checks all supplied WebElements, it checks if the day contains the text "Dienstuur"  and if so, adds it to a Vec of valid shifts in the calendar
 Does not search itself for elements
 */
-async fn get_elements(
-    driver: &WebDriver,
-    month: Month,
-    year: i32,
-) -> WebDriverResult<Vec<Shift>> {
+async fn get_elements(driver: &WebDriver, month: Month, year: i32) -> WebDriverResult<Vec<Shift>> {
     let mut temp_emlements: Vec<Shift> = vec![];
     let elements = driver
         .query(By::ClassName("calDay"))
@@ -51,17 +50,17 @@ Just presses the previous button in webcom to load the previous month
 #[async_recursion]
 pub async fn load_previous_month_shifts(
     driver: &WebDriver,
-    extra_months_back: usize
+    extra_months_back: usize,
 ) -> GenResult<Vec<Shift>> {
     debug!("Loading Previous Month..");
     let now = time::OffsetDateTime::now_utc();
     let today = now.date();
     let mut new_month = today.month().previous();
     let mut new_year = if new_month == Month::December {
-            today.year() - 1
-        } else {
-            today.year()
-        };
+        today.year() - 1
+    } else {
+        today.year()
+    };
     for _ in 0..extra_months_back {
         info!("Going way back");
         new_month = new_month.previous();
@@ -72,7 +71,7 @@ pub async fn load_previous_month_shifts(
             new_year
         };
     }
-    let mut shifts = vec![]; 
+    let mut shifts = vec![];
     if extra_months_back > 0 {
         shifts.append(&mut load_previous_month_shifts(driver, extra_months_back - 1).await?)
     }
@@ -80,7 +79,7 @@ pub async fn load_previous_month_shifts(
         &driver,
         &format!("roster.aspx?{}-{}-01", new_year, new_month as u8),
     )
-        .await?;
+    .await?;
     wait_until_loaded(&driver).await.unwrap();
     shifts.append(&mut get_elements(&driver, new_month, new_year).await?);
     Ok(shifts)
@@ -104,7 +103,7 @@ pub async fn load_next_month_shifts(driver: &WebDriver) -> WebDriverResult<Vec<S
         &driver,
         &format!("roster.aspx?{}-{}-01", new_year, new_month as u8),
     )
-        .await?;
+    .await?;
     wait_until_loaded(&driver).await.unwrap();
     Ok(get_elements(&driver, new_month, new_year).await?)
 }
@@ -133,20 +132,17 @@ pub async fn load_calendar(driver: &WebDriver, user: &str, pass: &str) -> GenRes
     Ok(())
 }
 
-
-
 async fn sign_in_webcom(driver: &WebDriver, user: &str, pass: &str) -> GenResult<()> {
-    let possible_error = match driver.find(By::Id("h3")).await{
+    let possible_error = match driver.find(By::Id("h3")).await {
         Ok(element) => Some(element.text().await.unwrap_or("GEEN TEKST".to_owned())),
-        Err(_) => None
+        Err(_) => None,
     };
     let username_field = driver
         .find(By::Id("ctl00_cntMainBody_lgnView_lgnLogin_UserName"))
-        .await.map_err(|error| {
-            match check_if_webcom_unavailable(possible_error){
-                true => Box::new(FailureType::SignInFailed(crate::SignInFailure::WebcomDown)),
-                false => Box::new(FailureType::Other(error.to_string()))
-            }
+        .await
+        .map_err(|error| match check_if_webcom_unavailable(possible_error) {
+            true => Box::new(FailureType::SignInFailed(crate::SignInFailure::WebcomDown)),
+            false => Box::new(FailureType::Other(error.to_string())),
         })?;
     username_field.send_keys(user).await?;
     let password_field = driver

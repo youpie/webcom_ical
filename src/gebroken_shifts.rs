@@ -1,12 +1,12 @@
-use crate::{shift::ShiftState, GenResult, Shift};
+use crate::{GenResult, Shift, shift::ShiftState};
 use async_recursion::async_recursion;
 use dotenvy::var;
 use thirtyfour::{
+    WebDriver, WebElement,
     error::{WebDriverError, WebDriverResult},
     prelude::*,
-    WebDriver, WebElement,
 };
-use time::{macros::format_description, Time};
+use time::{Time, macros::format_description};
 
 /*
 Main function for loading broken shifts
@@ -18,31 +18,33 @@ Does not return most errors as there are a few valid reason this function fails
 */
 pub async fn gebroken_diensten_laden(
     driver: &WebDriver,
-    all_shifts: &mut Vec<Shift>,
-) -> WebDriverResult<()> {
-    for shift in all_shifts {
-        if shift.is_broken && (shift.state == ShiftState::Changed || shift.state == ShiftState::New) {
+    all_shifts: &Vec<Shift>,
+) -> WebDriverResult<Vec<Shift>> {
+    let mut shifts_clone = all_shifts.clone();
+    for shift in shifts_clone.iter_mut() {
+        if shift.is_broken && (shift.state == ShiftState::Changed || shift.state == ShiftState::New)
+        {
             info!("Creating broken shift: {}", shift.number);
 
             match get_broken_shift_time(driver, shift).await {
                 Ok(_) => {
-                    info!("Added broken shift time to shift {}",shift.number);
+                    info!("Added broken shift time to shift {}", shift.number);
                 }
                 Err(x) => {
-                    warn!(
-                        "An error occured creating a broken shift: {:?}",
-                        x
-                    );
+                    warn!("An error occured creating a broken shift: {:?}", x);
                 }
             };
             navigate_to_subdirectory(driver, "/WebComm/roster.aspx").await?; //Ga terug naar de rooster pagina, anders laden de gebroken shifts niet goed
             wait_for_response(driver, By::ClassName("calDay"), false).await?
         } else if shift.is_broken && shift.state == ShiftState::Unchanged {
-            info!("Shift {} is broken, but unchanged from last check", shift.number);
+            info!(
+                "Shift {} is broken, but unchanged from last check",
+                shift.number
+            );
         }
     }
     info!("Done generating broken shifts");
-    Ok(())
+    Ok(shifts_clone)
 }
 
 /*
@@ -61,28 +63,47 @@ https://gitlab.gnome.org/GNOME/gnome-calendar/-/issues/944
 Not needed for most people
 */
 pub fn split_night_shift(shifts: &Vec<Shift>) -> Vec<Shift> {
-    let split_option = var("BREAK_UP_NIGHT_SHIFT").unwrap();
+    let split_option = var("BREAK_UP_NIGHT_SHIFT").unwrap_or_default();
     let mut temp_shift: Vec<Shift> = vec![];
-    if split_option == "true" {
-        for shift in shifts {
-            if shift.end_date != shift.date {
-                let split_shift = Shift::new_from_existing(
-                    (
-                        Time::from_hms(0, 0, 0).unwrap(),
-                        Time::from_hms(0, 0, 0).unwrap(),
-                    ),
-                    shift,
-                    true,
-                );
-                temp_shift.extend(split_shift);
-            } else {
-                temp_shift.push(shift.clone());
-            }
-        }
-    } else {
+    if split_option != "true" {
         temp_shift = shifts.clone();
+        return temp_shift;
+    }
+    for shift in shifts {
+        if shift.end_date != shift.date {
+            let split_shift = Shift::new_from_existing(
+                (
+                    Time::from_hms(0, 0, 0).unwrap(),
+                    Time::from_hms(0, 0, 0).unwrap(),
+                ),
+                shift,
+                true,
+            );
+            temp_shift.extend(split_shift);
+        } else {
+            temp_shift.push(shift.clone());
+        }
     }
     temp_shift
+}
+
+// Function to stop shifts at midnight. This is a request from Jerry
+pub fn stop_shift_at_midnight(shifts: &Vec<Shift>) -> Vec<Shift> {
+    let split_option = var("STOP_SHIFT_AT_MIDNIGHT").unwrap_or_default();
+    let mut temp_shifts: Vec<Shift> = vec![];
+    if split_option != "true" {
+        return shifts.clone();
+    }
+    for shift in shifts {
+        let mut shift_clone = shift.clone();
+        if shift.end_date != shift.date {
+            shift_clone.original_end_time = Some(shift_clone.end);
+            shift_clone.end = Time::from_hms(23, 59, 0).unwrap();
+            shift_clone.end_date = shift_clone.date; 
+        }
+        temp_shifts.push(shift_clone);
+    }
+    temp_shifts
 }
 
 /*
@@ -143,7 +164,10 @@ pub async fn find_broken_start_stop_time(
 A function to navigate to a subdirectory of the current URL
 Needed because if the while url is entered, the cookies will be lost and you will have to log in again
 */
-pub async fn navigate_to_subdirectory(driver: &WebDriver, subdirectory: &str) -> WebDriverResult<()> {
+pub async fn navigate_to_subdirectory(
+    driver: &WebDriver,
+    subdirectory: &str,
+) -> WebDriverResult<()> {
     let script = format!("window.location.href = '{}';", subdirectory);
     driver.execute(&script, vec![]).await?;
     Ok(())
@@ -153,12 +177,15 @@ pub async fn navigate_to_subdirectory(driver: &WebDriver, subdirectory: &str) ->
 pub fn split_broken_shifts(shifts: Vec<Shift>) -> GenResult<Vec<Shift>> {
     let mut shifts_clone = shifts.clone();
     let mut shifts_to_append = vec![];
-    let vec_len = shifts_clone.len() -1;
+    let vec_len = shifts_clone.len() - 1;
     for shift in shifts.iter().rev().enumerate() {
         let position = vec_len - shift.0;
         if shift.1.broken_period.is_some() {
             if let Some(mut shifts_split) = shift.1.split_broken() {
-                debug!("Broken shift {} has broken shift times of {:?}", shift.1.number, shift.1.broken_period);
+                debug!(
+                    "Broken shift {} has broken shift times of {:?}",
+                    shift.1.number, shift.1.broken_period
+                );
                 shifts_clone.remove(position);
                 shifts_to_append.append(&mut shifts_split);
             }

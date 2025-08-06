@@ -2,14 +2,15 @@ use std::{fs::{read_to_string, write}, path::PathBuf, time::SystemTime};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ical::CALENDAR_VERSION, shift::Shift, FailureType, GenResult, BASE_DIRECTORY};
+use crate::FailureType;
 
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct ApplicationLogbook {
     pub state: FailureType,
     // How long the application has been in the same state
-    pub repeat_count: usize,
-    pub application_state: ApplicationState
+    occuring_since: usize,
+    entries: Vec<LogbookEntry>,
+    application_state: ApplicationState,
 }
 
 impl ApplicationLogbook {
@@ -38,30 +39,17 @@ impl ApplicationLogbook {
         self.application_state.shifts = number_of_shifts;
     }
 
-    // Populate the logbook values and save it to disk
-    pub fn save(&mut self, state: FailureType) -> GenResult<()> {
-        let path = ApplicationLogbook::create_path();
-        let execution_time = SystemTime::now().duration_since(self.application_state.system_time.ok_or("Previous system time not set!")?).and_then(|duration| Ok(duration.as_millis() as usize)).unwrap_or_default();
-        self.application_state.execution_time_ms = execution_time;
-        self.repeat_count = if self.state == state {self.repeat_count + 1} else {0};
-        self.application_state.calendar_version = CALENDAR_VERSION.to_owned();
-        self.state = state;
-        write(path, serde_json::to_string_pretty(&self)?)?;
-        Ok(())
-    }
-    fn create_path() -> PathBuf {
-        let mut path = PathBuf::from(BASE_DIRECTORY);
-        path.push("logbook.json");
-        path
-    }
+#[derive(Default, Debug, Serialize, Deserialize, PartialEq, Clone)]
+struct LogbookEntry {
+    state: FailureStateType,
+    location: Option<String>,
+    additional_info: Option<String>,
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq, Clone)]
-pub struct ApplicationState {
-    #[serde(default, skip)]
-    system_time: Option<SystemTime>,
-    pub execution_time_ms: usize,
-    pub shifts: usize,
-    pub broken_shifts: usize,
-    pub calendar_version: String,
+struct ApplicationState {
+    execution_time_ms: usize,
+    shifts: usize,
+    broken_shifts: usize,
+    calendar_version: String,
 }

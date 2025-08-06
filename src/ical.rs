@@ -1,6 +1,15 @@
-use std::{collections::HashMap, fs::{self, read_to_string, write}, path::{Path, PathBuf}, time::{Duration, SystemTime, UNIX_EPOCH}};
+use std::{
+    collections::HashMap,
+    fs::{self, read_to_string, write},
+    path::{Path, PathBuf},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
-use crate::{create_ical_filename, create_shift_link, set_get_name, FailureType, GenResult, Shift, ShiftState};
+use crate::email::TIME_DESCRIPTION;
+use crate::{
+    FailureType, GenResult, Shift, ShiftState, create_ical_filename, create_shift_link,
+    set_get_name,
+};
 use chrono::{Datelike, Local, Months, NaiveDate, NaiveDateTime, NaiveTime};
 use dotenvy::var;
 use icalendar::{
@@ -25,7 +34,7 @@ enum CalendarVersionError {
     #[error("Calendar version changed with a breaking change")]
     BreakingChange,
     #[error("Calendar version has changed, and welcome mail is requested")]
-    WelcomeChange
+    WelcomeChange,
 }
 
 pub fn load_ical_file(path: &Path) -> GenResult<Calendar> {
@@ -43,15 +52,15 @@ pub fn load_ical_file(path: &Path) -> GenResult<Calendar> {
                     }
                     'W' => {
                         warn!("Welcome change");
-                        return Err(Box::new(CalendarVersionError::WelcomeChange))
+                        return Err(Box::new(CalendarVersionError::WelcomeChange));
                     }
                     _ => {
                         info!("Non beaking change");
                     }
                 }
             }
-        },
-        _ => ()
+        }
+        _ => (),
     };
     Ok(calendar)
 }
@@ -78,7 +87,7 @@ fn split_calendar(events: Vec<Event>) -> (Vec<Event>, Option<Vec<Event>>) {
     // Subtract one month, with proper handling for end-of-month behavior
     let cutoff = first_of_this_month
         .checked_sub_months(Months::new(1))
-        .unwrap(); 
+        .unwrap();
 
     let mut non_relevant_events = vec![];
     let mut relevant_events = vec![];
@@ -97,10 +106,7 @@ fn split_calendar(events: Vec<Event>) -> (Vec<Event>, Option<Vec<Event>>) {
         }
     }
 
-    return (
-        relevant_events,
-        Some(non_relevant_events)
-    );
+    return (relevant_events, Some(non_relevant_events));
 }
 
 // If true, the partial calendars need to be recreated. If date has changed
@@ -114,21 +120,31 @@ fn is_partial_calendar_regeneration_needed() -> Option<bool> {
             return None;
         }
     };
-    let previous_execution_date =  match || -> GenResult<Date> {
+    let previous_execution_date = match || -> GenResult<Date> {
         let previous_execution_file = read_to_string(PREVIOUS_EXECUTION_DATE_PATH)?;
         Ok(from_str::<Date>(&previous_execution_file)?)
     }() {
         Ok(date) => date,
-        Err(err) => {warn!("Getting previous execution date went wrong. Err: {}",err.to_string());
-            _  = write(PREVIOUS_EXECUTION_DATE_PATH, serde_json::to_string(&current_date).unwrap().as_bytes());
-            return None}
+        Err(err) => {
+            warn!(
+                "Getting previous execution date went wrong. Err: {}",
+                err.to_string()
+            );
+            _ = write(
+                PREVIOUS_EXECUTION_DATE_PATH,
+                serde_json::to_string(&current_date).unwrap().as_bytes(),
+            );
+            return None;
+        }
     };
     debug!("Current date: {current_date}");
-    _ = write(PREVIOUS_EXECUTION_DATE_PATH, serde_json::to_string(&current_date).unwrap().as_bytes());
+    _ = write(
+        PREVIOUS_EXECUTION_DATE_PATH,
+        serde_json::to_string(&current_date).unwrap().as_bytes(),
+    );
     if previous_execution_date != current_date {
         Some(true)
-    }
-    else {
+    } else {
         Some(false)
     }
 }
@@ -144,15 +160,21 @@ fn create_shift_hashmap(events: Vec<Event>) -> Vec<Shift> {
                 previous_shift_map.push(shift);
             }
         }
-    } 
+    }
     previous_shift_map
 }
 
 // Save relevant shifts to disk
 pub fn save_relevant_shifts(relevant_shifts: &Vec<Shift>) -> GenResult<()> {
-    match write(RELEVANT_EVENTS_PATH, serde_json::to_string_pretty(relevant_shifts)?) {
+    match write(
+        RELEVANT_EVENTS_PATH,
+        serde_json::to_string_pretty(relevant_shifts)?,
+    ) {
         Ok(_) => info!("Saving Relevant shifts to disk was succesful"),
-        Err(err) => error!("Saving Relevant shifts to disk FAILED. ERROR: {}",err.to_string())
+        Err(err) => error!(
+            "Saving Relevant shifts to disk FAILED. ERROR: {}",
+            err.to_string()
+        ),
     };
     Ok(())
 }
@@ -161,7 +183,7 @@ pub fn save_relevant_shifts(relevant_shifts: &Vec<Shift>) -> GenResult<()> {
 pub struct PreviousShiftInformation {
     pub previous_relevant_shifts: Vec<Shift>,
     pub previous_non_relevant_shifts: Vec<Shift>,
-    pub previous_exit_code: FailureType
+    pub previous_exit_code: FailureType,
 }
 
 impl PreviousShiftInformation {
@@ -169,7 +191,7 @@ impl PreviousShiftInformation {
         Self {
             previous_non_relevant_shifts: vec![],
             previous_relevant_shifts: vec![],
-            previous_exit_code: FailureType::default()
+            previous_exit_code: FailureType::default(),
         }
     }
 }
@@ -186,7 +208,9 @@ pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
     let relevant_events_exist = Path::new(RELEVANT_EVENTS_PATH).exists();
     let non_relevant_events_exist = Path::new(NON_RELEVANT_EVENTS_PATH).exists();
     let main_ical_path = get_ical_path()?;
-    if is_partial_calendar_regeneration_needed().is_none_or(|needed| needed) || !(relevant_events_exist && non_relevant_events_exist) {
+    if is_partial_calendar_regeneration_needed().is_none_or(|needed| needed)
+        || !(relevant_events_exist && non_relevant_events_exist)
+    {
         info!("calendar regeneration needed");
         if !main_ical_path.exists() {
             return Ok(None);
@@ -196,40 +220,63 @@ pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
             Err(err) => {
                 return match err.downcast_ref::<CalendarVersionError>() {
                     Some(ver_err) if ver_err == &CalendarVersionError::BreakingChange => Ok(None),
-                    Some(ver_err) if ver_err == &CalendarVersionError::WelcomeChange => {info!("Removing existing calendar file"); _=fs::remove_file(main_ical_path); Ok(None)},
-                    _ => Err(err)
+                    Some(ver_err) if ver_err == &CalendarVersionError::WelcomeChange => {
+                        info!("Removing existing calendar file");
+                        _ = fs::remove_file(main_ical_path);
+                        Ok(None)
+                    }
+                    _ => Err(err),
                 };
             }
         };
-        let previous_exit_code: FailureType = serde_json::from_str(main_calendar.property_value("X-EXIT-CODE").unwrap_or_default()).unwrap_or_default();
+        let previous_exit_code: FailureType = serde_json::from_str(
+            main_calendar
+                .property_value("X-EXIT-CODE")
+                .unwrap_or_default(),
+        )
+        .unwrap_or_default();
         let calendar_events = get_calendar_events(main_calendar);
         let calendar_split = split_calendar(calendar_events);
         let previous_shifts_hash = create_shift_hashmap(calendar_split.0);
-        let previous_non_relevant_shifts: Vec<Shift> = create_shift_hashmap(calendar_split.1.unwrap_or_default());
-        match write(NON_RELEVANT_EVENTS_PATH, serde_json::to_string_pretty(&previous_non_relevant_shifts)?) {
+        let previous_non_relevant_shifts: Vec<Shift> =
+            create_shift_hashmap(calendar_split.1.unwrap_or_default());
+        match write(
+            NON_RELEVANT_EVENTS_PATH,
+            serde_json::to_string_pretty(&previous_non_relevant_shifts)?,
+        ) {
             Ok(_) => debug!("Saving non-relevant shifts to disk was succesful"),
-            Err(err) => error!("Saving non-relevant shifts to disk FAILED. ERROR: {}",err.to_string())
+            Err(err) => error!(
+                "Saving non-relevant shifts to disk FAILED. ERROR: {}",
+                err.to_string()
+            ),
         };
         Ok(Some(PreviousShiftInformation {
             previous_relevant_shifts: previous_shifts_hash,
             previous_non_relevant_shifts,
-            previous_exit_code
+            previous_exit_code,
         }))
     } else {
         info!("Calendar regeneration NOT needed");
         let relevant_shift_str = read_to_string(RELEVANT_EVENTS_PATH).unwrap();
         let irrelevant_shift_str = read_to_string(NON_RELEVANT_EVENTS_PATH).unwrap();
-        let previous_relevant_shifts: Vec<Shift> = serde_json::from_str(&relevant_shift_str).unwrap_or_default();
+        let previous_relevant_shifts: Vec<Shift> =
+            serde_json::from_str(&relevant_shift_str).unwrap_or_default();
         // All relevant shifts MUST FIRST BE MARKED AS DELETED for deleted shift detection to work
-        let previous_relevant_shifts = previous_relevant_shifts.into_iter().map(|mut shift| {shift.state = ShiftState::Deleted; shift}).collect();
-        let previous_non_relevant_shifts: Vec<Shift> = serde_json::from_str(&irrelevant_shift_str).unwrap_or_default();
+        let previous_relevant_shifts = previous_relevant_shifts
+            .into_iter()
+            .map(|mut shift| {
+                shift.state = ShiftState::Deleted;
+                shift
+            })
+            .collect();
+        let previous_non_relevant_shifts: Vec<Shift> =
+            serde_json::from_str(&irrelevant_shift_str).unwrap_or_default();
         Ok(Some(PreviousShiftInformation {
             previous_relevant_shifts,
             previous_non_relevant_shifts,
-            previous_exit_code: FailureType::default()
+            previous_exit_code: FailureType::default(),
         }))
     }
-    
 }
 
 /*
@@ -241,27 +288,35 @@ let previous_execution_date = match Date::parse(&read_to_string(PREVIOUS_EXECUTI
 
 fn create_event(shift: &Shift, metadata: Option<&Shift>) -> Event {
     let shift_link = create_shift_link(shift, true).unwrap_or("ERROR".to_owned());
+    let cut_off_end_time = if let Some(end_time) = shift.original_end_time {
+        format!(
+            " ⏺ \nEindtijd - {}",
+            end_time.format(TIME_DESCRIPTION).unwrap()
+        )
+    } else {
+        String::new()
+    };
     Event::new()
-                .summary(&format!("Dienst - {}", shift.number))
-                .description(&format!(
-                    "Dienstsoort • {}
+        .summary(&format!("Dienst - {}{cut_off_end_time}", shift.number))
+        .description(&format!(
+            "Dienstsoort • {}
 Duur • {} uur {} minuten
 Omschrijving • {}
 Shift sheet • {}",
-                    shift.kind,
-                    shift.duration.whole_hours(),
-                    shift.duration.whole_minutes() % 60,
-                    shift.description,
-                    shift_link
-                ))
-                .location(&shift.location)
-                .append_property(icalendar::Property::new(
-                    "X-BUSSIE-METADATA",
-                    &serde_json::to_string(metadata.unwrap_or(shift)).unwrap(),
-                ))
-                .starts(create_dateperhapstime(shift.date, shift.start))
-                .ends(create_dateperhapstime(shift.end_date, shift.end))
-                .done()
+            shift.kind,
+            shift.duration.whole_hours(),
+            shift.duration.whole_minutes() % 60,
+            shift.description,
+            shift_link
+        ))
+        .location(&shift.location)
+        .append_property(icalendar::Property::new(
+            "X-BUSSIE-METADATA",
+            &serde_json::to_string(metadata.unwrap_or(shift)).unwrap(),
+        ))
+        .starts(create_dateperhapstime(shift.date, shift.start))
+        .ends(create_dateperhapstime(shift.end_date, shift.end))
+        .done()
 }
 
 /*
@@ -274,17 +329,33 @@ pub fn create_ical(shifts: &Vec<Shift>, metadata: Vec<Shift>, previous_exit_code
     let name = set_get_name(None);
     let admin_email = var("MAIL_ERROR_TO").unwrap_or_default();
     // get the current systemtime as a unix timestamp
-    let current_timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::from_secs(0));
-    let heartbeat_interval: i32 = var("KUMA_HEARTBEAT_INTERVAL").unwrap_or("0".to_owned()).parse().unwrap_or(0);
+    let current_timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or(Duration::from_secs(0));
+    let heartbeat_interval: i32 = var("KUMA_HEARTBEAT_INTERVAL")
+        .unwrap_or("0".to_owned())
+        .parse()
+        .unwrap_or(0);
     info!("Creating calendar file...");
     let mut calendar = Calendar::new()
         .name(&format!("Hermes rooster - {}", name))
         .append_property(("X-USER-NAME", name.as_str()))
-        .append_property(("X-LAST-UPDATED", current_timestamp.as_secs().to_string().as_str()))
-        .append_property(("X-UPDATE-INTERVAL-SECONDS", heartbeat_interval.to_string().as_str()))
+        .append_property((
+            "X-LAST-UPDATED",
+            current_timestamp.as_secs().to_string().as_str(),
+        ))
+        .append_property((
+            "X-UPDATE-INTERVAL-SECONDS",
+            heartbeat_interval.to_string().as_str(),
+        ))
         .append_property(("X-CAL-VERSION", CALENDAR_VERSION.to_string().as_str()))
-        .append_property(("X-ADMIN-EMAIL",admin_email.as_str()))
-        .append_property(("X-EXIT-CODE", serde_json::to_string(&previous_exit_code).unwrap_or("OK".to_owned()).as_str()))
+        .append_property(("X-ADMIN-EMAIL", admin_email.as_str()))
+        .append_property((
+            "X-EXIT-CODE",
+            serde_json::to_string(&previous_exit_code)
+                .unwrap_or("OK".to_owned())
+                .as_str(),
+        ))
         .append_property(("METHOD", "PUBLISH"))
         .timezone("Europe/Amsterdam")
         .done();

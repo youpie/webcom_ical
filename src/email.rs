@@ -18,7 +18,7 @@ type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 const ERROR_VALUE: &str = "HIER HOORT WAT ANDERS DAN DEZE TEKST TE STAAN, CONFIGURATIE INCORRECT";
 const SENDER_NAME: &str = "Peter";
-const TIME_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
+pub const TIME_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
     format_description!("[hour]:[minute]");
 pub const DATE_DESCRIPTION: &[time::format_description::BorrowedFormatItem<'_>] =
     format_description!("[day]-[month]-[year]");
@@ -34,9 +34,9 @@ trait StrikethroughString {
 impl StrikethroughString for String {
     fn strikethrough(&self) -> String {
     self
-            .chars()
-            .map(|c| format!("{}{}", c, '\u{0336}'))
-            .collect()
+        .chars()
+        .map(|c| format!("{}{}", c, '\u{0336}'))
+        .collect()
     }
 }
 
@@ -172,7 +172,6 @@ fn find_send_shift_mails(
             }
             // If after that loop, no previously known shift with the same start date as the new shift was found
             // we know it is a new shift, so we mark it as such and add it to the list of known shifts
-            // I THINK this currently marks all removed shifts as new, so check that when i have the brain capacity 
             if new_shift.state != ShiftState::Changed {
                 new_shift.state = ShiftState::New;
                 previous_shifts_map.insert(new_shift.magic_number, new_shift.clone());
@@ -230,7 +229,7 @@ fn create_send_new_email(
     let base_html = fs::read_to_string("./templates/email_base.html").unwrap();
     let mut changed_mail_html = fs::read_to_string("./templates/changed_shift.html").unwrap();
     let shift_table = fs::read_to_string("./templates/shift_table.html").unwrap();
-    let email_shift_s = if new_shifts.len() != 1 { "en" } else { "" };
+    let enkel_meervoud = if new_shifts.len() != 1 { "en" } else { "" };
     let name = set_get_name(None);
     let new_update_text = match update {
         true => "geupdate",
@@ -246,7 +245,9 @@ fn create_send_new_email(
             shift_end => shift.end.format(TIME_DESCRIPTION)?.to_string(),
             shift_duration_hour => shift.duration.whole_hours().to_string(),
             shift_duration_minute => (shift.duration.whole_minutes() % 60).to_string(),
-            shift_link => create_shift_link(shift, false)?
+            shift_link => create_shift_link(shift, false).unwrap_or_default(),
+            bussie_login => if let Ok(url) = create_footer(true) {format!("/loginlink/{url}")} else {String::new()},
+            shift_link_pdf => create_shift_link(shift, true).unwrap_or_default()
         )?;
         shift_tables.push_str(&shift_table_clone);
     }
@@ -255,13 +256,13 @@ fn create_send_new_email(
         name => name.clone(),
         shift_changed_ammount => new_shifts.len().to_string(),
         new_update => new_update_text.to_string(),
-        single_plural => email_shift_s.to_string(),
+        single_plural => enkel_meervoud.to_string(),
         shift_tables => shift_tables.to_string()
     )?;
     let email_body_html = strfmt!(&base_html, 
         content => changed_mail_html,
         banner_color => COLOR_BLUE,
-        footer => create_footer(false)
+        footer => create_footer(false).unwrap_or(ERROR_VALUE.to_owned())
     )?;
 
     let email = Message::builder()
@@ -271,7 +272,7 @@ fn create_send_new_email(
             "Je hebt {} {} dienst{}",
             &new_shifts.len(),
             new_update_text,
-            email_shift_s
+            enkel_meervoud
         ))
         .header(ContentType::TEXT_HTML)
         .body(email_body_html)?;
@@ -279,7 +280,7 @@ fn create_send_new_email(
     Ok(())
 }
 
-fn create_footer(only_url:bool) -> String {
+fn create_footer(only_url:bool) -> GenResult<String> {
     let footer_text = r#"<tr>
       <td style="background-color:#FFFFFF; text-align:center; padding-top:0px;font-size:12px;">
         <a style="color:#9a9996;">{footer_text}
@@ -294,15 +295,16 @@ fn create_footer(only_url:bool) -> String {
       </td>
       </tr>"#;
     let domain = var("DOMAIN").unwrap_or(ERROR_VALUE.to_string());
-    let url = format!("{}/{}", domain, create_ical_filename().unwrap_or(ERROR_VALUE.to_owned()));
+    let url = format!("{}/{}", domain, create_ical_filename()?);
     let admin_email = var("MAIL_ERROR_TO").ok();
-    match only_url {
+    let return_value = match only_url {
         true => url,
         false => strfmt!(footer_text,
             footer_text => "Je agenda link:",
             footer_url => url,
             admin_email_comment => if let Some(email) = admin_email {format!("Vragen of opmerkingen? Neem contact op met {email}")} else {"".to_owned()}).unwrap_or("".to_owned()),
-        }
+        };
+    Ok(return_value)
 }
 
 fn send_removed_shifts_mail(
@@ -330,7 +332,9 @@ fn send_removed_shifts_mail(
             shift_end => shift.end.format(TIME_DESCRIPTION)?.to_string().strikethrough(),
             shift_duration_hour => shift.duration.whole_hours().to_string().strikethrough(),
             shift_duration_minute => (shift.duration.whole_minutes() % 60).to_string().strikethrough(),
-            shift_link => create_shift_link(shift, false)?
+            shift_link => create_shift_link(shift, false).unwrap_or_default(),
+            bussie_login => if let Ok(url) = create_footer(true) {format!("/loginlink/{url}")} else {String::new()},
+            shift_link_pdf => create_shift_link(shift, true).unwrap_or_default()
         )?;
         shift_tables.push_str(&shift_table_clone);
     }
@@ -344,7 +348,7 @@ fn send_removed_shifts_mail(
     let email_body_html = strfmt!(&base_html, 
         content => removed_shift_html,
         banner_color => COLOR_BLUE,
-        footer => create_footer(false)
+        footer => create_footer(false).unwrap_or_default()
     )?;
     let email = Message::builder()
         .from(format!("{} <{}>",SENDER_NAME, &env.mail_from).parse()?)
@@ -426,14 +430,13 @@ pub fn send_welcome_mail(
         info!("Wanted to send welcome mail. But it is disabled");
         return Ok(());
     }
-
     let base_html = fs::read_to_string("./templates/email_base.html").unwrap();
     let onboarding_html = fs::read_to_string("./templates/onboarding_base.html").unwrap();
     let auth_html = fs::read_to_string("./templates/onboarding_auth.html").unwrap();
 
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
-    let ical_username = var("ICAL_USER").unwrap_or("".to_owned());
+    let ical_username = var("ICAL_USER").unwrap_or_default();
     let ical_password = var("ICAL_PASS").unwrap_or(ERROR_VALUE.to_string());
 
     let name = set_get_name(None);
@@ -443,7 +446,7 @@ pub fn send_welcome_mail(
         auth_password => ical_password.clone(), 
         admin_email => env.mail_error_to.clone())?;
 
-    let agenda_url = create_footer(true);
+    let agenda_url = create_footer(true).unwrap_or(ERROR_VALUE.to_owned());
     let agenda_url_webcal = agenda_url.clone().replace("https", "webcal");
     // A lot of email clients don't want to open webcal links. So by pointing to a website which returns a 302 to a webcal link it tricks the email client
     let rewrite_url = var("WEBCAL_REWRITE_URL").unwrap_or_default();
@@ -472,7 +475,7 @@ pub fn send_welcome_mail(
         donation_link,
         iban,
         iban_name,
-        auth_credentials => if ical_username.is_empty() {"".to_owned()} else {auth_html},
+        auth_credentials => if ical_username.is_empty() {String::new()} else {auth_html},
         admin_email
     )?;
     let email_body_html = strfmt!(&base_html,
@@ -492,7 +495,6 @@ pub fn send_welcome_mail(
 }
 
 pub fn send_failed_signin_mail(
-    name: &str,
     error: &IncorrectCredentialsCount,
     first_time: bool,
 ) -> GenResult<()> {
@@ -510,7 +512,7 @@ pub fn send_failed_signin_mail(
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
     let still_not_working_modifier = if first_time { "" } else { "nog steeds " };
-
+    let name = set_get_name(None);
     let verbose_error = match &error.error {
         None => "Een onbekende fout...",
         Some(SignInFailure::IncorrectCredentials) => {
@@ -523,19 +525,21 @@ pub fn send_failed_signin_mail(
 
     let login_failure_html = strfmt!(&login_failure_html, 
         still_not_working_modifier,
+        name => set_get_name(None),
         retry_counter => error.retry_count,
         signin_error => verbose_error.to_string(),
-        admin_email => env.mail_error_to.clone()
+        admin_email => env.mail_error_to.clone(),
+        name => name.clone()
     )?;
     let email_body_html = strfmt!(&base_html, 
         content => login_failure_html,
         banner_color => COLOR_RED,
-        footer => create_footer(false)
+        footer => create_footer(false).unwrap_or_default()
     )?;
 
     let email = Message::builder()
         .from(format!("WEBCOM ICAL <{}>", &env.mail_from).parse()?)
-        .to(format!("{} <{}>", name, &env.mail_to).parse()?)
+        .to(format!("{} <{}>", &name, &env.mail_to).parse()?)
         .subject("INLOGGEN WEBCOM NIET GELUKT!")
         .header(ContentType::TEXT_HTML)
         .body(email_body_html)?;
@@ -543,7 +547,7 @@ pub fn send_failed_signin_mail(
     Ok(())
 }
 
-pub fn send_sign_in_succesful(name: &str) -> GenResult<()> {
+pub fn send_sign_in_succesful() -> GenResult<()> {
     let send_failed_sign_in = EnvMailVariables::str_to_bool(
         &var("SEND_MAIL_SIGNIN_FAILED").unwrap_or("true".to_string()),
     );
@@ -553,14 +557,17 @@ pub fn send_sign_in_succesful(name: &str) -> GenResult<()> {
 
     let base_html = fs::read_to_string("./templates/email_base.html").unwrap();
     let login_success_html = fs::read_to_string("./templates/signin_succesful.html").unwrap();
-
+    let name = set_get_name(None);
     info!("Sending succesful sign in mail");
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
+    let sign_in_email_html = strfmt!(&login_success_html,
+        name => name.clone()
+    )?;
     let email_body_html = strfmt!(&base_html, 
-        content => login_success_html,
+        content => sign_in_email_html,
         banner_color => COLOR_GREEN,
-        footer => create_footer(false)
+        footer => create_footer(false).unwrap_or_default()
     )?;
     
     let email = Message::builder()
@@ -571,4 +578,59 @@ pub fn send_sign_in_succesful(name: &str) -> GenResult<()> {
         .body(email_body_html)?;
     mailer.send(&email)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn send_new_shift_mail() -> GenResult<()>{
+        let shift = create_example_shift();
+        let (env, mailer) = get_mailer()?;
+        create_send_new_email(&mailer, vec![&shift, &shift], &env, false)
+    }
+
+    #[test]
+    fn send_updated_shift_mail() -> GenResult<()>{
+        let shift = create_example_shift();
+        let (env, mailer) = get_mailer()?;
+        create_send_new_email(&mailer, vec![&shift, &shift], &env, true)
+    }
+
+    #[test]
+    fn send_deleted_shift_mail() -> GenResult<()>{
+        let shift = create_example_shift();
+        let (env, mailer) = get_mailer()?;
+        send_removed_shifts_mail(&mailer, &env,vec![&shift, &shift])
+    }
+
+    #[test]
+    fn send_welcome_mail_test() -> GenResult<()>{
+        send_welcome_mail(&PathBuf::new())
+    }
+
+    #[test]
+    fn send_failed_signin_test() -> GenResult<()> {
+        let credential_error = IncorrectCredentialsCount{
+            retry_count: 30,
+            error: Some(SignInFailure::IncorrectCredentials),
+            previous_password_hash: None
+        };
+        send_failed_signin_mail(&credential_error, false)
+    }
+
+    #[test]
+    fn send_succesful_sign_in() -> GenResult<()> {
+        send_sign_in_succesful()
+    }
+
+    fn create_example_shift() -> Shift {
+        Shift::new("Dienst: V2309 •  • Geldig vanaf: 29.06.2025 •  • Tijd: 06:14 - 13:54 •  • Dienstduur: 07:40 Uren •  • Loonuren: 07:40 Uren •  • Dagsoort:  • Donderdag •  • Dienstsoort:  • Rijdienst •  • Startplaats:  • ehvgas, Einhoven garage streek •  • Omschrijving:  • V".to_owned(),Date::from_calendar_date(2025, time::Month::June, 29).unwrap())
+    }
+
+    fn get_mailer() -> GenResult<(EnvMailVariables,SmtpTransport)> {
+        let env = EnvMailVariables::new(false)?;
+        let mailer = load_mailer(&env)?;
+        Ok((env, mailer))
+    }
 }

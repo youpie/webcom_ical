@@ -1,4 +1,7 @@
-use std::{hash::{DefaultHasher, Hash, Hasher}, str::Split};
+use std::{
+    hash::{DefaultHasher, Hash, Hasher},
+    str::Split,
+};
 
 use serde::{Deserialize, Serialize};
 use time::{Date, Duration, Time};
@@ -12,7 +15,7 @@ pub enum ShiftState {
     Deleted,
     Unchanged,
     #[default]
-    Unknown
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -29,10 +32,11 @@ pub struct Shift {
     pub is_broken: bool,
     // If the shift is broken, between what time is the user free
     pub broken_period: Option<(Time, Time)>,
+    pub original_end_time: Option<Time>,
     pub magic_number: i64,
     // This field is not always needed. Especially when serializing.
     #[serde(skip_deserializing, default)]
-    pub state: ShiftState
+    pub state: ShiftState,
 }
 
 impl Shift {
@@ -76,7 +80,7 @@ impl Shift {
         let mut is_broken = false;
         let shift_type = number.chars().nth(0).unwrap();
         let mut hasher = DefaultHasher::new();
-        let hash_list = (date,&number);
+        let hash_list = (date, &number);
         hash_list.hash(&mut hasher);
         let magic_number = (hasher.finish() as i128 - i64::MAX as i128) as i64;
         if shift_type == 'g' || shift_type == 'G' {
@@ -117,20 +121,21 @@ impl Shift {
             description,
             is_broken,
             broken_period: None,
+            original_end_time: None,
             magic_number,
-            state: ShiftState::Unknown
+            state: ShiftState::Unknown,
         }
     }
 
     // Create two new shifts from one broken shift.
     // Assumes second shift cannot start after midnight
     // None means no broken times have been found for the shift
-    pub fn split_broken(
-        &self,
-    ) -> Option<Vec<Self>> {
+    pub fn split_broken(&self) -> Option<Vec<Self>> {
         let break_period = match self.broken_period {
             Some(period) => period,
-            None => {return None;}
+            None => {
+                return None;
+            }
         };
         let mut part_one = self.clone();
         part_one.end = break_period.0;
@@ -162,5 +167,4 @@ impl Shift {
         let shifts: Vec<Self> = vec![part_one, part_two];
         shifts
     }
-
 }

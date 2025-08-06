@@ -16,3 +16,4 @@ kuma_data.toml
 Error_bestanden
 *.bkp
 name
+logbook.json

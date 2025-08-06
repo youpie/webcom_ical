@@ -14,7 +14,7 @@ use time::{Date, OffsetDateTime, Time};
 // UPDATE THIS WHENEVER ANYTHING CHANGES IN THE ICAL
 // Add B if it modifies of removes an already existing value
 // Add W if it is wanted to resend the welcome mail
-const CALENDAR_VERSION: &str = "3";
+pub const CALENDAR_VERSION: &str = "3";
 
 const PREVIOUS_EXECUTION_DATE_PATH: &str = "./kuma/previous_execution_date";
 pub const NON_RELEVANT_EVENTS_PATH: &str = "./kuma/non_relevant_events";
@@ -267,12 +267,10 @@ Shift sheet • {}",
 /*
 Creates the ICAL file to add to the calendar
 */
-pub fn create_ical(relevant_shifts: &Vec<Shift>, non_relevant_shifts: Vec<Shift>, metadata: Vec<Shift>, previous_exit_code: FailureType) -> String {
-    let mut shifts = non_relevant_shifts;
+pub fn create_ical(shifts: &Vec<Shift>, metadata: Vec<Shift>, previous_exit_code: &FailureType) -> String {
     let metadata_shifts_hashmap: HashMap<i64, Shift> = metadata.into_iter()
         .map(|x| (x.magic_number, x)) // Replace `operation(x)` with your specific operation
         .collect();
-    shifts.append(&mut relevant_shifts.clone());
     let name = set_get_name(None);
     let admin_email = var("MAIL_ERROR_TO").unwrap_or_default();
     // get the current systemtime as a unix timestamp

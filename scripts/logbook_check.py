@@ -50,12 +50,12 @@ def main(include_hidden: bool, only_failed: bool, single_user: bool, condensed: 
     table.add_column("User", style="bold")
     table.add_column("Up?", justify="center")
     table.add_column("State")
+    table.add_column("Since")
     table.add_column("Runs", justify="right")
     table.add_column("Exec (s)", justify="right")
     table.add_column("Shifts", justify="right")
     table.add_column("Broken", justify="right")
     table.add_column("CalVer")
-    table.add_column("Window")
     table.add_column("Last Run")
     table.add_column("Folder Name")
 
@@ -107,15 +107,17 @@ def get_user(path, table, failures, only_failed, skip_docker):
     # last run from file mtime
     ts = 0.0
     long_offline = False
+    last_run = ""
     if logbook.exists():
         ts = logbook.stat().st_mtime
     elif previous_execution_date.exists():
         ts = previous_execution_date.stat().st_mtime
+        last_run += "[orange1]"
     if ts != 0.0:
         last_run_time = datetime.fromtimestamp(ts)
         if last_run_time + timedelta(days=2) < datetime.now():
             long_offline = True
-        last_run = "[blink][red]" if long_offline else ""
+        last_run += "[blink][red]" if long_offline else ""
         last_run += last_run_time.strftime("%Y-%m-%d %H:%M")
     
 
@@ -132,8 +134,11 @@ def get_user(path, table, failures, only_failed, skip_docker):
         calver = app.get("calendar_version", "–")
 
         env = dotenv_values(envfile)
-        parse_int = int(env.get("PARSE_INTERVAL", 14400))
-        window = human_duration(parse_int * rc)
+        parse_int = int(env.get("PARSE_INTERVAL", 4001))
+        window = ""
+        if parse_int == 4001:
+            window += "[orange1]"
+        window += human_duration(parse_int * rc)
     failed = False
     # colorize state
     if state.upper() == "OK":
@@ -153,12 +158,13 @@ def get_user(path, table, failures, only_failed, skip_docker):
             uname,
             up_str,
             state_text,
+            window,
             str(rc) if logbook.exists() else "–",
             str(exec_s) if logbook.exists() else "–",
             str(shifts) if logbook.exists() else "–",
             str(broken) if logbook.exists() else "–",
             calver,
-            window,
+            
             last_run,
             path.name
         )

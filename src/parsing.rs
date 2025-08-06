@@ -80,7 +80,7 @@ pub async fn load_previous_month_shifts(
         &format!("roster.aspx?{}-{}-01", new_year, new_month as u8),
     )
     .await?;
-    wait_until_loaded(&driver).await.unwrap();
+    wait_until_loaded(&driver).await?;
     shifts.append(&mut get_elements(&driver, new_month, new_year).await?);
     Ok(shifts)
 }

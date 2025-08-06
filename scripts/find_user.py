@@ -3,6 +3,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from dotenv import dotenv_values
 
 BASE_DIR = Path.home() / "Services" / "Webcom"
 TMP_FILE = Path(tempfile.gettempdir()) / "kuma-find.tmp"
@@ -134,6 +135,9 @@ def main():
             folder = None  # do not auto-cd on fallback
 
     write_tmp(folder if folder else "")
+    env = dotenv_values(Path().resolve())
+    email = env.get("EMAIL_TO", 0)
+    print(email)
     sys.exit(0 if folder else 1)
 
 if __name__=="__main__":

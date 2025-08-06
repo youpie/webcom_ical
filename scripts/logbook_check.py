@@ -113,11 +113,10 @@ def get_user(path, table, failures, only_failed, skip_docker):
         ts = previous_execution_date.stat().st_mtime
     if ts != 0.0:
         last_run_time = datetime.fromtimestamp(ts)
-        last_run = "[blink][red]"
-        last_run += last_run_time.strftime("%Y-%m-%d %H:%M")
-        
-        if last_run_time + timedelta(days=2) < datetime.now():
+        if last_run_time + timedelta(days=0) < datetime.now():
             long_offline = True
+        last_run = "[blink][red]" if long_offline else ""
+        last_run += last_run_time.strftime("%Y-%m-%d %H:%M")
     
 
     if logbook.exists() and envfile.exists():

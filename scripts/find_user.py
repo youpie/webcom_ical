@@ -6,7 +6,11 @@ from pathlib import Path
 
 BASE_DIR = Path.home() / "Services" / "Webcom"
 TMP_FILE = Path(tempfile.gettempdir()) / "kuma-find.tmp"
-
+################
+#
+# !! GROOTENDEELS AI
+#
+################
 def parse_env(path):
     vars = {}
     for line in path.read_text().splitlines():
@@ -97,25 +101,20 @@ def main():
     else:
         matches = name_map.get(lc, [])
 
-    # 2-match underscore rule
-    def auto_pick(ms):
-        us = [m for m in ms if Path(m).name.startswith("_")]
-        non = [m for m in ms if not Path(m).name.startswith("_")]
-        if len(ms)==2 and len(non)==1:
-            return non[0], us[0]
-        return None, None
-
     folder = None
     n = len(matches)
     if n == 1:
         folder = matches[0]
         print(f"Found: {folder}")
     elif n == 2:
-        sel, ignored = auto_pick(matches)
-        if sel:
-            print(f"Ignored (leading underscore): {ignored}")
-            print(f"Auto-selected: {sel}")
-            folder = sel
+        if matches[0][0] == "_":
+            folder = matches[1]
+        elif matches[1][0] == "_":
+            folder = matches[0]
+        else:
+            folder = choose_from_list(q, matches)
+            if folder:
+                print(f"You picked: {folder}")
     elif n > 2:
         folder = choose_from_list(q, matches)
         if folder:

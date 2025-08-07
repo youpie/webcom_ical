@@ -134,7 +134,7 @@ def get_user(path, table, failures, only_failed, skip_docker):
         calver = app.get("calendar_version", "–")
 
         env = dotenv_values(envfile)
-        parse_int = int(env.get("PARSE_INTERVAL", 4001))
+        parse_int = int(env.get("KUMA_HEARTBEAT_INTERVAL", 4001))
         window = ""
         if parse_int == 4001:
             window += "[orange1]"

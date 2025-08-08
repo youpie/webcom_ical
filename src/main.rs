@@ -37,6 +37,7 @@ mod ical;
 pub mod kuma;
 mod parsing;
 pub mod shift;
+mod variables;
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -495,6 +496,7 @@ Loads the main logic, and retries if it fails
 async fn main() -> WebDriverResult<()> {
     dotenv_override().ok();
     pretty_env_logger::init();
+    
     warn!("Starting Webcom Ical");
     let mut logbook = ApplicationLogbook::load();
     let mut error_reason = FailureType::OK;

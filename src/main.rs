@@ -458,6 +458,7 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
     let mut previous_shifts = previous_shifts_information.previous_relevant_shifts;
     // The main send email function will return the broken shifts that are new or have changed.
     // This is because the send email functions uses the previous shifts and scanns for new shifts
+    // write("./shifts.json",serde_json::to_string_pretty(&new_shifts).unwrap());
     let shifts = match email::send_emails(&mut new_shifts, &mut previous_shifts) {
         Ok(shifts) => shifts,
         Err(err) => return Err(err),

@@ -80,7 +80,7 @@ impl Shift {
         let mut is_broken = false;
         let shift_type = number.chars().nth(0).unwrap();
         let mut hasher = DefaultHasher::new();
-        let hash_list = (date, &number);
+        let hash_list = (date, &number, &start, &end);
         hash_list.hash(&mut hasher);
         let magic_number = (hasher.finish() as i128 - i64::MAX as i128) as i64;
         if shift_type == 'g' || shift_type == 'G' {

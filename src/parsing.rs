@@ -89,7 +89,7 @@ pub async fn load_previous_month_shifts(
 Just presses the next button in webcom twice to load the next month.
 Only works correctly if the previous month function has been ran before
 */
-pub async fn load_next_month_shifts(driver: &WebDriver) -> WebDriverResult<Vec<Shift>> {
+pub async fn load_next_month_shifts(driver: &WebDriver) -> GenResult<Vec<Shift>> {
     debug!("Loading Next Month..");
     let now = time::OffsetDateTime::now_utc();
     let today = now.date();
@@ -104,7 +104,7 @@ pub async fn load_next_month_shifts(driver: &WebDriver) -> WebDriverResult<Vec<S
         &format!("roster.aspx?{}-{}-01", new_year, new_month as u8),
     )
     .await?;
-    wait_until_loaded(&driver).await.unwrap();
+    wait_until_loaded(&driver).await?;
     Ok(get_elements(&driver, new_month, new_year).await?)
 }
 

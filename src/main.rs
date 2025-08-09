@@ -507,9 +507,10 @@ async fn main() -> WebDriverResult<()> {
         Ok(driver) => driver,
         Err(error) => {
             error!("Kon driver niet opstarten: {:?}", &error);
-            send_errors(&vec![error], &name).unwrap();
+            _= send_errors(&vec![error], &name);
             error_reason = FailureType::GeckoEngine;
-            heartbeat(&error_reason, kuma_url, &username).await.unwrap();
+            _ = logbook.save(&error_reason);
+            _= heartbeat(&error_reason, kuma_url, &username).await;
             return Err(WebDriverError::FatalError("driver fout".to_string()));
         }
     };

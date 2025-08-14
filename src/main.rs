@@ -463,16 +463,16 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
         Ok(shifts) => shifts,
         Err(err) => return Err(err),
     };
-    let shifts = gebroken_shifts::gebroken_diensten_laden(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
+    let shifts = gebroken_shifts::load_broken_shift_information(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
     ical::save_relevant_shifts(&shifts)?;
-    let shifts = gebroken_shifts::split_broken_shifts(shifts.clone())?;
-    let shifts = gebroken_shifts::stop_shift_at_midnight(&shifts.clone());
-    let mut shifts_modified = gebroken_shifts::split_night_shift(&shifts);
-    shifts_modified.sort_by_key(|shift| shift.magic_number);
-    shifts_modified.dedup();
-    let mut all_shifts = shifts_modified.clone();
+    let broken_split_shifts = gebroken_shifts::split_broken_shifts(shifts.clone())?;
+    let midnight_stopped_shifts = gebroken_shifts::stop_shift_at_midnight(&broken_split_shifts);
+    let mut night_split_shifts = gebroken_shifts::split_night_shift(&midnight_stopped_shifts);
+    night_split_shifts.sort_by_key(|shift| shift.magic_number);
+    night_split_shifts.dedup();
+    let mut all_shifts = night_split_shifts.clone();
     all_shifts.append(&mut non_relevant_shifts.clone());
-    let calendar = create_ical(&shifts_modified, shifts,&previous_shifts_information.previous_exit_code);
+    let calendar = create_ical(&night_split_shifts, shifts,&previous_shifts_information.previous_exit_code);
     send_welcome_mail(&ical_path)?;
     let mut output = File::create(&ical_path)?;
     info!("Writing to: {:?}", &ical_path);

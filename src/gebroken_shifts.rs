@@ -27,7 +27,7 @@ Creates two new shifts and adds them to the list
 Returns the new list
 Does not return most errors as there are a few valid reason this function fails
 */
-pub async fn gebroken_diensten_laden(
+pub async fn load_broken_shift_information(
     driver: &WebDriver,
     all_shifts: &Vec<Shift>,
 ) -> WebDriverResult<Vec<Shift>> {

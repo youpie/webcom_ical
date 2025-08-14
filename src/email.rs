@@ -4,6 +4,7 @@ use lettre::{
     SmtpTransport, Transport,
 };
 use thiserror::Error;
+use url::Url;
 use std::{
     collections::HashMap, fs, path::PathBuf
 };
@@ -295,13 +296,14 @@ fn create_footer(only_url:bool) -> GenResult<String> {
       </td>
       </tr>"#;
     let domain = var("DOMAIN").unwrap_or(ERROR_VALUE.to_string());
-    let url = format!("{}/{}", domain, create_ical_filename()?);
+    let url = Url::parse(&domain)?;
+    let url = url.join(&create_ical_filename()?)?;
     let admin_email = var("MAIL_ERROR_TO").ok();
     let return_value = match only_url {
-        true => url,
+        true => url.to_string(),
         false => strfmt!(footer_text,
             footer_text => "Je agenda link:",
-            footer_url => url,
+            footer_url => url.to_string(),
             admin_email_comment => if let Some(email) = admin_email {format!("Vragen of opmerkingen? Neem contact op met {email}")} else {"".to_owned()}).unwrap_or("".to_owned()),
         };
     Ok(return_value)

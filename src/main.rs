@@ -240,7 +240,7 @@ async fn wait_untill_redirect(driver: &WebDriver) -> GenResult<()> {
     Ok(())
 }
 
-async fn heartbeat(
+async fn send_heartbeat(
     reason: &FailureType,
     url: Option<String>,
     personeelsnummer: &str,
@@ -272,14 +272,14 @@ async fn heartbeat(
 }
 
 // Loads the sign in failure counter. Creates it if it does not exist
-fn load_sign_in_failure_count(path: &str) -> GenResult<IncorrectCredentialsCount> {
+fn load_sign_in_failure_count(path: &PathBuf) -> GenResult<IncorrectCredentialsCount> {
     let failure_count_json = std::fs::read_to_string(path)?;
     let failure_counter: IncorrectCredentialsCount = serde_json::from_str(&failure_count_json)?;
     Ok(failure_counter)
 }
 
 // Save the sign in faulure count file
-fn save_sign_in_failure_count(path: &str, counter: &IncorrectCredentialsCount) -> GenResult<()> {
+fn save_sign_in_failure_count(path: &PathBuf, counter: &IncorrectCredentialsCount) -> GenResult<()> {
     let failure_counter_serialised = serde_json::to_string(counter)?;
     let mut output = File::create(path)?;
     write!(output, "{}", failure_counter_serialised)?;
@@ -293,7 +293,7 @@ fn get_password_hash() -> GenResult<u64> {
     Ok(hasher.finish())
 }
 
-// If returning true, continue execution
+// If returning None, continue execution
 fn sign_in_failed_check() -> GenResult<Option<SignInFailure>> {
     let resend_error_mail_count: usize = var("SIGNIN_FAIL_MAIL_REPEAT")
         .unwrap_or("24".to_string())
@@ -303,7 +303,8 @@ fn sign_in_failed_check() -> GenResult<Option<SignInFailure>> {
         .unwrap_or("2".to_string())
         .parse()
         .unwrap_or(1);
-    let path = format!("./{BASE_DIRECTORY}sign_in_failure_count.json");
+    let mut path = PathBuf::from(BASE_DIRECTORY);
+    path.push("sign_in_failure_count.json");
     // Load the existing failure counter, create a new one if one doesn't exist yet
     let mut failure_counter = match load_sign_in_failure_count(&path) {
         Ok(value) => value,
@@ -348,7 +349,8 @@ fn sign_in_failed_check() -> GenResult<Option<SignInFailure>> {
 }
 
 fn sign_in_failed_update(failed: bool, failure_type: Option<SignInFailure>) -> GenResult<()> {
-    let path = format!("./{BASE_DIRECTORY}sign_in_failure_count.json");
+    let mut path = PathBuf::from(BASE_DIRECTORY);
+    path.push("sign_in_failure_count.json");
     let mut failure_counter = match load_sign_in_failure_count(&path) {
         Ok(failure) => failure,
         Err(_) => IncorrectCredentialsCount::default(),
@@ -378,22 +380,38 @@ fn sign_in_failed_update(failed: bool, failure_type: Option<SignInFailure>) -> G
     Ok(())
 }
 
+fn update_calendar_exit_code(previous_exit_code: &FailureType, current_exit_code: &FailureType) -> GenResult<()> {
+    let ical_path = get_ical_path()?;
+    let calendar = load_ical_file(&ical_path).unwrap_or_default().to_string();
+    let formatted_previous_exit_code =
+        serde_json::to_string(&previous_exit_code).unwrap_or("OK".to_owned());
+    let formatted_current_exit_code =
+        serde_json::to_string(&current_exit_code).unwrap_or("OK".to_owned());
+    let calendar = calendar.replace(
+        &format!("X-EXIT-CODE:{formatted_previous_exit_code}"),
+        &format!("X-EXIT-CODE:{formatted_current_exit_code}"),
+    );
+    write(ical_path, calendar.to_string().as_bytes())?;
+    Ok(())
+}
+
 fn set_get_name(new_name_option: Option<String>) -> String {
-    let path = &format!("./{BASE_DIRECTORY}name");
+    let mut path = PathBuf::from(BASE_DIRECTORY);
+    path.push("name");
     // Just return constant name if already set
     if let Ok(const_name) = NAME.read() {
         if new_name_option.is_none() && const_name.is_some() {
             return const_name.clone().unwrap();
         }
     }
-    let mut name = std::fs::read_to_string(path)
+    let mut name = std::fs::read_to_string(&path)
         .ok()
         .unwrap_or("FOUT BIJ LADEN VAN NAAM".to_owned());
 
     // Write new name if previous name is different (deadname protection lmao)
     if let Some(new_name) = new_name_option {
         if new_name != name {
-            if let Err(error) = write(path, &new_name) {
+            if let Err(error) = write(&path, &new_name) {
                 error!("Fout tijdens opslaan van naam: {}", error.to_string());
             }
             name = new_name;
@@ -498,7 +516,7 @@ async fn main() -> WebDriverResult<()> {
     pretty_env_logger::init();
     warn!("Starting Webcom Ical");
     let mut logbook = ApplicationLogbook::load();
-    let mut error_reason = FailureType::OK;
+    let mut current_exit_code = FailureType::OK;
     let name = set_get_name(None);
     let kuma_url = var("KUMA_URL").ok();
     let username = var("USERNAME").unwrap();
@@ -507,10 +525,10 @@ async fn main() -> WebDriverResult<()> {
         Ok(driver) => driver,
         Err(error) => {
             error!("Kon driver niet opstarten: {:?}", &error);
-            _= send_errors(&vec![error], &name);
-            error_reason = FailureType::GeckoEngine;
-            _ = logbook.save(&error_reason);
-            _= heartbeat(&error_reason, kuma_url, &username).await;
+            _ = send_errors(&vec![error], &name);
+            current_exit_code = FailureType::GeckoEngine;
+            _ = logbook.save(&current_exit_code);
+            _ = send_heartbeat(&current_exit_code, kuma_url, &username).await;
             return Err(WebDriverError::FatalError("driver fout".to_string()));
         }
     };
@@ -531,11 +549,11 @@ async fn main() -> WebDriverResult<()> {
         }
     }
     // Check if the program is allowed to run, or not due to failed sign-in
-    let sign_in_check: Option<SignInFailure> = sign_in_failed_check().unwrap();
+    let sign_in_check: Option<SignInFailure> = sign_in_failed_check().unwrap_or(None);
     let mut previous_exit_code = FailureType::default();
     if let Some(failure) = sign_in_check {
         retry_count = max_retry_count;
-        error_reason = FailureType::SignInFailed(failure);
+        current_exit_code = FailureType::SignInFailed(failure);
     }
     while retry_count <= max_retry_count - 1 {
         match main_program(&driver, &username, &password, retry_count, &mut logbook).await {
@@ -558,8 +576,8 @@ async fn main() -> WebDriverResult<()> {
                             )
                         } else {
                             retry_count = max_retry_count;
-                            sign_in_failed_update(true, Some(y.clone())).unwrap();
-                            error_reason = FailureType::SignInFailed(y.to_owned());
+                            _ = sign_in_failed_update(true, Some(y.clone()));
+                            current_exit_code = FailureType::SignInFailed(y.to_owned());
                             error!("Inloggen niet succesvol, fout: {:?}", y)
                         }
                     }
@@ -581,7 +599,7 @@ async fn main() -> WebDriverResult<()> {
     } else if running_errors.len() < max_retry_count {
         warn!("Errors have occured, but succeded in the end");
     } else {
-        error_reason = FailureType::TriesExceeded;
+        current_exit_code = FailureType::TriesExceeded;
         match send_errors(&running_errors, &name) {
             Ok(_) => (),
             Err(x) => error!("failed to send error email, ironic: {:?}", x),
@@ -596,28 +614,18 @@ async fn main() -> WebDriverResult<()> {
         if let Some(failure_type) = last_error.downcast_ref::<FailureType>() {
             if failure_type == &FailureType::ConnectError {
                 info!("Failure reason is because webcom is down");
-                error_reason = FailureType::ConnectError;
+                current_exit_code = FailureType::ConnectError;
             }
         }
     }
-    if error_reason != FailureType::TriesExceeded {
-        heartbeat(&error_reason, kuma_url, &username).await.unwrap();
+    if current_exit_code != FailureType::TriesExceeded {
+        _ = send_heartbeat(&current_exit_code, kuma_url, &username).await;
     }
-    _ = logbook.save(&error_reason);
+    _ = logbook.save(&current_exit_code);
     // Update the exit code in the calendar if it is not equal to the previous value
-    if previous_exit_code != error_reason {
+    if previous_exit_code != current_exit_code {
         warn!("Previous exit code was different than current, need to update");
-        let ical_path = get_ical_path().unwrap();
-        let calendar = load_ical_file(&ical_path).unwrap_or_default().to_string();
-        let formatted_previous_exit_code =
-            serde_json::to_string(&previous_exit_code).unwrap_or("OK".to_owned());
-        let formatted_current_exit_code =
-            serde_json::to_string(&error_reason).unwrap_or("OK".to_owned());
-        let calendar = calendar.replace(
-            &format!("X-EXIT-CODE:{formatted_previous_exit_code}"),
-            &format!("X-EXIT-CODE:{formatted_current_exit_code}"),
-        );
-        _ = write(ical_path, calendar.to_string().as_bytes());
+        _ = update_calendar_exit_code(&previous_exit_code, &current_exit_code);
     }
     driver.quit().await?;
     Ok(())

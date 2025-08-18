@@ -1,8 +1,9 @@
 use std::{fs::{read_to_string, write}, path::PathBuf, time::SystemTime};
 
 use serde::{Deserialize, Serialize};
+use url::Url;
 
-use crate::{ical::CALENDAR_VERSION, shift::Shift, FailureType, GenResult, BASE_DIRECTORY};
+use crate::{errors::SignInFailure, ical::{get_ical_path, load_ical_file, CALENDAR_VERSION}, shift::Shift, FailureType, GenResult, BASE_DIRECTORY};
 
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct ApplicationLogbook {
@@ -64,4 +65,53 @@ pub struct ApplicationState {
     pub shifts: usize,
     pub broken_shifts: usize,
     pub calendar_version: String,
+}
+
+pub async fn send_heartbeat(
+    reason: &FailureType,
+    url: Option<String>,
+    personeelsnummer: &str,
+) -> GenResult<()> {
+    if url.is_none() || reason == &FailureType::TriesExceeded {
+        info!("no heartbeat URL");
+        return Ok(());
+    }
+    let mut request_url: Url = url.clone().unwrap().parse().unwrap();
+    request_url.set_path(&format!("/api/push/{personeelsnummer}"));
+    request_url.set_query(Some(&format!(
+        "status={}&msg={}&ping=",
+        match reason.clone() {
+            FailureType::GeckoEngine => "down",
+            FailureType::SignInFailed(failure)
+                if matches!(
+                    failure,
+                    SignInFailure::WebcomDown
+                        | SignInFailure::TooManyTries
+                        | SignInFailure::Other(_)
+                ) =>
+                "down",
+            _ => "up",
+        },
+        reason.to_string()
+    )));
+    reqwest::get(request_url).await?;
+    Ok(())
+}
+
+pub fn update_calendar_exit_code(
+    previous_exit_code: &FailureType,
+    current_exit_code: &FailureType,
+) -> GenResult<()> {
+    let ical_path = get_ical_path()?;
+    let calendar = load_ical_file(&ical_path).unwrap_or_default().to_string();
+    let formatted_previous_exit_code =
+        serde_json::to_string(&previous_exit_code).unwrap_or("OK".to_owned());
+    let formatted_current_exit_code =
+        serde_json::to_string(&current_exit_code).unwrap_or("OK".to_owned());
+    let calendar = calendar.replace(
+        &format!("X-EXIT-CODE:{formatted_previous_exit_code}"),
+        &format!("X-EXIT-CODE:{formatted_current_exit_code}"),
+    );
+    write(ical_path, calendar.to_string().as_bytes())?;
+    Ok(())
 }

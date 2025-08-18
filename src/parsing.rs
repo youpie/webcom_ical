@@ -1,6 +1,7 @@
+use crate::errors::{check_if_webcom_unavailable, check_sign_in_error};
 use crate::gebroken_shifts::{navigate_to_subdirectory, wait_for_response};
 use crate::{
-    FailureType, GenResult, Shift, check_if_webcom_unavailable, check_sign_in_error, set_get_name,
+    FailureType, GenResult, Shift, set_get_name,
     wait_until_loaded,
 };
 use async_recursion::async_recursion;

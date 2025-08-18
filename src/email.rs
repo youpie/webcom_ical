@@ -11,9 +11,10 @@ use std::{
 use strfmt::strfmt;
 use thirtyfour::error::{WebDriverErrorInfo, WebDriverResult};
 use time::{macros::format_description, Date};
+use crate::errors::IncorrectCredentialsCount;
 use crate::ShiftState;
 
-use crate::{create_ical_filename, create_shift_link, set_get_name, IncorrectCredentialsCount, Shift, SignInFailure};
+use crate::{create_ical_filename, create_shift_link, set_get_name, Shift, SignInFailure};
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 

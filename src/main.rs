@@ -14,26 +14,24 @@ use dotenvy::dotenv_override;
 use dotenvy::var;
 use email::send_errors;
 use email::send_welcome_mail;
-use reqwest;
-use serde::{Deserialize, Serialize};
-use std::default;
 use std::fs;
 use std::fs::File;
 use std::fs::read_to_string;
 use std::fs::write;
-use std::hash::DefaultHasher;
-use std::hash::Hash;
-use std::hash::Hasher;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::sync::RwLock;
 use std::time::Duration;
 use thirtyfour::prelude::*;
-use thiserror::Error;
 use time::macros::format_description;
-use url::Url;
 
+use crate::errors::sign_in_failed_check;
+use crate::errors::update_signin_failure;
+use crate::errors::FailureType;
+use crate::errors::SignInFailure;
+use crate::health::send_heartbeat;
+use crate::health::update_calendar_exit_code;
 use crate::health::ApplicationLogbook;
 use crate::ical::*;
 use crate::parsing::*;
@@ -48,64 +46,12 @@ mod ical;
 pub mod kuma;
 mod parsing;
 pub mod shift;
+mod execution;
+pub mod errors;
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 static NAME: LazyLock<RwLock<Option<String>>> = LazyLock::new(|| RwLock::new(None));
-
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-pub struct IncorrectCredentialsCount {
-    retry_count: usize,
-    error: Option<SignInFailure>,
-    previous_password_hash: Option<u64>,
-}
-
-impl IncorrectCredentialsCount {
-    fn new() -> Self {
-        Self {
-            retry_count: 0,
-            error: None,
-            previous_password_hash: None,
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Error)]
-enum SignInFailure {
-    #[error("Er zijn te veel incorrecte inlogpogingen in een korte periode gedaan")]
-    TooManyTries,
-    #[error("Inloggegevens kloppen niet")]
-    IncorrectCredentials,
-    #[error("Webcomm heeft een storing")]
-    WebcomDown,
-    #[error("Onbekende fout: {0}")]
-    Other(String),
-}
-
-#[derive(Debug, Error, PartialEq, Clone, Serialize, Deserialize, Default)]
-enum FailureType {
-    #[error("Webcom ical was niet in staat na meerdere pogingen diensten correct in te laden")]
-    TriesExceeded,
-    #[error("Webcom ical kan geen verbinding maken met de interne browser")]
-    GeckoEngine,
-    #[error("Webcom ical kon niet inloggen. Fout: {}",0.to_string())]
-    SignInFailed(SignInFailure),
-    #[error("Webcom ical kon geen verbinding maken met de Webcomm site")]
-    ConnectError,
-    #[error("Een niet-specifieke fout is opgetreden: {0}")]
-    Other(String),
-    #[error("Ok")]
-    #[default]
-    OK,
-}
-
-/*
-An absolutely useless struct that is only needed  becasue a Vec<> cannot be serialised
-*/
-#[derive(Serialize, Deserialize)]
-pub struct Shifts {
-    shifts: Vec<Shift>,
-}
 
 fn create_shift_link(shift: &Shift, include_domain: bool) -> GenResult<String> {
     let date_format = format_description!("[day]-[month]-[year]");
@@ -140,47 +86,6 @@ fn get_time(str_time: &str) -> Time {
         hour = hour - 24;
     }
     Time::from_hms(hour, min, 0).unwrap()
-}
-
-async fn check_sign_in_error(driver: &WebDriver) -> GenResult<FailureType> {
-    error!("Sign in failed");
-    match driver.find(By::Id("ctl00_lblMessage")).await {
-        Ok(element) => {
-            let element_text = element.text().await?;
-            let sign_in_error_type = get_sign_in_error_type(&element_text);
-            info!("Found error banner: {:?}", &sign_in_error_type);
-            return Ok(FailureType::SignInFailed(sign_in_error_type));
-        }
-        Err(_) => {
-            info!("Geen fout banner gevonden");
-        }
-    };
-    Ok(FailureType::SignInFailed(SignInFailure::Other(
-        "Geen idee waarom er niet ingelogd kon worden".to_string(),
-    )))
-}
-
-// See if there is a text which indicated webcom is offline
-fn check_if_webcom_unavailable(h3_text: Option<String>) -> bool {
-    match h3_text {
-        Some(text) => {
-            if text == "De servertoepassing is niet beschikbaar.".to_owned() {
-                return true;
-            }
-        }
-        None => (),
-    };
-    false
-}
-
-fn get_sign_in_error_type(text: &str) -> SignInFailure {
-    match text {
-        "Uw aanmelding was niet succesvol. Voer a.u.b. het personeelsnummer of 'naam, voornaam' in" => {
-            SignInFailure::IncorrectCredentials
-        }
-        "Te veel verkeerde aanmeldpogingen" => SignInFailure::TooManyTries,
-        _ => SignInFailure::Other(text.to_string()),
-    }
 }
 
 fn create_ical_filename() -> GenResult<String> {
@@ -245,152 +150,10 @@ async fn wait_untill_redirect(driver: &WebDriver) -> GenResult<()> {
     Ok(())
 }
 
-async fn send_heartbeat(
-    reason: &FailureType,
-    url: Option<String>,
-    personeelsnummer: &str,
-) -> GenResult<()> {
-    if url.is_none() || reason == &FailureType::TriesExceeded {
-        info!("no heartbeat URL");
-        return Ok(());
-    }
-    let mut request_url: Url = url.clone().unwrap().parse().unwrap();
-    request_url.set_path(&format!("/api/push/{personeelsnummer}"));
-    request_url.set_query(Some(&format!(
-        "status={}&msg={}&ping=",
-        match reason.clone() {
-            FailureType::GeckoEngine => "down",
-            FailureType::SignInFailed(failure)
-                if matches!(
-                    failure,
-                    SignInFailure::WebcomDown
-                        | SignInFailure::TooManyTries
-                        | SignInFailure::Other(_)
-                ) =>
-                "down",
-            _ => "up",
-        },
-        reason.to_string()
-    )));
-    reqwest::get(request_url).await?;
-    Ok(())
-}
-
-// Loads the sign in failure counter. Creates it if it does not exist
-fn load_sign_in_failure_count(path: &PathBuf) -> GenResult<IncorrectCredentialsCount> {
-    let failure_count_json = std::fs::read_to_string(path)?;
-    let failure_counter: IncorrectCredentialsCount = serde_json::from_str(&failure_count_json)?;
-    Ok(failure_counter)
-}
-
-// Save the sign in faulure count file
-fn save_sign_in_failure_count(
-    path: &PathBuf,
-    counter: &IncorrectCredentialsCount,
-) -> GenResult<()> {
-    let failure_counter_serialised = serde_json::to_string(counter)?;
-    let mut output = File::create(path)?;
-    write!(output, "{}", failure_counter_serialised)?;
-    Ok(())
-}
-
-fn get_password_hash() -> GenResult<u64> {
-    let current_password = var("PASSWORD")?;
-    let mut hasher = DefaultHasher::new();
-    current_password.hash(&mut hasher);
-    Ok(hasher.finish())
-}
-
-// If returning None, continue execution
-fn sign_in_failed_check() -> GenResult<Option<SignInFailure>> {
-    let resend_error_mail_count: usize = var("SIGNIN_FAIL_MAIL_REPEAT")
-        .unwrap_or("24".to_string())
-        .parse()
-        .unwrap_or(2);
-    let sign_in_attempt_reduce: usize = var("SIGNIN_FAILED_REDUCE")
-        .unwrap_or("2".to_string())
-        .parse()
-        .unwrap_or(1);
-    let mut path = PathBuf::from(BASE_DIRECTORY);
-    path.push("sign_in_failure_count.json");
-    // Load the existing failure counter, create a new one if one doesn't exist yet
-    let mut failure_counter = match load_sign_in_failure_count(&path) {
-        Ok(value) => value,
-        Err(_) => {
-            let new = IncorrectCredentialsCount::new();
-            save_sign_in_failure_count(&path, &new)?;
-            new
-        }
-    };
-    let return_value: Option<SignInFailure>;
-    if let Some(previous_password_hash) = failure_counter.previous_password_hash {
-        if let Ok(current_password_hash) = get_password_hash() {
-            if previous_password_hash != current_password_hash {
-                info!("Password hash has changed, resuming execution");
-                return Ok(None);
-            }
-        }
-    }
-
-    // else check if retry counter == reduce_ammount, if not, stop running
-    if failure_counter.retry_count == 0 {
-        return_value = None;
-    } else if failure_counter.retry_count % sign_in_attempt_reduce == 0 {
-        warn!(
-            "Continuing execution with sign in error, reduce val: {sign_in_attempt_reduce}, current count {}",
-            failure_counter.retry_count
-        );
-        failure_counter.retry_count += 1;
-        return_value = None;
-    } else {
-        warn!("Skipped execution due to previous sign in error");
-        failure_counter.retry_count += 1;
-        return_value = Some(failure_counter.error.clone().unwrap());
-    }
-
-    if failure_counter.retry_count % resend_error_mail_count == 0 && failure_counter.error.is_some()
-    {
-        email::send_failed_signin_mail(&failure_counter, false)?;
-    }
-    save_sign_in_failure_count(&path, &failure_counter)?;
-    Ok(return_value)
-}
-
 pub fn create_path(filename: &str) -> PathBuf {
     let mut path = PathBuf::from(BASE_DIRECTORY);
     path.push(filename);
     path
-}
-
-fn sign_in_failed_update(failed: bool, failure_type: Option<SignInFailure>) -> GenResult<()> {
-    let path = create_path("sign_in_failure_count.json");
-    let mut failure_counter = match load_sign_in_failure_count(&path) {
-        Ok(failure) => failure,
-        Err(_) => IncorrectCredentialsCount::default(),
-    };
-    if let Ok(current_password_hash) = get_password_hash() {
-        debug!("Got current password hash: {current_password_hash}");
-        failure_counter.previous_password_hash = Some(current_password_hash);
-    }
-    // if failed == true, set increment counter and set error
-    if failed == true {
-        failure_counter.error = failure_type;
-        if failure_counter.retry_count == 0 {
-            failure_counter.retry_count += 1;
-            email::send_failed_signin_mail(&failure_counter, true)?;
-        }
-    }
-    // if failed == false, reset counter
-    else if failed == false {
-        if failure_counter.error.is_some() {
-            info!("Sign in succesful again!");
-            email::send_sign_in_succesful()?;
-        }
-        failure_counter.retry_count = 0;
-        failure_counter.error = None;
-    }
-    save_sign_in_failure_count(&path, &failure_counter)?;
-    Ok(())
 }
 
 fn get_execution_properties() -> (Duration, u8) {
@@ -409,24 +172,6 @@ fn get_execution_properties() -> (Duration, u8) {
     }()
     .unwrap_or(rand::random_range(0..60));
     (Duration::from_secs(cycle_time), starting_minute)
-}
-
-fn update_calendar_exit_code(
-    previous_exit_code: &FailureType,
-    current_exit_code: &FailureType,
-) -> GenResult<()> {
-    let ical_path = get_ical_path()?;
-    let calendar = load_ical_file(&ical_path).unwrap_or_default().to_string();
-    let formatted_previous_exit_code =
-        serde_json::to_string(&previous_exit_code).unwrap_or("OK".to_owned());
-    let formatted_current_exit_code =
-        serde_json::to_string(&current_exit_code).unwrap_or("OK".to_owned());
-    let calendar = calendar.replace(
-        &format!("X-EXIT-CODE:{formatted_previous_exit_code}"),
-        &format!("X-EXIT-CODE:{formatted_current_exit_code}"),
-    );
-    write(ical_path, calendar.to_string().as_bytes())?;
-    Ok(())
 }
 
 fn set_get_name(new_name_option: Option<String>) -> String {
@@ -595,7 +340,7 @@ async fn main_loop(
         match main_program(&driver, &username, &password, retry_count, &mut logbook).await {
             Ok(last_exit_code) => {
                 previous_exit_code = last_exit_code;
-                match sign_in_failed_update(false, None) {
+                match update_signin_failure(false, None) {
                     Ok(_) => (),
                     Err(err) => error!("Sign in failure check failed. error {err}"),
                 };
@@ -612,7 +357,7 @@ async fn main_loop(
                             )
                         } else {
                             retry_count = max_retry_count;
-                            _ = sign_in_failed_update(true, Some(y.clone()));
+                            _ = update_signin_failure(true, Some(y.clone()));
                             current_exit_code = FailureType::SignInFailed(y.to_owned());
                             error!("Inloggen niet succesvol, fout: {:?}", y)
                         }

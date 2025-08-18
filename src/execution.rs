@@ -1,8 +1,8 @@
-use std::{fs::{read_to_string, write}, sync::Arc, time::Duration};
+use std::{fs::{read_to_string, write}, time::Duration};
 
 use chrono::{Timelike, Utc};
 use dotenvy::var;
-use tokio::{sync::Notify, time::sleep};
+use tokio::{sync::mpsc::Sender, time::sleep};
 
 use crate::{create_path, GenResult};
 
@@ -24,10 +24,13 @@ fn get_execution_properties() -> (Duration, u8) {
     (Duration::from_secs(cycle_time), starting_minute)
 }
 
-pub async fn execution_manager(notification: Arc<Notify>, instant_run: bool) {
+pub async fn execution_manager(tx: Sender<bool>, instant_run: bool) {
     let execution_properties = get_execution_properties();
     let current_time = Utc::now();
-    if current_time.minute() != execution_properties.1 as u32 || instant_run {
+    if instant_run {
+        _ = tx.send(true).await;
+    }
+    if current_time.minute() != execution_properties.1 as u32 {
         let current_minute = current_time.minute() as i8;
         let mut waiting_minutes = execution_properties.1 as i8 - current_minute;
         if waiting_minutes < 0 {
@@ -38,7 +41,7 @@ pub async fn execution_manager(notification: Arc<Notify>, instant_run: bool) {
     }
     loop {
         info!("Starting execution loop");
-        notification.notify_waiters();
+        _ = tx.send(true).await;
         sleep(execution_properties.0).await;
     }
 

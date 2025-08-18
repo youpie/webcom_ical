@@ -17,13 +17,13 @@ use dotenvy::var;
 use email::send_errors;
 use email::send_welcome_mail;
 use tokio::spawn;
-use tokio::sync::Notify;
+use tokio::sync::mpsc::channel;
+use tokio::sync::mpsc::Receiver;
 use std::fs;
 use std::fs::File;
 use std::fs::write;
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::LazyLock;
 use std::sync::RwLock;
 use thirtyfour::prelude::*;
@@ -32,6 +32,7 @@ use time::macros::format_description;
 use crate::errors::sign_in_failed_check;
 use crate::errors::update_signin_failure;
 use crate::errors::FailureType;
+use crate::errors::OptionResult;
 use crate::errors::SignInFailure;
 use crate::execution::execution_manager;
 use crate::health::send_heartbeat;
@@ -281,12 +282,12 @@ Loads the main logic, and retries if it fails
 */
 async fn main_loop(
     driver: &WebDriver,
-    notification: Arc<Notify>,
+    receiver: &mut Receiver<bool>,
     kuma_url: Option<&str>,
 ) -> GenResult<()> {
     loop {
         info!("Waiting for notification");
-        notification.notified().await;
+        let continue_execution = receiver.recv().await.result()?;
         let name = set_get_name(None);
         let mut logbook = ApplicationLogbook::load();
 
@@ -393,7 +394,11 @@ async fn main_loop(
             warn!("Previous exit code was different than current, need to update");
             _ = update_calendar_exit_code(&previous_exit_code, &current_exit_code);
         }
+        if !continue_execution {
+            break;
+        }
     }
+    Ok(())
 }
 
 #[tokio::main]
@@ -418,16 +423,14 @@ async fn main() -> GenResult<()> {
             return Err("driver fout".into());
         }
     };
-
-    let execution_notification = Arc::new(Notify::new());
-    let execution_notification_clone = execution_notification.clone();
+    let (tx, mut rx) = channel(1);
     let instant_run = args.instant_run;
     match args.single_run {
-        false => {spawn(async move {execution_manager(execution_notification_clone, instant_run).await});},
-        true => {execution_notification.notify_one();}
+        false => {spawn(async move {execution_manager(tx, instant_run).await});},
+        true => {_ = tx.send(false).await;}
     };
     
-    _ = main_loop(&driver, execution_notification, kuma_url.as_deref()).await;
+    _ = main_loop(&driver, &mut rx, kuma_url.as_deref()).await;
     driver.quit().await?;
     Ok(())
 }

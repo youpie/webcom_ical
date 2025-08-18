@@ -10,19 +10,22 @@ extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 
+use clap::command;
+use clap::Parser;
 use dotenvy::dotenv_override;
 use dotenvy::var;
 use email::send_errors;
 use email::send_welcome_mail;
+use tokio::spawn;
+use tokio::sync::Notify;
 use std::fs;
 use std::fs::File;
-use std::fs::read_to_string;
 use std::fs::write;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::LazyLock;
 use std::sync::RwLock;
-use std::time::Duration;
 use thirtyfour::prelude::*;
 use time::macros::format_description;
 
@@ -30,6 +33,7 @@ use crate::errors::sign_in_failed_check;
 use crate::errors::update_signin_failure;
 use crate::errors::FailureType;
 use crate::errors::SignInFailure;
+use crate::execution::execution_manager;
 use crate::health::send_heartbeat;
 use crate::health::update_calendar_exit_code;
 use crate::health::ApplicationLogbook;
@@ -50,6 +54,15 @@ pub mod errors;
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 static NAME: LazyLock<RwLock<Option<String>>> = LazyLock::new(|| RwLock::new(None));
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(short, long)]
+    instant_run: bool,
+    #[arg(short, long)]
+    single_run: bool
+}
 
 fn create_shift_link(shift: &Shift, include_domain: bool) -> GenResult<String> {
     let date_format = format_description!("[day]-[month]-[year]");
@@ -139,24 +152,6 @@ pub fn create_path(filename: &str) -> PathBuf {
     let mut path = PathBuf::from(BASE_DIRECTORY);
     path.push(filename);
     path
-}
-
-fn get_execution_properties() -> (Duration, u8) {
-    let cycle_time = || -> GenResult<u64> {
-        Ok(var("CYCLE_TIME")
-            .unwrap_or((var("KUMA_HEARTBEAT_INTERVAL")?.parse::<u64>()? - 400).to_string())
-            .parse::<u64>()?)
-    }()
-    .unwrap_or(7200);
-    let starting_minute = || -> GenResult<u8> {
-        let path = create_path("starting_minute");
-        let starting_minute_str =
-            read_to_string(&path).unwrap_or(rand::random_range(0..60).to_string());
-        _ = write(&path, starting_minute_str.as_bytes());
-        Ok(starting_minute_str.parse()?)
-    }()
-    .unwrap_or(rand::random_range(0..60));
-    (Duration::from_secs(cycle_time), starting_minute)
 }
 
 fn set_get_name(new_name_option: Option<String>) -> String {
@@ -286,115 +281,119 @@ Loads the main logic, and retries if it fails
 */
 async fn main_loop(
     driver: &WebDriver,
-    kuma_url: Option<String>,
-) -> GenResult<FailureType> {
-    let name = set_get_name(None);
-    let mut logbook = ApplicationLogbook::load();
+    notification: Arc<Notify>,
+    kuma_url: Option<&str>,
+) -> GenResult<()> {
+    loop {
+        info!("Waiting for notification");
+        notification.notified().await;
+        let name = set_get_name(None);
+        let mut logbook = ApplicationLogbook::load();
 
-    let username = var("USERNAME").expect("Error in username variable loop");
-    let password = var("PASSWORD").expect("Error in password variable loop");
+        let username = var("USERNAME").expect("Error in username variable loop");
+        let password = var("PASSWORD").expect("Error in password variable loop");
 
-    let mut current_exit_code = FailureType::default();
-    let mut previous_exit_code = FailureType::default();
+        let mut current_exit_code = FailureType::default();
+        let mut previous_exit_code = FailureType::default();
 
-    let mut running_errors: Vec<Box<dyn std::error::Error>> = vec![];
+        let mut running_errors: Vec<Box<dyn std::error::Error>> = vec![];
 
-    let mut retry_count: usize = 0;
-    let max_retry_count: usize = var("RETRY_COUNT")
-        .unwrap_or("3".to_string())
-        .parse()
-        .unwrap_or(3);
+        let mut retry_count: usize = 0;
+        let max_retry_count: usize = var("RETRY_COUNT")
+            .unwrap_or("3".to_string())
+            .parse()
+            .unwrap_or(3);
 
-    if let Some(url_unwrap) = kuma_url.clone() {
-        if !url_unwrap.is_empty() {
-            debug!("Checking if kuma needs to be created");
-            match kuma::first_run(&url_unwrap, &username).await {
-                Ok(_) => debug!("Kuma run was succesful"),
-                Err(err) => warn!("Kuma run was not succesful. Error: {}", err.to_string()),
-            }
-        }
-    }
-
-    // Check if the program is allowed to run, or not due to failed sign-in
-    let sign_in_check: Option<SignInFailure> = sign_in_failed_check().unwrap_or(None);
-    if let Some(failure) = sign_in_check {
-        retry_count = max_retry_count;
-        current_exit_code = FailureType::SignInFailed(failure);
-    }
-
-    while retry_count < max_retry_count {
-        match main_program(&driver, &username, &password, retry_count, &mut logbook).await {
-            Ok(last_exit_code) => {
-                previous_exit_code = last_exit_code;
-                match update_signin_failure(false, None) {
-                    Ok(_) => (),
-                    Err(err) => error!("Sign in failure check failed. error {err}"),
-                };
-                retry_count = max_retry_count;
-            }
-            Err(x) => {
-                match x.downcast_ref::<FailureType>() {
-                    Some(FailureType::SignInFailed(y)) => {
-                        // Do not stop webcom if the sign in failure reason is unknown
-                        if let SignInFailure::Other(x) = y {
-                            warn!(
-                                "Kon niet inloggen, maar een onbekende fout: {}. Probeert opnieuw",
-                                x
-                            )
-                        } else {
-                            retry_count = max_retry_count;
-                            _ = update_signin_failure(true, Some(y.clone()));
-                            current_exit_code = FailureType::SignInFailed(y.to_owned());
-                            error!("Inloggen niet succesvol, fout: {:?}", y)
-                        }
-                    }
-                    _ => {
-                        warn!(
-                            "Fout tijdens shift laden, opnieuw proberen, poging: {}. Fout: {}",
-                            retry_count + 1,
-                            &x.to_string()
-                        );
-                        running_errors.push(x);
-                    }
+        if let Some(url_unwrap) = kuma_url.clone() {
+            if !url_unwrap.is_empty() {
+                debug!("Checking if kuma needs to be created");
+                match kuma::first_run(&url_unwrap, &username).await {
+                    Ok(_) => debug!("Kuma run was succesful"),
+                    Err(err) => warn!("Kuma run was not succesful. Error: {}", err.to_string()),
                 }
             }
-        };
-        retry_count += 1;
-    }
-    if running_errors.is_empty() {
-        info!("Alles is in een keer goed gegaan, jippie!");
-    } else if running_errors.len() < max_retry_count {
-        warn!("Errors have occured, but succeded in the end");
-    } else {
-        current_exit_code = FailureType::TriesExceeded;
-        match send_errors(&running_errors, &name) {
-            Ok(_) => (),
-            Err(x) => error!("failed to send error email, ironic: {:?}", x),
         }
-    }
-    // TODO the logic for selecting the error reason is quite confusing. This should be cleaned up someday
-    // Could be done by always returning a failuretype. Wrapping it around all error types. Possible based on the type of error
-    // Then having one big match on what to do based on the failure type?
-    // But that is for later
-    // This currently informs the user if webcom is down
-    if let Some(last_error) = running_errors.last() {
-        if let Some(failure_type) = last_error.downcast_ref::<FailureType>() {
-            if failure_type == &FailureType::ConnectError {
-                info!("Failure reason is because webcom is down");
-                current_exit_code = FailureType::ConnectError;
+
+        // Check if the program is allowed to run, or not due to failed sign-in
+        let sign_in_check: Option<SignInFailure> = sign_in_failed_check().unwrap_or(None);
+        if let Some(failure) = sign_in_check {
+            retry_count = max_retry_count;
+            current_exit_code = FailureType::SignInFailed(failure);
+        }
+
+        while retry_count < max_retry_count {
+            match main_program(&driver, &username, &password, retry_count, &mut logbook).await {
+                Ok(last_exit_code) => {
+                    previous_exit_code = last_exit_code;
+                    match update_signin_failure(false, None) {
+                        Ok(_) => (),
+                        Err(err) => error!("Sign in failure check failed. error {err}"),
+                    };
+                    retry_count = max_retry_count;
+                }
+                Err(x) => {
+                    match x.downcast_ref::<FailureType>() {
+                        Some(FailureType::SignInFailed(y)) => {
+                            // Do not stop webcom if the sign in failure reason is unknown
+                            if let SignInFailure::Other(x) = y {
+                                warn!(
+                                    "Kon niet inloggen, maar een onbekende fout: {}. Probeert opnieuw",
+                                    x
+                                )
+                            } else {
+                                retry_count = max_retry_count;
+                                _ = update_signin_failure(true, Some(y.clone()));
+                                current_exit_code = FailureType::SignInFailed(y.to_owned());
+                                error!("Inloggen niet succesvol, fout: {:?}", y)
+                            }
+                        }
+                        _ => {
+                            warn!(
+                                "Fout tijdens shift laden, opnieuw proberen, poging: {}. Fout: {}",
+                                retry_count + 1,
+                                &x.to_string()
+                            );
+                            running_errors.push(x);
+                        }
+                    }
+                }
+            };
+            retry_count += 1;
+        }
+        if running_errors.is_empty() {
+            info!("Alles is in een keer goed gegaan, jippie!");
+        } else if running_errors.len() < max_retry_count {
+            warn!("Errors have occured, but succeded in the end");
+        } else {
+            current_exit_code = FailureType::TriesExceeded;
+            match send_errors(&running_errors, &name) {
+                Ok(_) => (),
+                Err(x) => error!("failed to send error email, ironic: {:?}", x),
             }
         }
+        // TODO the logic for selecting the error reason is quite confusing. This should be cleaned up someday
+        // Could be done by always returning a failuretype. Wrapping it around all error types. Possible based on the type of error
+        // Then having one big match on what to do based on the failure type?
+        // But that is for later
+        // This currently informs the user if webcom is down
+        if let Some(last_error) = running_errors.last() {
+            if let Some(failure_type) = last_error.downcast_ref::<FailureType>() {
+                if failure_type == &FailureType::ConnectError {
+                    info!("Failure reason is because webcom is down");
+                    current_exit_code = FailureType::ConnectError;
+                }
+            }
+        }
+        if current_exit_code != FailureType::TriesExceeded {
+            _ = send_heartbeat(&current_exit_code, kuma_url, &username).await;
+        }
+        _ = logbook.save(&current_exit_code);
+        // Update the exit code in the calendar if it is not equal to the previous value
+        if previous_exit_code != current_exit_code {
+            warn!("Previous exit code was different than current, need to update");
+            _ = update_calendar_exit_code(&previous_exit_code, &current_exit_code);
+        }
     }
-    if current_exit_code != FailureType::TriesExceeded {
-        _ = send_heartbeat(&current_exit_code, kuma_url, &username).await;
-    }
-    _ = logbook.save(&current_exit_code);
-    // Update the exit code in the calendar if it is not equal to the previous value
-    if previous_exit_code != current_exit_code {
-        warn!("Previous exit code was different than current, need to update");
-        _ = update_calendar_exit_code(&previous_exit_code, &current_exit_code);
-    }
-    Ok(current_exit_code)
 }
 
 #[tokio::main]
@@ -403,22 +402,32 @@ async fn main() -> GenResult<()> {
     pretty_env_logger::init();
     warn!("Starting Webcom Ical");
 
+    let args = Args::parse();
+
     let username = var("USERNAME").expect("Error in username variable");
     let kuma_url = var("KUMA_URL").ok();
 
     let mut logbook = ApplicationLogbook::load();
-    let driver = match initiate_webdriver().await {
+    let driver: WebDriver = match initiate_webdriver().await {
         Ok(driver) => driver,
         Err(error) => {
             error!("Kon driver niet opstarten: {:?}", &error);
             _ = send_errors(&vec![error], &set_get_name(None));
             _ = logbook.save(&FailureType::GeckoEngine);
-            _ = send_heartbeat(&FailureType::GeckoEngine, kuma_url, &username).await;
+            _ = send_heartbeat(&FailureType::GeckoEngine, kuma_url.as_deref(), &username).await;
             return Err("driver fout".into());
         }
     };
-    let execution_properties = get_execution_properties();
-    _ = main_loop(&driver, kuma_url).await;
+
+    let execution_notification = Arc::new(Notify::new());
+    let execution_notification_clone = execution_notification.clone();
+    let instant_run = args.instant_run;
+    match args.single_run {
+        false => {spawn(async move {execution_manager(execution_notification_clone, instant_run).await});},
+        true => {execution_notification.notify_one();}
+    };
+    
+    _ = main_loop(&driver, execution_notification, kuma_url.as_deref()).await;
     driver.quit().await?;
     Ok(())
 }

@@ -101,7 +101,7 @@ pub struct ApplicationState {
 
 pub async fn send_heartbeat(
     reason: &FailureType,
-    url: Option<String>,
+    url: Option<&str>,
     personeelsnummer: &str,
 ) -> GenResult<()> {
     if url.is_none() || reason == &FailureType::TriesExceeded {

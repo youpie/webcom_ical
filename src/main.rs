@@ -37,8 +37,6 @@ use crate::ical::*;
 use crate::parsing::*;
 use crate::shift::*;
 
-use time::Time;
-
 pub mod email;
 pub mod gebroken_shifts;
 mod health;
@@ -74,18 +72,6 @@ fn create_shift_link(shift: &Shift, include_domain: bool) -> GenResult<String> {
         "{domain}{shift_number_bare}?date={}",
         &formatted_date
     ))
-}
-
-// Creates and returns a Time::time from a given string of time eg: 12:34
-// Uses A LOT of unwraps, so can easilly fail. :)
-fn get_time(str_time: &str) -> Time {
-    let mut time_split = str_time.split(":");
-    let mut hour: u8 = time_split.clone().next().unwrap().parse().unwrap();
-    let min: u8 = time_split.nth(1).unwrap().parse().unwrap();
-    if hour >= 24 {
-        hour = hour - 24;
-    }
-    Time::from_hms(hour, min, 0).unwrap()
 }
 
 fn create_ical_filename() -> GenResult<String> {
@@ -231,7 +217,7 @@ async fn main_program(
     };
     load_calendar(&driver, &username, &password).await?;
     wait_until_loaded(&driver).await?;
-    let mut new_shifts = load_current_month_shifts(&driver).await?;
+    let mut new_shifts = load_current_month_shifts(&driver, logbook).await?;
     let ical_path = get_ical_path()?;
     if !ical_path.exists() {
         info!(
@@ -253,7 +239,7 @@ async fn main_program(
         debug!("Existing calendar file found");
         new_shifts.append(&mut load_previous_month_shifts(&driver, 0).await?);
     }
-    new_shifts.append(&mut load_next_month_shifts(&driver).await?);
+    new_shifts.append(&mut load_next_month_shifts(&driver, logbook).await?);
     info!("Found {} shifts", new_shifts.len());
     let non_relevant_shifts = previous_shifts_information.previous_non_relevant_shifts;
     let mut previous_shifts = previous_shifts_information.previous_relevant_shifts;
@@ -299,7 +285,6 @@ Loads the main logic, and retries if it fails
 */
 async fn main_loop(
     driver: &WebDriver,
-    _execution_interval: Duration,
     kuma_url: Option<String>,
 ) -> GenResult<FailureType> {
     let name = set_get_name(None);
@@ -431,7 +416,8 @@ async fn main() -> GenResult<()> {
             return Err("driver fout".into());
         }
     };
-    _ = main_loop(&driver, Duration::from_secs(3600), kuma_url).await;
+    let execution_properties = get_execution_properties();
+    _ = main_loop(&driver, kuma_url).await;
     driver.quit().await?;
     Ok(())
 }

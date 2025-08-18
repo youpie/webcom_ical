@@ -36,6 +36,18 @@ pub enum FailureType {
     OK,
 }
 
+pub trait OptionResult<T> {
+    fn result(self) -> GenResult<T>;
+}
+
+impl<T> OptionResult<T> for Option<T> {
+    fn result(self) -> GenResult<T> {
+        match self {
+            Some(value) => Ok(value),
+            None => Err("Option Unwrap".into()),
+        }
+    }
+}
 
 pub async fn check_sign_in_error(driver: &WebDriver) -> GenResult<FailureType> {
     error!("Sign in failed");

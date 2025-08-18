@@ -6,7 +6,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use time::{Date, Duration, Time};
 
-use crate::get_time;
+use crate::{errors::OptionResult, GenResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum ShiftState {
@@ -45,7 +45,7 @@ impl Shift {
     Also hashes the string to see if it has been updated
     Looks intimidating, bus is mostly boilerplate + a bit of logic for correctly parsing the duration
     */
-    pub fn new(text: String, date: Date) -> Self {
+    pub fn new(text: String, date: Date) -> GenResult<Self> {
         let text_clone = text.clone();
         let parts = text_clone.split("\u{a0}• \u{a0}• ");
         let mut location_modifier = 1;
@@ -73,12 +73,12 @@ impl Shift {
             .nth(1)
             .unwrap_or("")
             .to_string();
-        let start_time_str = time.split_whitespace().nth(0).unwrap();
-        let end_time_str = time.split_whitespace().nth(2).unwrap();
-        let start = get_time(start_time_str);
-        let end = get_time(end_time_str);
+        let start_time_str = time.split_whitespace().nth(0).result()?;
+        let end_time_str = time.split_whitespace().nth(2).result()?;
+        let start = Shift::get_time(start_time_str)?;
+        let end = Shift::get_time(end_time_str)?;
         let mut is_broken = false;
-        let shift_type = number.chars().nth(0).unwrap();
+        let shift_type = number.chars().nth(0).result()?;
         let mut hasher = DefaultHasher::new();
         let hash_list = (date, &number, &start, &end, &shift_duration);
         hash_list.hash(&mut hasher);
@@ -92,24 +92,21 @@ impl Shift {
             duration_split
                 .clone()
                 .nth(1)
-                .unwrap()
-                .parse::<i64>()
-                .unwrap(),
+                .result()?
+                .parse::<i64>()?
         );
         let duration_hours = Duration::hours(
             duration_split
                 .clone()
-                .nth(0)
-                .unwrap()
-                .parse::<i64>()
-                .unwrap(),
+                .nth(0).result()?
+                .parse::<i64>()?,
         );
         let duration = duration_hours + duration_minutes;
         let mut end_date = date;
         if end < start {
             end_date = date + Duration::days(1);
         }
-        Self {
+        Ok(Self {
             date,
             number,
             start,
@@ -124,7 +121,7 @@ impl Shift {
             original_end_time: None,
             magic_number,
             state: ShiftState::Unknown,
-        }
+        })
     }
 
     // Create two new shifts from one broken shift.
@@ -166,5 +163,16 @@ impl Shift {
         };
         let shifts: Vec<Self> = vec![part_one, part_two];
         shifts
+    }
+
+    // Creates and returns a Time::time from a given string of time eg: 12:34
+    fn get_time(str_time: &str) -> GenResult<Time> {
+        let mut time_split = str_time.split(":");
+        let mut hour: u8 = time_split.clone().next().result()?.parse()?;
+        let min: u8 = time_split.nth(1).result()?.parse()?;
+        if hour >= 24 {
+            hour = hour - 24;
+        }
+        Ok(Time::from_hms(hour, min, 0)?)
     }
 }

@@ -1,4 +1,4 @@
-use crate::{GenResult, Shift, shift::ShiftState};
+use crate::{errors::OptionResult, shift::ShiftState, GenResult, Shift};
 use async_recursion::async_recursion;
 use dotenvy::var;
 use thirtyfour::{
@@ -27,7 +27,7 @@ Creates two new shifts and adds them to the list
 Returns the new list
 Does not return most errors as there are a few valid reason this function fails
 */
-pub async fn gebroken_diensten_laden(
+pub async fn load_broken_shift_information(
     driver: &WebDriver,
     all_shifts: &Vec<Shift>,
 ) -> WebDriverResult<Vec<Shift>> {
@@ -130,7 +130,7 @@ pub async fn load_broken_dienst_page(
 ) -> GenResult<Vec<WebElement>> {
     let date = shift.date;
     let date_format = format_description!("[year]-[month]-[day]");
-    let formatted_date = date.format(date_format).unwrap();
+    let formatted_date = date.format(date_format)?;
     navigate_to_subdirectory(driver, &format!("/WebComm/shift.aspx?{}", formatted_date)).await?;
     //wait_until_loaded(&driver).await?;
     wait_for_response(driver, By::PartialLinkText("Werk en afwezigheden"), true).await?;
@@ -151,11 +151,11 @@ pub async fn find_broken_start_stop_time(
     let mut opstaptijden: Vec<String> = vec![];
     for row in shift_rows {
         let shift_columns = row.query(By::Tag("td")).all_from_selector().await?;
-        if shift_columns.last().unwrap().text().await? == "Afstaptijd" {
+        if shift_columns.last().result()?.text().await? == "Afstaptijd" {
             debug!("afstaptijd {}", shift_columns[3].text().await?);
             afstaptijden.push(shift_columns[1].text().await?);
         }
-        if shift_columns.last().unwrap().text().await? == "Opstaptijd" {
+        if shift_columns.last().result()?.text().await? == "Opstaptijd" {
             debug!("opstaptijd {}", shift_columns[1].text().await?);
             opstaptijden.push(shift_columns[1].text().await?);
         }

@@ -23,7 +23,7 @@ use time::{Date, OffsetDateTime, Time};
 // UPDATE THIS WHENEVER ANYTHING CHANGES IN THE ICAL
 // Add B if it modifies of removes an already existing value
 // Add W if it is wanted to resend the welcome mail
-pub const CALENDAR_VERSION: &str = "3";
+pub const CALENDAR_VERSION: &str = "3B";
 
 const PREVIOUS_EXECUTION_DATE_PATH: &str = "./kuma/previous_execution_date";
 pub const NON_RELEVANT_EVENTS_PATH: &str = "./kuma/non_relevant_events";
@@ -112,12 +112,12 @@ fn split_calendar(events: Vec<Event>) -> (Vec<Event>, Option<Vec<Event>>) {
 // If true, the partial calendars need to be recreated. If date has changed
 // If false, doesn't need to happen
 // None, unknown, error occured
-fn is_partial_calendar_regeneration_needed() -> Option<bool> {
+fn is_partial_calendar_regeneration_needed() -> GenResult<Option<bool>> {
     let current_date = match OffsetDateTime::now_local() {
         Ok(date) => date.date(),
         Err(_err) => {
             warn!("failed to get current date");
-            return None;
+            return Ok(None);
         }
     };
     let previous_execution_date = match || -> GenResult<Date> {
@@ -132,20 +132,20 @@ fn is_partial_calendar_regeneration_needed() -> Option<bool> {
             );
             _ = write(
                 PREVIOUS_EXECUTION_DATE_PATH,
-                serde_json::to_string(&current_date).unwrap().as_bytes(),
+                serde_json::to_string(&current_date)?.as_bytes(),
             );
-            return None;
+            return Ok(None);
         }
     };
     debug!("Current date: {current_date}");
     _ = write(
         PREVIOUS_EXECUTION_DATE_PATH,
-        serde_json::to_string(&current_date).unwrap().as_bytes(),
+        serde_json::to_string(&current_date)?.as_bytes(),
     );
     if previous_execution_date != current_date {
-        Some(true)
+        Ok(Some(true))
     } else {
-        Some(false)
+        Ok(Some(false))
     }
 }
 
@@ -208,7 +208,7 @@ pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
     let relevant_events_exist = Path::new(RELEVANT_EVENTS_PATH).exists();
     let non_relevant_events_exist = Path::new(NON_RELEVANT_EVENTS_PATH).exists();
     let main_ical_path = get_ical_path()?;
-    if is_partial_calendar_regeneration_needed().is_none_or(|needed| needed)
+    if is_partial_calendar_regeneration_needed()?.is_none_or(|needed| needed)
         || !(relevant_events_exist && non_relevant_events_exist)
     {
         info!("calendar regeneration needed");
@@ -257,8 +257,8 @@ pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
         }))
     } else {
         info!("Calendar regeneration NOT needed");
-        let relevant_shift_str = read_to_string(RELEVANT_EVENTS_PATH).unwrap();
-        let irrelevant_shift_str = read_to_string(NON_RELEVANT_EVENTS_PATH).unwrap();
+        let relevant_shift_str = read_to_string(RELEVANT_EVENTS_PATH)?;
+        let irrelevant_shift_str = read_to_string(NON_RELEVANT_EVENTS_PATH)?;
         let previous_relevant_shifts: Vec<Shift> =
             serde_json::from_str(&relevant_shift_str).unwrap_or_default();
         // All relevant shifts MUST FIRST BE MARKED AS DELETED for deleted shift detection to work
@@ -291,7 +291,7 @@ fn create_event(shift: &Shift, metadata: Option<&Shift>) -> Event {
     let cut_off_end_time = if let Some(end_time) = shift.original_end_time {
         format!(
             " ⏺ \nEindtijd - {}",
-            end_time.format(TIME_DESCRIPTION).unwrap()
+            end_time.format(TIME_DESCRIPTION).unwrap_or_default()
         )
     } else {
         String::new()
@@ -312,7 +312,7 @@ Shift sheet • {}",
         .location(&shift.location)
         .append_property(icalendar::Property::new(
             "X-BUSSIE-METADATA",
-            &serde_json::to_string(metadata.unwrap_or(shift)).unwrap(),
+            &serde_json::to_string(metadata.unwrap_or(shift)).unwrap_or_default(),
         ))
         .starts(create_dateperhapstime(shift.date, shift.start))
         .ends(create_dateperhapstime(shift.end_date, shift.end))

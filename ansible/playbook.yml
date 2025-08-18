@@ -60,6 +60,10 @@
       set_fact:
         timeout_time: "{{ timeout_time_hrs | int * 3600 + 400 }}"
 
+    - name: Set cycle time
+      set_fact:
+        timeout_time: "{{ timeout_time_hrs | int * 3600}}"
+
     - name: Create user directory
       ansible.builtin.file:
         path: "~/Services/Webcom/{{ personeelsnummer }}"

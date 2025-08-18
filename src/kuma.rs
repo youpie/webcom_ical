@@ -6,6 +6,7 @@ use std::fs::read_to_string;
 use strfmt::strfmt;
 use url::Url;
 
+use crate::errors::OptionResult;
 use crate::{email, set_get_name};
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
@@ -68,7 +69,7 @@ async fn create_monitor(
         ..Default::default()
     };
     let monitor_response = kuma_client.add_monitor(monitor).await?;
-    let monitor_id = monitor_response.common().id().unwrap();
+    let monitor_id = monitor_response.common().id().result()?;
     info!("Monitor has been created, id: {monitor_id}");
     Ok(monitor_id)
 }
@@ -79,9 +80,9 @@ async fn create_notification(
     personeelsnummer: &str,
     kuma_url: &Url,
 ) -> GenResult<(i32, bool)> {
-    let base_html = read_to_string("./templates/email_base.html").unwrap();
-    let offline_html = read_to_string("./templates/kuma_offline.html").unwrap();
-    let online_html = read_to_string("./templates/kuma_online.html").unwrap();
+    let base_html = read_to_string("./templates/email_base.html").expect("Can't get email base template");
+    let offline_html = read_to_string("./templates/kuma_offline.html").expect("Can't get kuma offline template");
+    let online_html = read_to_string("./templates/kuma_online.html").expect("Can't get kuma online template");
 
     let body_online = strfmt!(&base_html,
         content => strfmt!(&online_html,
@@ -156,7 +157,7 @@ Webcom Ical weer online
     };
 
     let notification_response = kuma_client.add_notification(notification.clone()).await?;
-    let id = notification_response.id.unwrap();
+    let id = notification_response.id.result()?;
     info!("Created notification with ID {id}");
     Ok((id, true))
 }

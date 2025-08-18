@@ -108,7 +108,7 @@ pub async fn send_heartbeat(
         info!("no heartbeat URL");
         return Ok(());
     }
-    let mut request_url: Url = url.clone().unwrap().parse().unwrap();
+    let mut request_url: Url = url.clone().expect("Can't get heartbeat URL").parse()?;
     request_url.set_path(&format!("/api/push/{personeelsnummer}"));
     request_url.set_query(Some(&format!(
         "status={}&msg={}&ping=",

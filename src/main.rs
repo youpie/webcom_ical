@@ -90,8 +90,7 @@ pub async fn wait_until_loaded(driver: &WebDriver) -> GenResult<()> {
         loop {
             let ready_state: ScriptRet = driver
                 .execute("return document.readyState", vec![])
-                .await
-                .unwrap();
+                .await?;
             let current_state = format!("{:?}", ready_state.json());
             if current_state == "String(\"complete\")" && started_loading {
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -163,9 +162,11 @@ fn get_execution_properties() -> (Duration, u8) {
 fn set_get_name(new_name_option: Option<String>) -> String {
     let path = create_path("name");
     // Just return constant name if already set
-    if let Ok(const_name) = NAME.read() {
-        if new_name_option.is_none() && const_name.is_some() {
-            return const_name.clone().unwrap();
+    if let Ok(const_name_option) = NAME.read() {
+        if let Some(const_name) = const_name_option.clone() {
+            if new_name_option.is_none() {
+                return const_name;
+            }
         }
     }
     let mut name = std::fs::read_to_string(&path)

@@ -57,8 +57,8 @@ impl Shift {
             .collect();
         let mut parts_list: Vec<Split<'_, &str>> =
             parts_clean.iter().map(|x| x.split(": ")).collect();
-        let number: String = parts_list[0].nth(1).unwrap().to_string();
-        let _date: String = parts_list[1].nth(1).unwrap().to_string();
+        let number: String = parts_list[0].nth(1).result()?.to_string();
+        let _date: String = parts_list[1].nth(1).result()?.to_string();
         let time: String = parts_list[2].nth(1).unwrap_or("").to_string();
         let shift_duration: String = parts_list[3].nth(1).unwrap_or("").to_string();
         let _working_hours: String = parts_list[4].nth(1).unwrap_or("").to_string();
@@ -87,7 +87,7 @@ impl Shift {
             is_broken = true;
         }
 
-        let duration_split = shift_duration.split_whitespace().nth(0).unwrap().split(":");
+        let duration_split = shift_duration.split_whitespace().nth(0).result()?.split(":");
         let duration_minutes = Duration::minutes(
             duration_split
                 .clone()

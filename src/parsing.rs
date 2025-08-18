@@ -177,10 +177,10 @@ async fn sign_in_webcom(driver: &WebDriver, user: &str, pass: &str) -> GenResult
     let name = name_text
         .split(",")
         .last()
-        .unwrap()
+        .result()?
         .split_whitespace()
         .next()
-        .unwrap()
+        .result()?
         .to_string();
     set_get_name(Some(name));
     Ok(())

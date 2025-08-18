@@ -205,7 +205,7 @@ pub fn sign_in_failed_check() -> GenResult<Option<SignInFailure>> {
     } else {
         warn!("Skipped execution due to previous sign in error");
         failure_counter.retry_count += 1;
-        return_value = Some(failure_counter.error.clone().unwrap());
+        return_value = Some(failure_counter.error.clone().result()?);
     }
 
     if failure_counter.retry_count % resend_error_mail_count == 0 && failure_counter.error.is_some()

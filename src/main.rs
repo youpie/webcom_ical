@@ -16,8 +16,10 @@ use email::send_errors;
 use email::send_welcome_mail;
 use reqwest;
 use serde::{Deserialize, Serialize};
+use std::default;
 use std::fs;
 use std::fs::File;
+use std::fs::read_to_string;
 use std::fs::write;
 use std::hash::DefaultHasher;
 use std::hash::Hash;
@@ -282,7 +284,10 @@ fn load_sign_in_failure_count(path: &PathBuf) -> GenResult<IncorrectCredentialsC
 }
 
 // Save the sign in faulure count file
-fn save_sign_in_failure_count(path: &PathBuf, counter: &IncorrectCredentialsCount) -> GenResult<()> {
+fn save_sign_in_failure_count(
+    path: &PathBuf,
+    counter: &IncorrectCredentialsCount,
+) -> GenResult<()> {
     let failure_counter_serialised = serde_json::to_string(counter)?;
     let mut output = File::create(path)?;
     write!(output, "{}", failure_counter_serialised)?;
@@ -388,7 +393,28 @@ fn sign_in_failed_update(failed: bool, failure_type: Option<SignInFailure>) -> G
     Ok(())
 }
 
-fn update_calendar_exit_code(previous_exit_code: &FailureType, current_exit_code: &FailureType) -> GenResult<()> {
+fn get_execution_properties() -> (Duration, u8) {
+    let cycle_time = || -> GenResult<u64> {
+        Ok(var("CYCLE_TIME")
+            .unwrap_or((var("KUMA_HEARTBEAT_INTERVAL")?.parse::<u64>()? - 400).to_string())
+            .parse::<u64>()?)
+    }()
+    .unwrap_or(7200);
+    let starting_minute = || -> GenResult<u8> {
+        let path = create_path("starting_minute");
+        let starting_minute_str =
+            read_to_string(&path).unwrap_or(rand::random_range(0..60).to_string());
+        _ = write(&path, starting_minute_str.as_bytes());
+        Ok(starting_minute_str.parse()?)
+    }()
+    .unwrap_or(rand::random_range(0..60));
+    (Duration::from_secs(cycle_time), starting_minute)
+}
+
+fn update_calendar_exit_code(
+    previous_exit_code: &FailureType,
+    current_exit_code: &FailureType,
+) -> GenResult<()> {
     let ical_path = get_ical_path()?;
     let calendar = load_ical_file(&ical_path).unwrap_or_default().to_string();
     let formatted_previous_exit_code =
@@ -431,7 +457,13 @@ fn set_get_name(new_name_option: Option<String>) -> String {
 }
 
 // Main program logic that has to run, if it fails it will all be reran.
-async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_count: usize, logbook: &mut ApplicationLogbook) -> GenResult<FailureType> {
+async fn main_program(
+    driver: &WebDriver,
+    username: &str,
+    password: &str,
+    retry_count: usize,
+    logbook: &mut ApplicationLogbook,
+) -> GenResult<FailureType> {
     driver.delete_all_cookies().await?;
     info!("Loading site: {}..", MAIN_URL);
     match driver.goto(MAIN_URL).await {
@@ -496,7 +528,11 @@ async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_
     night_split_shifts.dedup();
     let mut all_shifts = night_split_shifts.clone();
     all_shifts.append(&mut non_relevant_shifts.clone());
-    let calendar = create_ical(&night_split_shifts, shifts,&previous_shifts_information.previous_exit_code);
+    let calendar = create_ical(
+        &night_split_shifts,
+        shifts,
+        &previous_shifts_information.previous_exit_code,
+    );
     send_welcome_mail(&ical_path)?;
     let mut output = File::create(&ical_path)?;
     info!("Writing to: {:?}", &ical_path);
@@ -516,7 +552,11 @@ async fn initiate_webdriver() -> GenResult<WebDriver> {
 This starts the WebDriver session
 Loads the main logic, and retries if it fails
 */
-async fn main_loop(driver: &WebDriver, _execution_interval: Duration, kuma_url: Option<String>) -> GenResult<FailureType> {
+async fn main_loop(
+    driver: &WebDriver,
+    _execution_interval: Duration,
+    kuma_url: Option<String>,
+) -> GenResult<FailureType> {
     let name = set_get_name(None);
     let mut logbook = ApplicationLogbook::load();
 
@@ -525,7 +565,7 @@ async fn main_loop(driver: &WebDriver, _execution_interval: Duration, kuma_url: 
 
     let mut current_exit_code = FailureType::default();
     let mut previous_exit_code = FailureType::default();
-    
+
     let mut running_errors: Vec<Box<dyn std::error::Error>> = vec![];
 
     let mut retry_count: usize = 0;

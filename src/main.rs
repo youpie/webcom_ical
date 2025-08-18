@@ -1,3 +1,11 @@
+const BASE_DIRECTORY: &str = "kuma/";
+const MAIN_URL: &str = "webcom.connexxion.nl";
+// the ;x should be equal to the ammount of fallback URLs
+const FALLBACK_URL: [&str; 2] = [
+    "https://dmz-wbc-web01.connexxion.nl/WebComm/default.aspx",
+    "https://dmz-wbc-web02.connexxion.nl/WebComm/default.aspx",
+];
+
 extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
@@ -41,12 +49,6 @@ pub mod shift;
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
-const BASE_DIRECTORY: &str = "kuma/";
-// the ;x should be equal to the ammount of fallback URLs
-const FALLBACK_URL: [&str; 2] = [
-    "https://dmz-wbc-web01.connexxion.nl/WebComm/default.aspx",
-    "https://dmz-wbc-web02.connexxion.nl/WebComm/default.aspx",
-];
 static NAME: LazyLock<RwLock<Option<String>>> = LazyLock::new(|| RwLock::new(None));
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -349,9 +351,14 @@ fn sign_in_failed_check() -> GenResult<Option<SignInFailure>> {
     Ok(return_value)
 }
 
-fn sign_in_failed_update(failed: bool, failure_type: Option<SignInFailure>) -> GenResult<()> {
+pub fn create_path(filename: &str) -> PathBuf {
     let mut path = PathBuf::from(BASE_DIRECTORY);
-    path.push("sign_in_failure_count.json");
+    path.push(filename);
+    path
+}
+
+fn sign_in_failed_update(failed: bool, failure_type: Option<SignInFailure>) -> GenResult<()> {
+    let path = create_path("sign_in_failure_count.json");
     let mut failure_counter = match load_sign_in_failure_count(&path) {
         Ok(failure) => failure,
         Err(_) => IncorrectCredentialsCount::default(),
@@ -397,8 +404,7 @@ fn update_calendar_exit_code(previous_exit_code: &FailureType, current_exit_code
 }
 
 fn set_get_name(new_name_option: Option<String>) -> String {
-    let mut path = PathBuf::from(BASE_DIRECTORY);
-    path.push("name");
+    let path = create_path("name");
     // Just return constant name if already set
     if let Ok(const_name) = NAME.read() {
         if new_name_option.is_none() && const_name.is_some() {
@@ -427,9 +433,8 @@ fn set_get_name(new_name_option: Option<String>) -> String {
 // Main program logic that has to run, if it fails it will all be reran.
 async fn main_program(driver: &WebDriver, username: &str, password: &str, retry_count: usize, logbook: &mut ApplicationLogbook) -> GenResult<FailureType> {
     driver.delete_all_cookies().await?;
-    let main_url = "webcom.connexxion.nl";
-    info!("Loading site: {}..", main_url);
-    match driver.goto(main_url).await {
+    info!("Loading site: {}..", MAIN_URL);
+    match driver.goto(MAIN_URL).await {
         Ok(_) => wait_untill_redirect(&driver).await?,
         Err(_) => {
             error!(
@@ -511,8 +516,12 @@ async fn initiate_webdriver() -> GenResult<WebDriver> {
 This starts the WebDriver session
 Loads the main logic, and retries if it fails
 */
-async fn main_loop(driver: &WebDriver, _execution_interval: Duration, kuma_url: Option<String>, username: &str, password: &str, logbook: &mut ApplicationLogbook) -> GenResult<FailureType> {
+async fn main_loop(driver: &WebDriver, _execution_interval: Duration, kuma_url: Option<String>) -> GenResult<FailureType> {
     let name = set_get_name(None);
+    let mut logbook = ApplicationLogbook::load();
+
+    let username = var("USERNAME").expect("Error in username variable loop");
+    let password = var("PASSWORD").expect("Error in password variable loop");
 
     let mut current_exit_code = FailureType::default();
     let mut previous_exit_code = FailureType::default();
@@ -543,7 +552,7 @@ async fn main_loop(driver: &WebDriver, _execution_interval: Duration, kuma_url: 
     }
 
     while retry_count < max_retry_count {
-        match main_program(&driver, &username, &password, retry_count, logbook).await {
+        match main_program(&driver, &username, &password, retry_count, &mut logbook).await {
             Ok(last_exit_code) => {
                 previous_exit_code = last_exit_code;
                 match sign_in_failed_update(false, None) {
@@ -622,9 +631,9 @@ async fn main() -> GenResult<()> {
     dotenv_override().ok();
     pretty_env_logger::init();
     warn!("Starting Webcom Ical");
-    let kuma_url = var("KUMA_URL").ok();
+
     let username = var("USERNAME").expect("Error in username variable");
-    let password = var("PASSWORD").expect("Error in password variable");
+    let kuma_url = var("KUMA_URL").ok();
 
     let mut logbook = ApplicationLogbook::load();
     let driver = match initiate_webdriver().await {
@@ -637,7 +646,7 @@ async fn main() -> GenResult<()> {
             return Err("driver fout".into());
         }
     };
-    _ = main_loop(&driver, Duration::from_secs(3600), kuma_url, &username, &password, &mut logbook).await;
+    _ = main_loop(&driver, Duration::from_secs(3600), kuma_url).await;
     driver.quit().await?;
     Ok(())
 }

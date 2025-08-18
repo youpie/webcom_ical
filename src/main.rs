@@ -18,6 +18,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::sync::RwLock;
+use std::time::Duration;
 use thirtyfour::prelude::*;
 use thiserror::Error;
 use time::macros::format_description;
@@ -510,30 +511,15 @@ async fn initiate_webdriver() -> GenResult<WebDriver> {
 This starts the WebDriver session
 Loads the main logic, and retries if it fails
 */
-#[tokio::main]
-async fn main() -> WebDriverResult<()> {
-    dotenv_override().ok();
-    pretty_env_logger::init();
-    warn!("Starting Webcom Ical");
-    let mut logbook = ApplicationLogbook::load();
-    let mut current_exit_code = FailureType::OK;
+async fn main_loop(driver: &WebDriver, _execution_interval: Duration, kuma_url: Option<String>, username: &str, password: &str, logbook: &mut ApplicationLogbook) -> GenResult<FailureType> {
     let name = set_get_name(None);
-    let kuma_url = var("KUMA_URL").ok();
-    let username = var("USERNAME").unwrap();
-    let password = var("PASSWORD").unwrap();
-    let driver = match initiate_webdriver().await {
-        Ok(driver) => driver,
-        Err(error) => {
-            error!("Kon driver niet opstarten: {:?}", &error);
-            _ = send_errors(&vec![error], &name);
-            current_exit_code = FailureType::GeckoEngine;
-            _ = logbook.save(&current_exit_code);
-            _ = send_heartbeat(&current_exit_code, kuma_url, &username).await;
-            return Err(WebDriverError::FatalError("driver fout".to_string()));
-        }
-    };
-    let mut retry_count: usize = 0;
+
+    let mut current_exit_code = FailureType::default();
+    let mut previous_exit_code = FailureType::default();
+    
     let mut running_errors: Vec<Box<dyn std::error::Error>> = vec![];
+
+    let mut retry_count: usize = 0;
     let max_retry_count: usize = var("RETRY_COUNT")
         .unwrap_or("3".to_string())
         .parse()
@@ -548,15 +534,16 @@ async fn main() -> WebDriverResult<()> {
             }
         }
     }
+
     // Check if the program is allowed to run, or not due to failed sign-in
     let sign_in_check: Option<SignInFailure> = sign_in_failed_check().unwrap_or(None);
-    let mut previous_exit_code = FailureType::default();
     if let Some(failure) = sign_in_check {
         retry_count = max_retry_count;
         current_exit_code = FailureType::SignInFailed(failure);
     }
-    while retry_count <= max_retry_count - 1 {
-        match main_program(&driver, &username, &password, retry_count, &mut logbook).await {
+
+    while retry_count < max_retry_count {
+        match main_program(&driver, &username, &password, retry_count, logbook).await {
             Ok(last_exit_code) => {
                 previous_exit_code = last_exit_code;
                 match sign_in_failed_update(false, None) {
@@ -627,6 +614,30 @@ async fn main() -> WebDriverResult<()> {
         warn!("Previous exit code was different than current, need to update");
         _ = update_calendar_exit_code(&previous_exit_code, &current_exit_code);
     }
+    Ok(current_exit_code)
+}
+
+#[tokio::main]
+async fn main() -> GenResult<()> {
+    dotenv_override().ok();
+    pretty_env_logger::init();
+    warn!("Starting Webcom Ical");
+    let kuma_url = var("KUMA_URL").ok();
+    let username = var("USERNAME").expect("Error in username variable");
+    let password = var("PASSWORD").expect("Error in password variable");
+
+    let mut logbook = ApplicationLogbook::load();
+    let driver = match initiate_webdriver().await {
+        Ok(driver) => driver,
+        Err(error) => {
+            error!("Kon driver niet opstarten: {:?}", &error);
+            _ = send_errors(&vec![error], &set_get_name(None));
+            _ = logbook.save(&FailureType::GeckoEngine);
+            _ = send_heartbeat(&FailureType::GeckoEngine, kuma_url, &username).await;
+            return Err("driver fout".into());
+        }
+    };
+    _ = main_loop(&driver, Duration::from_secs(3600), kuma_url, &username, &password, &mut logbook).await;
     driver.quit().await?;
     Ok(())
 }

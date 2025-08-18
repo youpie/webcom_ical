@@ -51,6 +51,7 @@ mod parsing;
 pub mod shift;
 mod execution;
 pub mod errors;
+mod variables;
 
 type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 

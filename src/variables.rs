@@ -1,7 +1,3 @@
-use diesel::{Queryable, Selectable};
-
-#[derive(Queryable, Selectable)]
-#[diesel(table_name = user_data)]
 struct UserData {
     personeelsnummer: String,
     wachtwoord: String,

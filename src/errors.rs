@@ -1,4 +1,4 @@
-use std::{fs::write, hash::{DefaultHasher, Hash, Hasher}, path::PathBuf};
+use std::{fmt::Display, fs::write, hash::{DefaultHasher, Hash, Hasher}, path::PathBuf};
 
 use dotenvy::var;
 use serde::{Deserialize, Serialize};
@@ -214,4 +214,27 @@ pub fn sign_in_failed_check() -> GenResult<Option<SignInFailure>> {
     }
     save_sign_in_failure_count(&path, &failure_counter)?;
     Ok(return_value)
+}
+
+pub trait ResultLog<T,E> {
+    fn warn(&self, function_name: &str) -> &Self;
+    fn info(&self, function_name: &str) -> &Self;
+}
+
+impl<T,E> ResultLog<T,E> for Result<T,E> where E: Display{
+    fn info(&self, function_name: &str) -> &Self {
+        match self {
+            Err(error) => info!("Error in function \"{function_name}\": {}",error.to_string()),
+            _ => (),
+        };
+        self
+    }
+    fn warn(&self, function_name: &str) -> &Self {
+        match self {
+            Err(error) => warn!("Error in function \"{function_name}\": {}",error.to_string()),
+            _ => (),
+        };
+        self
+    }
+    
 }

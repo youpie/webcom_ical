@@ -135,7 +135,7 @@ pub fn update_calendar_exit_code(
     current_exit_code: &FailureType,
 ) -> GenResult<()> {
     let ical_path = get_ical_path()?;
-    let calendar = load_ical_file(&ical_path).unwrap_or_default().to_string();
+    let calendar = load_ical_file(&ical_path)?.to_string();
     let formatted_previous_exit_code =
         serde_json::to_string(&previous_exit_code).unwrap_or("OK".to_owned());
     let formatted_current_exit_code =

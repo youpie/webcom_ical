@@ -33,6 +33,7 @@ use crate::errors::sign_in_failed_check;
 use crate::errors::update_signin_failure;
 use crate::errors::FailureType;
 use crate::errors::OptionResult;
+use crate::errors::ResultLog;
 use crate::errors::SignInFailure;
 use crate::execution::execution_manager;
 use crate::health::send_heartbeat;
@@ -220,16 +221,10 @@ async fn main_program(
         info!(
             "An existing calendar file has not been found, adding two extra months of shifts, also removing partial calendars"
         );
-        match || -> GenResult<()> {
+        || -> GenResult<()> {
             fs::remove_file(PathBuf::from(NON_RELEVANT_EVENTS_PATH))?;
             Ok(fs::remove_file(PathBuf::from(RELEVANT_EVENTS_PATH))?)
-        }() {
-            Ok(_) => info!("Removing files succesful"),
-            Err(err) => warn!(
-                "Removing partial calendar files failed. Error: {}",
-                err.to_string()
-            ),
-        };
+        }().warn("Removing partial shifts");
 
         new_shifts.append(&mut load_previous_month_shifts(&driver, 2).await?);
     } else {
@@ -305,16 +300,6 @@ async fn main_loop(
             .parse()
             .unwrap_or(3);
 
-        if let Some(url_unwrap) = kuma_url.clone() {
-            if !url_unwrap.is_empty() {
-                debug!("Checking if kuma needs to be created");
-                match kuma::first_run(&url_unwrap, &username).await {
-                    Ok(_) => debug!("Kuma run was succesful"),
-                    Err(err) => warn!("Kuma run was not succesful. Error: {}", err.to_string()),
-                }
-            }
-        }
-
         // Check if the program is allowed to run, or not due to failed sign-in
         let sign_in_check: Option<SignInFailure> = sign_in_failed_check().unwrap_or(None);
         if let Some(failure) = sign_in_check {
@@ -326,10 +311,7 @@ async fn main_loop(
             match main_program(&driver, &username, &password, retry_count, &mut logbook).await {
                 Ok(last_exit_code) => {
                     previous_exit_code = last_exit_code;
-                    match update_signin_failure(false, None) {
-                        Ok(_) => (),
-                        Err(err) => error!("Sign in failure check failed. error {err}"),
-                    };
+                    update_signin_failure(false, None).warn("Updating signin failure");
                     retry_count = max_retry_count;
                 }
                 Err(x) => {
@@ -367,10 +349,7 @@ async fn main_loop(
             warn!("Errors have occured, but succeded in the end");
         } else {
             current_exit_code = FailureType::TriesExceeded;
-            match send_errors(&running_errors, &name) {
-                Ok(_) => (),
-                Err(x) => error!("failed to send error email, ironic: {:?}", x),
-            }
+            send_errors(&running_errors, &name).warn("Sending errors in loop");
         }
         // TODO the logic for selecting the error reason is quite confusing. This should be cleaned up someday
         // Could be done by always returning a failuretype. Wrapping it around all error types. Possible based on the type of error
@@ -386,13 +365,13 @@ async fn main_loop(
             }
         }
         if current_exit_code != FailureType::TriesExceeded {
-            _ = send_heartbeat(&current_exit_code, kuma_url, &username).await;
+            send_heartbeat(&current_exit_code, kuma_url, &username).await.warn("Sending Heartbeat in loop");
         }
-        _ = logbook.save(&current_exit_code);
+        logbook.save(&current_exit_code).warn("Saving logbook in loop");
         // Update the exit code in the calendar if it is not equal to the previous value
         if previous_exit_code != current_exit_code {
             warn!("Previous exit code was different than current, need to update");
-            _ = update_calendar_exit_code(&previous_exit_code, &current_exit_code);
+            update_calendar_exit_code(&previous_exit_code, &current_exit_code).warn("Updating calendar exit code");
         }
         if !continue_execution {
             break;
@@ -417,20 +396,30 @@ async fn main() -> GenResult<()> {
         Ok(driver) => driver,
         Err(error) => {
             error!("Kon driver niet opstarten: {:?}", &error);
-            _ = send_errors(&vec![error], &set_get_name(None));
-            _ = logbook.save(&FailureType::GeckoEngine);
-            _ = send_heartbeat(&FailureType::GeckoEngine, kuma_url.as_deref(), &username).await;
+            send_errors(&vec![error], &set_get_name(None)).info("Send errors");
+            logbook.save(&FailureType::GeckoEngine).warn("Saving Logbook");
+            send_heartbeat(&FailureType::GeckoEngine, kuma_url.as_deref(), &username).await.warn("Sending heartbeat");
             return Err("driver fout".into());
         }
     };
+
+    if let Some(url_unwrap) = kuma_url.clone() {
+        if !url_unwrap.is_empty() {
+            debug!("Checking if kuma needs to be created");
+            kuma::first_run(&url_unwrap, &username).await.warn("Kuma Run");
+        }
+    }
+
     let (tx, mut rx) = channel(1);
     let instant_run = args.instant_run;
+    // If the single run argument is set, just send a single message so the main loop instantly runs. 
+    // Otherwise start the execution manager
     match args.single_run {
         false => {spawn(async move {execution_manager(tx, instant_run).await});},
-        true => {_ = tx.send(false).await;}
+        true => {tx.send(false).await?;}
     };
     
-    _ = main_loop(&driver, &mut rx, kuma_url.as_deref()).await;
+    main_loop(&driver, &mut rx, kuma_url.as_deref()).await?;
     driver.quit().await?;
     Ok(())
 }

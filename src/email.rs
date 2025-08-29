@@ -12,11 +12,9 @@ use strfmt::strfmt;
 use thirtyfour::error::{WebDriverErrorInfo, WebDriverResult};
 use time::{macros::format_description, Date};
 use crate::errors::IncorrectCredentialsCount;
-use crate::ShiftState;
+use crate::{GenError, GenResult, ShiftState};
 
 use crate::{create_ical_filename, create_shift_link, set_get_name, Shift, SignInFailure};
-
-type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 const ERROR_VALUE: &str = "HIER HOORT WAT ANDERS DAN DEZE TEKST TE STAAN, CONFIGURATIE INCORRECT";
 const SENDER_NAME: &str = "Peter";
@@ -372,7 +370,7 @@ fn send_removed_shifts_mail(
 Composes and sends email of found errors, in plaintext
 List of errors can be as long as possible, but for now is always 3
 */
-pub fn send_errors(errors: &Vec<Box<dyn std::error::Error>>, name: &str) -> GenResult<()> {
+pub fn send_errors(errors: &Vec<GenError>, name: &str) -> GenResult<()> {
     let env = EnvMailVariables::new(false)?;
     if !env.send_error_mail {
         info!("tried to send error mail, but is disabled");

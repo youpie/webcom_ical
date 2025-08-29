@@ -1,12 +1,15 @@
-use std::{fs::{read_to_string, write}, time::Duration};
+use std::{fs::{read_to_string, write}, io::BufRead, time::Duration};
 
 use chrono::{Timelike, Utc};
 use dotenvy::var;
+use ipipe::Pipe;
 use tokio::{sync::mpsc::Sender, time::sleep};
 
-use crate::{create_path, GenResult};
+use crate::{create_path, errors::ResultLog, GenResult};
 
-fn get_execution_properties() -> (Duration, u8) {
+type StartMinute = u8;
+
+fn get_execution_properties() -> (Duration, StartMinute) {
     let cycle_time = || -> GenResult<u64> {
         Ok(var("CYCLE_TIME")
             .unwrap_or((var("KUMA_HEARTBEAT_INTERVAL")?.parse::<u64>()? - 400).to_string())
@@ -39,10 +42,31 @@ pub async fn execution_manager(tx: Sender<bool>, instant_run: bool) {
         debug!("Waiting {waiting_minutes} minutes until execution");
         sleep(Duration::from_secs(waiting_minutes as u64 * 60)).await;
     }
+    
     loop {
         info!("Starting execution loop");
-        _ = tx.send(true).await;
+        _ = tx.try_send(true);
+        
         sleep(execution_properties.0).await;
     }
+}
 
+pub fn start_pipe(tx: Sender<bool>) -> Result<(), ipipe::Error> {
+    let pipe_path = create_path("pipe");
+    if pipe_path.exists() {
+        info!("Previous pipe file found, removing");
+        std::fs::remove_file(&pipe_path).warn("Removing previous pipe");
+    }
+    let pipe = Pipe::open(&pipe_path, ipipe::OnCleanup::Delete)?;
+    let reader = std::io::BufReader::new(pipe);
+    for line in reader.lines()
+    {
+        match line {
+            Ok(line) if line == "q" => {return Ok(())},
+            Ok(_) => {tx.try_send(true).info("Send start request from pipe")},
+            _ => (),
+        }
+        debug!("Recieved message from pipe: {}", line.unwrap_or("Error".to_owned()));
+    }
+    Ok(())
 }

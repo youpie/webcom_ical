@@ -217,24 +217,28 @@ pub fn sign_in_failed_check() -> GenResult<Option<SignInFailure>> {
 }
 
 pub trait ResultLog<T,E> {
-    fn warn(&self, function_name: &str) -> &Self;
-    fn info(&self, function_name: &str) -> &Self;
+    fn warn(&self, function_name: &str);
+    fn warn_owned(self, function_name: &str) -> Self;
+    fn info(&self, function_name: &str);
 }
 
 impl<T,E> ResultLog<T,E> for Result<T,E> where E: Display{
-    fn info(&self, function_name: &str) -> &Self {
+    fn info(&self, function_name: &str) {
         match self {
-            Err(error) => info!("Error in function \"{function_name}\": {}",error.to_string()),
-            _ => (),
-        };
-        self
+            Err(err) => {info!("Error in function \"{function_name}\": {}",err.to_string())},
+            _ => ()
+        }
     }
-    fn warn(&self, function_name: &str) -> &Self {
+    fn warn_owned(self, function_name: &str) -> Self {
+        self.inspect_err(|err| {
+            warn!("Error in function \"{function_name}\": {}",err.to_string())
+        })
+    }
+    fn warn(&self, function_name: &str) {
         match self {
-            Err(error) => warn!("Error in function \"{function_name}\": {}",error.to_string()),
-            _ => (),
-        };
-        self
+            Err(err) => {warn!("Error in function \"{function_name}\": {}",err.to_string())},
+            _ => ()
+        }
     }
     
 }

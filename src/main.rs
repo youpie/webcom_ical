@@ -36,6 +36,7 @@ use crate::errors::OptionResult;
 use crate::errors::ResultLog;
 use crate::errors::SignInFailure;
 use crate::execution::execution_manager;
+use crate::execution::start_pipe;
 use crate::health::send_heartbeat;
 use crate::health::update_calendar_exit_code;
 use crate::health::ApplicationLogbook;
@@ -53,7 +54,8 @@ pub mod shift;
 mod execution;
 pub mod errors;
 
-type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
+type GenResult<T> = Result<T, GenError>;
+type GenError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 static NAME: LazyLock<RwLock<Option<String>>> = LazyLock::new(|| RwLock::new(None));
 
@@ -276,7 +278,7 @@ This starts the WebDriver session
 Loads the main logic, and retries if it fails
 */
 async fn main_loop(
-    driver: &WebDriver,
+    driver: WebDriver,
     receiver: &mut Receiver<bool>,
     kuma_url: Option<&str>,
 ) -> GenResult<()> {
@@ -292,7 +294,7 @@ async fn main_loop(
         let mut current_exit_code = FailureType::default();
         let mut previous_exit_code = FailureType::default();
 
-        let mut running_errors: Vec<Box<dyn std::error::Error>> = vec![];
+        let mut running_errors: Vec<GenError> = vec![];
 
         let mut retry_count: usize = 0;
         let max_retry_count: usize = var("RETRY_COUNT")
@@ -402,7 +404,7 @@ async fn main() -> GenResult<()> {
             return Err("driver fout".into());
         }
     };
-
+    let driver_clone= driver.clone();
     if let Some(url_unwrap) = kuma_url.clone() {
         if !url_unwrap.is_empty() {
             debug!("Checking if kuma needs to be created");
@@ -411,6 +413,7 @@ async fn main() -> GenResult<()> {
     }
 
     let (tx, mut rx) = channel(1);
+    let tx_clone = tx.clone();
     let instant_run = args.instant_run;
     // If the single run argument is set, just send a single message so the main loop instantly runs. 
     // Otherwise start the execution manager
@@ -418,8 +421,9 @@ async fn main() -> GenResult<()> {
         false => {spawn(async move {execution_manager(tx, instant_run).await});},
         true => {tx.send(false).await?;}
     };
-    
-    main_loop(&driver, &mut rx, kuma_url.as_deref()).await?;
+    spawn(async move {main_loop(driver_clone, &mut rx, kuma_url.as_deref()).await});
+    start_pipe(tx_clone).warn("Start pipe");
+    info!("Stopping webcom ical");
     driver.quit().await?;
     Ok(())
 }

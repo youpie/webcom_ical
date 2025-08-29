@@ -7,9 +7,7 @@ use strfmt::strfmt;
 use url::Url;
 
 use crate::errors::OptionResult;
-use crate::{email, set_get_name};
-
-type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
+use crate::{email, set_get_name, GenResult};
 
 const COLOR_RED: &str = "#a51d2d";
 const COLOR_GREEN: &str = "#26a269";

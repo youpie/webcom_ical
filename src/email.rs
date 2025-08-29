@@ -523,10 +523,22 @@ pub fn send_failed_signin_mail(
         Some(SignInFailure::WebcomDown) => "Webcom heeft op dit moment een storing",
         Some(SignInFailure::Other(fault)) => fault,
     };
+    let password_change_text = if let Ok(url) = var("PASSWORD_CHANGE_URL") {
+        format!("
+<tr>
+    <td>
+        Als je je webcomm wachtwoord hebt veranderd. Vul je nieuwe wachtwoord in met behulp van de volgende link: <br>
+        <a href=\"mailto:{url}\" style=\"color:#003366; text-decoration:underline;\">{url}</a>
+    </td>
+</tr>")
+    } else {
+        String::new()
+    };
 
     let login_failure_html = strfmt!(&login_failure_html, 
         still_not_working_modifier,
         name => set_get_name(None),
+        additional_text => password_change_text,
         retry_counter => error.retry_count,
         signin_error => verbose_error.to_string(),
         admin_email => env.mail_error_to.clone(),

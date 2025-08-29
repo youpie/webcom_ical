@@ -92,7 +92,7 @@ def get_user(path, table, failures, only_failed, skip_docker):
 
     # user’s display name
     uname = (kuma / "name").read_text().strip() if (kuma / "name").exists() else path.name
-    execution_minute = (kuma / "starting_minute").read_text().strip() if (kuma / "name").exists() else "-"
+    execution_minute = (kuma / "starting_minute").read_text().strip() if (kuma / "starting_minute").exists() else "-"
     # container status
     if not skip_docker:
         up = check_container_up(compose) if compose.exists() else False

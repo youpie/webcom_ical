@@ -528,7 +528,7 @@ pub fn send_failed_signin_mail(
 <tr>
     <td>
         Als je je webcomm wachtwoord hebt veranderd. Vul je nieuwe wachtwoord in met behulp van de volgende link: <br>
-        <a href=\"mailto:{url}\" style=\"color:#003366; text-decoration:underline;\">{url}</a>
+        <a href=\"{url}\" style=\"color:#003366; text-decoration:underline;\">{url}</a>
     </td>
 </tr>")
     } else {

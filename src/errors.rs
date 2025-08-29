@@ -7,7 +7,7 @@ use thiserror::Error;
 
 use crate::{create_path, email, GenResult};
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Error)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Error, Default)]
 pub enum SignInFailure {
     #[error("Er zijn te veel incorrecte inlogpogingen in een korte periode gedaan")]
     TooManyTries,
@@ -17,6 +17,9 @@ pub enum SignInFailure {
     WebcomDown,
     #[error("Onbekende fout: {0}")]
     Other(String),
+    #[error("Onbekende fout")]
+    #[default]
+    Unknown
 }
 
 #[derive(Debug, Error, PartialEq, Clone, Serialize, Deserialize, Default)]
@@ -25,7 +28,7 @@ pub enum FailureType {
     TriesExceeded,
     #[error("Webcom ical kan geen verbinding maken met de interne browser")]
     GeckoEngine,
-    #[error("Webcom ical kon niet inloggen. Fout: {}",0.to_string())]
+    #[error("Webcom ical kon niet inloggen. Fout: {0}",)]
     SignInFailed(SignInFailure),
     #[error("Webcom ical kon geen verbinding maken met de Webcomm site")]
     ConnectError,
@@ -105,23 +108,14 @@ impl IncorrectCredentialsCount {
             previous_password_hash: None,
         }
     }
-}
-
-// Loads the sign in failure counter. Creates it if it does not exist
-fn load_sign_in_failure_count(path: &PathBuf) -> GenResult<IncorrectCredentialsCount> {
-    let failure_count_json = std::fs::read_to_string(path)?;
-    let failure_counter: IncorrectCredentialsCount = serde_json::from_str(&failure_count_json)?;
-    Ok(failure_counter)
-}
-
-// Save the sign in failure count file
-fn save_sign_in_failure_count(
-    path: &PathBuf,
-    counter: &IncorrectCredentialsCount,
-) -> GenResult<()> {
-    let failure_counter_serialised = serde_json::to_string(counter)?;
-    write(path, failure_counter_serialised.as_bytes())?;
-    Ok(())
+    fn load(path: &PathBuf) -> GenResult<IncorrectCredentialsCount> {
+        let failure_count_json = std::fs::read_to_string(path)?;
+        Ok(serde_json::from_str::<IncorrectCredentialsCount>(&failure_count_json)?)
+    }
+    fn save(&self, path: &PathBuf) -> GenResult<()>{
+        let failure_counter_serialised = serde_json::to_string(self)?;
+        Ok(write(path, failure_counter_serialised.as_bytes())?)
+    }
 }
 
 fn get_password_hash() -> GenResult<u64> {
@@ -133,7 +127,7 @@ fn get_password_hash() -> GenResult<u64> {
 
 pub fn update_signin_failure(failed: bool, failure_type: Option<SignInFailure>) -> GenResult<()> {
     let path = create_path("sign_in_failure_count.json");
-    let mut failure_counter = match load_sign_in_failure_count(&path) {
+    let mut failure_counter = match IncorrectCredentialsCount::load(&path) {
         Ok(failure) => failure,
         Err(_) => IncorrectCredentialsCount::default(),
     };
@@ -143,7 +137,8 @@ pub fn update_signin_failure(failed: bool, failure_type: Option<SignInFailure>) 
     }
     // if failed == true, set increment counter and set error
     if failed == true {
-        failure_counter.error = failure_type;
+        failure_counter.error = failure_type.clone();
+        // Send email about failed sign in if this is the first time it has happened
         if failure_counter.retry_count == 0 {
             failure_counter.retry_count += 1;
             email::send_failed_signin_mail(&failure_counter, true)?;
@@ -158,7 +153,7 @@ pub fn update_signin_failure(failed: bool, failure_type: Option<SignInFailure>) 
         failure_counter.retry_count = 0;
         failure_counter.error = None;
     }
-    save_sign_in_failure_count(&path, &failure_counter)?;
+    failure_counter.save(&path)?;
     Ok(())
 }
 
@@ -168,20 +163,23 @@ pub fn sign_in_failed_check() -> GenResult<Option<SignInFailure>> {
         .unwrap_or("24".to_string())
         .parse()
         .unwrap_or(24);
-    // let sign_in_attempt_reduce: usize = var("SIGNIN_FAILED_REDUCE")
-    //     .unwrap_or("12".to_string())
-    //     .parse()
-    //     .unwrap_or(12);
+    let sign_in_attempt_reduce: usize = var("SIGNIN_FAILED_REDUCE")
+        .unwrap_or("2".to_string())
+        .parse()
+        .unwrap_or(2);
     let path = create_path("sign_in_failure_count.json");
     // Load the existing failure counter, create a new one if one doesn't exist yet
-    let mut failure_counter = match load_sign_in_failure_count(&path) {
+    let mut failure_counter = match IncorrectCredentialsCount::load(&path) {
         Ok(value) => value,
         Err(_) => {
             let new = IncorrectCredentialsCount::new();
-            save_sign_in_failure_count(&path, &new)?;
+            new.save(&path)?;
             new
         }
     };
+    if failure_counter.retry_count == 0 {
+        return Ok(None);
+    }
     let return_value: Option<SignInFailure>;
     if let Some(previous_password_hash) = failure_counter.previous_password_hash {
         if let Ok(current_password_hash) = get_password_hash() {
@@ -191,30 +189,28 @@ pub fn sign_in_failed_check() -> GenResult<Option<SignInFailure>> {
             }
         }
     }
-    warn!("Skipped execution due to previous sign in error");
     failure_counter.retry_count += 1;
-    return_value = Some(failure_counter.error.clone().result()?);
-    // // else check if retry counter == reduce_ammount, if not, stop running
-    // if failure_counter.retry_count == 0 {
-    //     return_value = None;
-    // } else if failure_counter.retry_count % sign_in_attempt_reduce == 0 {
-    //     warn!(
-    //         "Continuing execution with sign in error, reduce val: {sign_in_attempt_reduce}, current count {}",
-    //         failure_counter.retry_count
-    //     );
-    //     failure_counter.retry_count += 1;
-    //     return_value = None;
-    // } else {
-    //     warn!("Skipped execution due to previous sign in error");
-    //     failure_counter.retry_count += 1;
-    //     return_value = Some(failure_counter.error.clone().result()?);
-    // }
+    // else check if retry counter == reduce_ammount, if not, stop running
+    if failure_counter.retry_count % sign_in_attempt_reduce == 0 && failure_counter.error.clone().unwrap_or_default() != SignInFailure::IncorrectCredentials {
+        warn!(
+            "Continuing execution with sign in error, reduce val: {sign_in_attempt_reduce}, current count {}",
+            failure_counter.retry_count
+        );
+        failure_counter.retry_count -= 1;
+        return_value = None;
+    } else {
+        match failure_counter.error {
+            Some(SignInFailure::IncorrectCredentials) => info!("Never executing due to incorrect credentials"),
+            _ => warn!("Skipped execution due to previous sign in error")
+        }
+        return_value = Some(failure_counter.error.clone().result()?);
+    }
 
     if failure_counter.retry_count % resend_error_mail_count == 0 && failure_counter.error.is_some()
     {
         email::send_failed_signin_mail(&failure_counter, false)?;
     }
-    save_sign_in_failure_count(&path, &failure_counter)?;
+    failure_counter.save(&path)?;
     Ok(return_value)
 }
 

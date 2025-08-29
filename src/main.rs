@@ -195,7 +195,7 @@ async fn main_program(
     password: &str,
     retry_count: usize,
     logbook: &mut ApplicationLogbook,
-) -> GenResult<FailureType> {
+) -> GenResult<()> {
     driver.delete_all_cookies().await?;
     info!("Loading site: {}..", MAIN_URL);
     match driver.goto(MAIN_URL).await {
@@ -257,14 +257,14 @@ async fn main_program(
     let calendar = create_ical(
         &night_split_shifts,
         shifts,
-        &previous_shifts_information.previous_exit_code,
+        &logbook.state,
     );
     send_welcome_mail(&ical_path)?;
     let mut output = File::create(&ical_path)?;
     info!("Writing to: {:?}", &ical_path);
     write!(output, "{}", calendar)?;
     logbook.generate_shift_statistics(&all_shifts);
-    Ok(previous_shifts_information.previous_exit_code)
+    Ok(())
 }
 
 async fn initiate_webdriver() -> GenResult<WebDriver> {
@@ -286,6 +286,7 @@ async fn main_loop(
     loop {
         debug!("Waiting for notification");
         let continue_execution = receiver.recv().await.result()?;
+        dotenv_override().ok();
         let name = set_get_name(None);
         let mut logbook = ApplicationLogbook::load();
 
@@ -293,7 +294,7 @@ async fn main_loop(
         let password = var("PASSWORD").expect("Error in password variable loop");
 
         let mut current_exit_code = FailureType::default();
-        let mut previous_exit_code = FailureType::default();
+        let previous_exit_code = logbook.clone().state;
 
         let mut running_errors: Vec<GenError> = vec![];
 
@@ -316,8 +317,7 @@ async fn main_loop(
 
         while retry_count < max_retry_count {
             match main_program(&driver, &username, &password, retry_count, &mut logbook).await {
-                Ok(last_exit_code) => {
-                    previous_exit_code = last_exit_code;
+                Ok(()) => {
                     update_signin_failure(false, None).warn("Updating signin failure");
                     retry_count = max_retry_count;
                 }
@@ -332,7 +332,7 @@ async fn main_loop(
                                 )
                             } else {
                                 retry_count = max_retry_count;
-                                _ = update_signin_failure(true, Some(y.clone()));
+                                update_signin_failure(true, Some(y.clone())).warn("Updating signin failure");
                                 current_exit_code = FailureType::SignInFailed(y.to_owned());
                                 error!("Inloggen niet succesvol, fout: {:?}", y)
                             }

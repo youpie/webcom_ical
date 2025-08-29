@@ -183,7 +183,6 @@ pub fn save_relevant_shifts(relevant_shifts: &Vec<Shift>) -> GenResult<()> {
 pub struct PreviousShiftInformation {
     pub previous_relevant_shifts: Vec<Shift>,
     pub previous_non_relevant_shifts: Vec<Shift>,
-    pub previous_exit_code: FailureType,
 }
 
 impl PreviousShiftInformation {
@@ -191,7 +190,6 @@ impl PreviousShiftInformation {
         Self {
             previous_non_relevant_shifts: vec![],
             previous_relevant_shifts: vec![],
-            previous_exit_code: FailureType::default(),
         }
     }
 }
@@ -229,12 +227,6 @@ pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
                 };
             }
         };
-        let previous_exit_code: FailureType = serde_json::from_str(
-            main_calendar
-                .property_value("X-EXIT-CODE")
-                .unwrap_or_default(),
-        )
-        .unwrap_or_default();
         let calendar_events = get_calendar_events(main_calendar);
         let calendar_split = split_calendar(calendar_events);
         let previous_shifts_hash = create_shift_hashmap(calendar_split.0);
@@ -253,7 +245,6 @@ pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
         Ok(Some(PreviousShiftInformation {
             previous_relevant_shifts: previous_shifts_hash,
             previous_non_relevant_shifts,
-            previous_exit_code,
         }))
     } else {
         info!("Calendar regeneration NOT needed");
@@ -274,7 +265,6 @@ pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
         Ok(Some(PreviousShiftInformation {
             previous_relevant_shifts,
             previous_non_relevant_shifts,
-            previous_exit_code: FailureType::default(),
         }))
     }
 }
@@ -321,6 +311,8 @@ Shift sheet • {}",
 
 /*
 Creates the ICAL file to add to the calendar
+Needs previous exit code so it can add it to the calendar
+Will later be replaced with current exit code if its different
 */
 pub fn create_ical(shifts: &Vec<Shift>, metadata: Vec<Shift>, previous_exit_code: &FailureType) -> String {
     let metadata_shifts_hashmap: HashMap<i64, Shift> = metadata.into_iter()

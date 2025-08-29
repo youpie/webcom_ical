@@ -515,13 +515,13 @@ pub fn send_failed_signin_mail(
     let still_not_working_modifier = if first_time { "" } else { "nog steeds " };
     let name = set_get_name(None);
     let verbose_error = match &error.error {
-        None => "Een onbekende fout...",
         Some(SignInFailure::IncorrectCredentials) => {
             "Incorrecte inloggegevens, heb je misschien je wachtwoord veranderd?"
         }
         Some(SignInFailure::TooManyTries) => "Te veel incorrecte inlogpogingen…",
         Some(SignInFailure::WebcomDown) => "Webcom heeft op dit moment een storing",
         Some(SignInFailure::Other(fault)) => fault,
+        _ => "Een onbekende fout...",
     };
     let password_change_text = if let Ok(url) = var("PASSWORD_CHANGE_URL") {
         format!("

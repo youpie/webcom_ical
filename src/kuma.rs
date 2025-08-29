@@ -3,6 +3,8 @@ use kuma_client::monitor::{MonitorGroup, MonitorType};
 use kuma_client::{Client, monitor, notification};
 use std::collections::HashMap;
 use std::fs::read_to_string;
+use std::thread;
+use std::time::Duration;
 use strfmt::strfmt;
 use url::Url;
 
@@ -17,6 +19,7 @@ pub async fn first_run(url: &str, personeelsnummer: &str) -> GenResult<()> {
     let username = var("KUMA_USERNAME")?;
     let password = var("KUMA_PASSWORD")?;
     let kuma_client = connect_to_kuma(&url, username, password).await?;
+    thread::sleep(Duration::from_millis(100));
     let notification_id = create_notification(&kuma_client, personeelsnummer, &url).await?;
     if let Some(monitor_id) =
         get_monitor_type_id(&kuma_client, personeelsnummer, MonitorType::Push, false).await?

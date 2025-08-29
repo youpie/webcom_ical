@@ -2,9 +2,7 @@ use crate::{errors::OptionResult, shift::ShiftState, GenResult, Shift};
 use async_recursion::async_recursion;
 use dotenvy::var;
 use thirtyfour::{
-    WebDriver, WebElement,
-    error::{WebDriverError, WebDriverResult},
-    prelude::*,
+    error::{WebDriverError, WebDriverErrorInner, WebDriverResult}, prelude::*, WebDriver, WebElement
 };
 use thiserror::Error;
 use time::{Time, macros::format_description};
@@ -224,10 +222,11 @@ pub async fn wait_for_response(
         false => query.wait_until().displayed().await,
     };
     match test {
-        Err(WebDriverError::ElementClickIntercepted(_)) => {
+        Err(_error) => {
             wait_for_response(driver, element, clickable).await?;
         }
-        x => return x,
+        _ => return Ok(()),
     };
+    //  if error.into_inner() == WebDriverErrorInner::ElementClickIntercepted(_) =>
     Ok(())
 }

@@ -114,7 +114,7 @@ fn load_sign_in_failure_count(path: &PathBuf) -> GenResult<IncorrectCredentialsC
     Ok(failure_counter)
 }
 
-// Save the sign in faulure count file
+// Save the sign in failure count file
 fn save_sign_in_failure_count(
     path: &PathBuf,
     counter: &IncorrectCredentialsCount,
@@ -167,11 +167,11 @@ pub fn sign_in_failed_check() -> GenResult<Option<SignInFailure>> {
     let resend_error_mail_count: usize = var("SIGNIN_FAIL_MAIL_REPEAT")
         .unwrap_or("24".to_string())
         .parse()
-        .unwrap_or(2);
-    let sign_in_attempt_reduce: usize = var("SIGNIN_FAILED_REDUCE")
-        .unwrap_or("2".to_string())
-        .parse()
-        .unwrap_or(1);
+        .unwrap_or(24);
+    // let sign_in_attempt_reduce: usize = var("SIGNIN_FAILED_REDUCE")
+    //     .unwrap_or("12".to_string())
+    //     .parse()
+    //     .unwrap_or(12);
     let path = create_path("sign_in_failure_count.json");
     // Load the existing failure counter, create a new one if one doesn't exist yet
     let mut failure_counter = match load_sign_in_failure_count(&path) {
@@ -191,22 +191,24 @@ pub fn sign_in_failed_check() -> GenResult<Option<SignInFailure>> {
             }
         }
     }
-
-    // else check if retry counter == reduce_ammount, if not, stop running
-    if failure_counter.retry_count == 0 {
-        return_value = None;
-    } else if failure_counter.retry_count % sign_in_attempt_reduce == 0 {
-        warn!(
-            "Continuing execution with sign in error, reduce val: {sign_in_attempt_reduce}, current count {}",
-            failure_counter.retry_count
-        );
-        failure_counter.retry_count += 1;
-        return_value = None;
-    } else {
-        warn!("Skipped execution due to previous sign in error");
-        failure_counter.retry_count += 1;
-        return_value = Some(failure_counter.error.clone().result()?);
-    }
+    warn!("Skipped execution due to previous sign in error");
+    failure_counter.retry_count += 1;
+    return_value = Some(failure_counter.error.clone().result()?);
+    // // else check if retry counter == reduce_ammount, if not, stop running
+    // if failure_counter.retry_count == 0 {
+    //     return_value = None;
+    // } else if failure_counter.retry_count % sign_in_attempt_reduce == 0 {
+    //     warn!(
+    //         "Continuing execution with sign in error, reduce val: {sign_in_attempt_reduce}, current count {}",
+    //         failure_counter.retry_count
+    //     );
+    //     failure_counter.retry_count += 1;
+    //     return_value = None;
+    // } else {
+    //     warn!("Skipped execution due to previous sign in error");
+    //     failure_counter.retry_count += 1;
+    //     return_value = Some(failure_counter.error.clone().result()?);
+    // }
 
     if failure_counter.retry_count % resend_error_mail_count == 0 && failure_counter.error.is_some()
     {

@@ -37,6 +37,7 @@ use crate::errors::ResultLog;
 use crate::errors::SignInFailure;
 use crate::execution::execution_manager;
 use crate::execution::start_pipe;
+use crate::execution::StartReason;
 use crate::health::send_heartbeat;
 use crate::health::update_calendar_exit_code;
 use crate::health::ApplicationLogbook;
@@ -279,7 +280,7 @@ Loads the main logic, and retries if it fails
 */
 async fn main_loop(
     driver: WebDriver,
-    receiver: &mut Receiver<bool>,
+    receiver: &mut Receiver<StartReason>,
     kuma_url: Option<&str>,
 ) -> GenResult<()> {
     loop {
@@ -304,9 +305,13 @@ async fn main_loop(
 
         // Check if the program is allowed to run, or not due to failed sign-in
         let sign_in_check: Option<SignInFailure> = sign_in_failed_check().unwrap_or(None);
-        if let Some(failure) = sign_in_check {
-            retry_count = max_retry_count;
-            current_exit_code = FailureType::SignInFailed(failure);
+        if continue_execution != StartReason::Force {
+            if let Some(failure) = sign_in_check {
+                retry_count = max_retry_count;
+                current_exit_code = FailureType::SignInFailed(failure);
+            }
+        } else {
+            info!("Force resuming execution");
         }
 
         while retry_count < max_retry_count {
@@ -375,7 +380,7 @@ async fn main_loop(
             warn!("Previous exit code was different than current, need to update");
             update_calendar_exit_code(&previous_exit_code, &current_exit_code).warn("Updating calendar exit code");
         }
-        if !continue_execution {
+        if continue_execution == StartReason::Single {
             break;
         }
     }
@@ -419,7 +424,7 @@ async fn main() -> GenResult<()> {
     // Otherwise start the execution manager
     match args.single_run {
         false => {spawn(async move {execution_manager(tx, instant_run).await});},
-        true => {tx.send(false).await?;}
+        true => {tx.send(StartReason::Direct).await?;}
     };
     spawn(async move {main_loop(driver_clone, &mut rx, kuma_url.as_deref()).await});
     start_pipe(tx_clone).warn("Start pipe");

@@ -9,6 +9,15 @@ use crate::{create_path, errors::ResultLog, GenResult};
 
 type StartMinute = u8;
 
+#[derive(PartialEq)]
+pub enum StartReason {
+    Direct,
+    Timer,
+    Single,
+    Pipe,
+    Force
+}
+
 fn get_execution_properties() -> (Duration, StartMinute) {
     let cycle_time = || -> GenResult<u64> {
         Ok(var("CYCLE_TIME")
@@ -27,11 +36,11 @@ fn get_execution_properties() -> (Duration, StartMinute) {
     (Duration::from_secs(cycle_time), starting_minute)
 }
 
-pub async fn execution_manager(tx: Sender<bool>, instant_run: bool) {
+pub async fn execution_manager(tx: Sender<StartReason>, instant_run: bool) {
     let execution_properties = get_execution_properties();
     let current_time = Utc::now();
     if instant_run {
-        _ = tx.send(true).await;
+        _ = tx.send(StartReason::Direct).await;
     }
     if current_time.minute() != execution_properties.1 as u32 {
         let current_minute = current_time.minute() as i8;
@@ -45,13 +54,13 @@ pub async fn execution_manager(tx: Sender<bool>, instant_run: bool) {
     
     loop {
         info!("Starting execution loop");
-        _ = tx.try_send(true);
+        _ = tx.try_send(StartReason::Timer);
         
         sleep(execution_properties.0).await;
     }
 }
 
-pub fn start_pipe(tx: Sender<bool>) -> Result<(), ipipe::Error> {
+pub fn start_pipe(tx: Sender<StartReason>) -> Result<(), ipipe::Error> {
     let pipe_path = create_path("pipe");
     if pipe_path.exists() {
         info!("Previous pipe file found, removing");
@@ -69,12 +78,14 @@ pub fn start_pipe(tx: Sender<bool>) -> Result<(), ipipe::Error> {
     let reader = std::io::BufReader::new(pipe);
     for line in reader.lines()
     {
-        match line {
+        let start_reason = match &line {
             Ok(line) if line == "q" => {return Ok(())},
-            Ok(_) => {tx.try_send(true).info("Send start request from pipe")},
-            _ => (),
-        }
+            Ok(line) if line == "f" => Some(StartReason::Force),
+            Ok(_) => Some(StartReason::Pipe),
+            _ => None,
+        };
         debug!("Recieved message from pipe: {}", line.unwrap_or("Error".to_owned()));
+        _ = start_reason.is_some_and(|start_reason| {tx.try_send(start_reason).info("Send start request from pipe");false}); 
     }
     Ok(())
 }

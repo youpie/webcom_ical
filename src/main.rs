@@ -283,7 +283,7 @@ async fn main_loop(
     kuma_url: Option<&str>,
 ) -> GenResult<()> {
     loop {
-        info!("Waiting for notification");
+        debug!("Waiting for notification");
         let continue_execution = receiver.recv().await.result()?;
         let name = set_get_name(None);
         let mut logbook = ApplicationLogbook::load();
@@ -386,7 +386,7 @@ async fn main_loop(
 async fn main() -> GenResult<()> {
     dotenv_override().ok();
     pretty_env_logger::init();
-    warn!("Starting Webcom Ical");
+    info!("Starting Webcom Ical");
 
     let args = Args::parse();
 

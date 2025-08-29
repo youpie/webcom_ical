@@ -1,4 +1,4 @@
-use std::{fs::{read_to_string, write}, io::BufRead, time::Duration};
+use std::{fs::{self, read_to_string, write}, io::BufRead, os::unix::fs::PermissionsExt, time::Duration};
 
 use chrono::{Timelike, Utc};
 use dotenvy::var;
@@ -58,6 +58,14 @@ pub fn start_pipe(tx: Sender<bool>) -> Result<(), ipipe::Error> {
         std::fs::remove_file(&pipe_path).warn("Removing previous pipe");
     }
     let pipe = Pipe::open(&pipe_path, ipipe::OnCleanup::Delete)?;
+    if let Ok(metadata) =  fs::metadata(&pipe_path) {
+        let mut permissions = metadata.permissions();
+        permissions.set_mode(0o666);   
+        fs::set_permissions(&pipe_path, permissions).info("Setting permissions");
+    } else {
+        warn!("Failed to set permissions of pipe");
+    }
+    
     let reader = std::io::BufReader::new(pipe);
     for line in reader.lines()
     {

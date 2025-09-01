@@ -45,11 +45,12 @@ impl ApplicationLogbook {
         logbook
     }
 
-    pub fn generate_shift_statistics(&mut self, shifts: &Vec<Shift>) {
+    pub fn generate_shift_statistics(&mut self, shifts: &Vec<Shift>, non_relevant_shifts: usize) {
         let number_of_shifts = shifts.len() as u64;
         let number_of_broken_shifts = shifts.iter().filter(|shift| shift.is_broken).count() as u64;
         self.application_state.broken_shifts = number_of_broken_shifts;
         self.application_state.shifts = number_of_shifts;
+        self.application_state.non_relevant_shifts = non_relevant_shifts as u64;
     }
 
     pub fn add_failed_shifts(&mut self, number: u64, replace: bool) {
@@ -95,6 +96,7 @@ pub struct ApplicationState {
     pub execution_time_ms: u64,
     pub shifts: u64,
     pub broken_shifts: u64,
+    pub non_relevant_shifts: u64,
     pub failed_shifts: u64,
     pub calendar_version: String,
 }

@@ -211,14 +211,10 @@ async fn main_program(
                 .map_err(|_| Box::new(FailureType::ConnectError))?
         }
     };
-    // If getting previous shift information failed, just create an empty one. Because it will cause a new calendar to be created
-    let previous_shifts_information = match get_previous_shifts()? {
-        Some(previous_shifts) => previous_shifts,
-        None => PreviousShiftInformation::new(),
-    };
     load_calendar(&driver, &username, &password).await?;
     wait_until_loaded(&driver).await?;
     let mut new_shifts = load_current_month_shifts(&driver, logbook).await?;
+    let mut non_relevant_shifts = vec![];
     let ical_path = get_ical_path()?;
     if !ical_path.exists() {
         info!(
@@ -228,15 +224,29 @@ async fn main_program(
             fs::remove_file(PathBuf::from(NON_RELEVANT_EVENTS_PATH))?;
             Ok(fs::remove_file(PathBuf::from(RELEVANT_EVENTS_PATH))?)
         }().warn("Removing partial shifts");
-
-        new_shifts.append(&mut load_previous_month_shifts(&driver, 2).await?);
+        let found_shifts = load_previous_month_shifts(&driver, 2).await?;
+        debug!("Found a total of {} shifts", found_shifts.len());
+        let mut found_shifts_split = split_relevant_shifts(found_shifts);
+        new_shifts.append(&mut found_shifts_split.0);
+        // Because the non-relevant shifts do need to be saved even on first run, which doesn't happen otherwise
+        non_relevant_shifts.append(&mut found_shifts_split.1);
+        debug!(
+            "Got {} relevant and {} non-relevant events",
+            new_shifts.len(),
+            non_relevant_shifts.len()
+        );
     } else {
         debug!("Existing calendar file found");
         new_shifts.append(&mut load_previous_month_shifts(&driver, 0).await?);
     }
     new_shifts.append(&mut load_next_month_shifts(&driver, logbook).await?);
     info!("Found {} shifts", new_shifts.len());
-    let non_relevant_shifts = previous_shifts_information.previous_non_relevant_shifts;
+    // If getting previous shift information failed, just create an empty one. Because it will cause a new calendar to be created
+    let previous_shifts_information = match get_previous_shifts().warn_owned("Getting previous shift information")? {
+        Some(previous_shifts) => previous_shifts,
+        None => PreviousShiftInformation::new(),
+    };
+    non_relevant_shifts.append(&mut previous_shifts_information.previous_non_relevant_shifts.clone());
     let mut previous_shifts = previous_shifts_information.previous_relevant_shifts;
     // The main send email function will return the broken shifts that are new or have changed.
     // This is because the send email functions uses the previous shifts and scanns for new shifts
@@ -246,7 +256,7 @@ async fn main_program(
         Err(err) => return Err(err),
     };
     let shifts = gebroken_shifts::load_broken_shift_information(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
-    ical::save_relevant_shifts(&shifts)?;
+    ical::save_partial_shift_files(&shifts, &non_relevant_shifts)?;
     let broken_split_shifts = gebroken_shifts::split_broken_shifts(shifts.clone())?;
     let midnight_stopped_shifts = gebroken_shifts::stop_shift_at_midnight(&broken_split_shifts);
     let mut night_split_shifts = gebroken_shifts::split_night_shift(&midnight_stopped_shifts);
@@ -254,8 +264,9 @@ async fn main_program(
     night_split_shifts.dedup();
     let mut all_shifts = night_split_shifts.clone();
     all_shifts.append(&mut non_relevant_shifts.clone());
+    debug!("Saving {} shifts", all_shifts.len());
     let calendar = create_ical(
-        &night_split_shifts,
+        &all_shifts,
         shifts,
         &logbook.state,
     );
@@ -263,7 +274,7 @@ async fn main_program(
     let mut output = File::create(&ical_path)?;
     info!("Writing to: {:?}", &ical_path);
     write!(output, "{}", calendar)?;
-    logbook.generate_shift_statistics(&all_shifts);
+    logbook.generate_shift_statistics(&all_shifts, non_relevant_shifts.len());
     Ok(())
 }
 

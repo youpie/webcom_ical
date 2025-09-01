@@ -56,6 +56,7 @@ def main(include_hidden: bool, only_failed: bool, single_user: bool, condensed: 
     table.add_column("Shifts", justify="right")
     table.add_column("Broken", justify="right")
     table.add_column("Failed", justify="right")
+    table.add_column("Old", justify="right")
     table.add_column("Minute", justify="right")
     table.add_column("CalVer")
     table.add_column("Last Run")
@@ -134,6 +135,7 @@ def get_user(path, table, failures, only_failed, skip_docker):
         shifts = app.get("shifts", 0)
         broken = app.get("broken_shifts", 0)
         failed_shifts = app.get("failed_shifts", 0)
+        non_relevant_shifts = app.get("non_relevant_shifts", 0)
         calver = app.get("calendar_version", "–")
         env = dotenv_values(envfile)
         parse_int = int(env.get("KUMA_HEARTBEAT_INTERVAL", 4001))
@@ -166,6 +168,7 @@ def get_user(path, table, failures, only_failed, skip_docker):
             str(shifts) if logbook.exists() else "–",
             str(broken) if logbook.exists() else "–",
             str(failed_shifts) if logbook.exists() else "–",
+            str(non_relevant_shifts) if logbook.exists() else "–",
             execution_minute,
             calver,
             last_run,

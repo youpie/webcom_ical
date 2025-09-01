@@ -176,17 +176,17 @@ fn event_to_shift(events: Vec<Event>) -> Vec<Shift> {
 
 // Save relevant shifts to disk
 pub fn save_partial_shift_files(
-    relevant_shifts: &Vec<Shift>,
-    non_relevant_shifts: &Vec<Shift>,
+    shifts: &Vec<Shift>,
 ) -> GenResult<()> {
+    let (relevant_shifts, non_relevant_shifts) = split_relevant_shifts(shifts.clone());
     write(
         RELEVANT_EVENTS_PATH,
-        serde_json::to_string_pretty(relevant_shifts)?,
+        serde_json::to_string_pretty(&relevant_shifts)?,
     )
     .warn("Saving relevant shifts");
     write(
         NON_RELEVANT_EVENTS_PATH,
-        serde_json::to_string_pretty(non_relevant_shifts)?,
+        serde_json::to_string_pretty(&non_relevant_shifts)?,
     )
     .warn("Saving non-relevant shifts");
     Ok(())

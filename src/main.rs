@@ -251,30 +251,30 @@ async fn main_program(
     // The main send email function will return the broken shifts that are new or have changed.
     // This is because the send email functions uses the previous shifts and scanns for new shifts
     // write("./shifts.json",serde_json::to_string_pretty(&new_shifts).unwrap());
-    let shifts = match email::send_emails(&mut new_shifts, &mut previous_shifts) {
+    let relevant_shifts = match email::send_emails(&mut new_shifts, &mut previous_shifts) {
         Ok(shifts) => shifts,
         Err(err) => return Err(err),
     };
-    let shifts = gebroken_shifts::load_broken_shift_information(&driver, &shifts).await?; // Replace the shifts with the newly created list of broken shifts
-    ical::save_partial_shift_files(&shifts, &non_relevant_shifts)?;
-    let broken_split_shifts = gebroken_shifts::split_broken_shifts(shifts.clone())?;
+    let mut all_shifts = relevant_shifts.clone();
+    all_shifts.append(&mut non_relevant_shifts.clone());
+    let all_shifts = gebroken_shifts::load_broken_shift_information(&driver, &all_shifts).await?; // Replace the shifts with the newly created list of broken shifts
+    ical::save_partial_shift_files(&all_shifts)?;
+    let broken_split_shifts = gebroken_shifts::split_broken_shifts(all_shifts.clone())?;
     let midnight_stopped_shifts = gebroken_shifts::stop_shift_at_midnight(&broken_split_shifts);
     let mut night_split_shifts = gebroken_shifts::split_night_shift(&midnight_stopped_shifts);
     night_split_shifts.sort_by_key(|shift| shift.magic_number);
     night_split_shifts.dedup();
-    let mut all_shifts = night_split_shifts.clone();
-    all_shifts.append(&mut non_relevant_shifts.clone());
-    debug!("Saving {} shifts", all_shifts.len());
+    debug!("Saving {} shifts", night_split_shifts.len());
     let calendar = create_ical(
-        &all_shifts,
-        shifts,
+        &night_split_shifts,
+        all_shifts,
         &logbook.state,
     );
     send_welcome_mail(&ical_path)?;
     let mut output = File::create(&ical_path)?;
     info!("Writing to: {:?}", &ical_path);
     write!(output, "{}", calendar)?;
-    logbook.generate_shift_statistics(&all_shifts, non_relevant_shifts.len());
+    logbook.generate_shift_statistics(&relevant_shifts, non_relevant_shifts.len());
     Ok(())
 }
 
@@ -435,10 +435,13 @@ async fn main() -> GenResult<()> {
     // Otherwise start the execution manager
     match args.single_run {
         false => {spawn(async move {execution_manager(tx, instant_run).await});},
-        true => {tx.send(StartReason::Direct).await?;}
+        true => {tx.send(StartReason::Single).await?;}
     };
-    spawn(async move {main_loop(driver_clone, &mut rx, kuma_url.as_deref()).await});
-    start_pipe(tx_clone).warn("Start pipe");
+    let main_program = spawn(async move {main_loop(driver_clone, &mut rx, kuma_url.as_deref()).await});
+    if !args.single_run {
+        start_pipe(tx_clone).warn("Start pipe");
+    }
+    _ = main_program.await;
     info!("Stopping webcom ical");
     driver.quit().await?;
     Ok(())

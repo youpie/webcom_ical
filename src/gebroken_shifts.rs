@@ -8,7 +8,7 @@ use thiserror::Error;
 use time::{Time, macros::format_description};
 
 #[derive(Debug, Error, Clone, PartialEq)]
-enum BrokenShiftErrorReason {
+pub enum BrokenShiftErrorReason {
     #[error("Niet volledige gebroken dienst")]
     NotComplete,
     #[error("Geen eerste afstaptijd")]
@@ -48,7 +48,7 @@ pub async fn load_broken_shift_information(
             };
             navigate_to_subdirectory(driver, "/WebComm/roster.aspx").await?; //Ga terug naar de rooster pagina, anders laden de gebroken shifts niet goed
             wait_for_response(driver, By::ClassName("calDay"), false).await?
-        } else if shift.is_broken && shift.state == ShiftState::Unchanged {
+        } else if shift.is_broken && (shift.state == ShiftState::Unchanged || shift.state == ShiftState::Unknown) {
             info!(
                 "Shift {} is broken, but unchanged from last check",
                 shift.number

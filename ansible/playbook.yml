@@ -62,7 +62,7 @@
 
     - name: Set cycle time
       set_fact:
-        timeout_time: "{{ timeout_time_hrs | int * 3600}}"
+        cycle_time: "{{ timeout_time_hrs | int * 3600}}"
 
     - name: Create user directory
       ansible.builtin.file:

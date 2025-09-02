@@ -121,7 +121,7 @@ RUST_LOG=info cargo run
 ```
 uitvoeren op je computer in het mapje van webcom ical. Dit kan de eerste keer meerdere minuten duren voor het programma start. Je kan de `RUST_LOG=` aanpassen om de hoeveelheid logboek informatie van webcom ical aan te passen. De opties zijn `debug`, `info`, `warn` en `error`. Door het `RUST_LOG=` weg te laten wordt `error` gekozen
 
-Het programma zal nu automatisch om de hoeveel seconden je de `PARSE_INTERVAL` variable hebt ingesteld je diensten inladen. Het programma zal, als het opgestart wordt beginnen met inladen van de agenda op de minuut van het uur bepaald in `./kuma/starting_minute` deze waarde is random gegenereerd, maar deze waarde kan je aanpassen door het bestand aan te passen.
+Het programma zal nu automatisch om de hoeveel seconden je de `CYCLE TIME` variable hebt ingesteld je diensten inladen. Het programma zal, als het opgestart wordt beginnen met inladen van de agenda op de minuut van het uur bepaald in `./kuma/starting_minute` deze waarde is random gegenereerd, maar deze waarde kan je aanpassen door het bestand aan te passen.
 
 Als het programma opgestart is wordt een pipe aangemaakt op de computer. Door een waarde naar deze pipe te sturen zal het programma uitvoeren, afhankelijk van welke letter je stuurt zal het gedrag van het programma aangepast worden. In Linux kan je schrijven naar deze pipe door bijvoorbeeld `echo "f" > ./kuma/pipe` uit te voeren. Op windows moet je het zelf uitzoeken
 ### Tabel met mogelijke pipe waardes

@@ -290,7 +290,6 @@ This starts the WebDriver session
 Loads the main logic, and retries if it fails
 */
 async fn main_loop(
-    driver: WebDriver,
     receiver: &mut Receiver<StartReason>,
     kuma_url: Option<&str>,
 ) -> GenResult<()> {
@@ -303,7 +302,7 @@ async fn main_loop(
 
         let username = var("USERNAME").expect("Error in username variable loop");
         let password = var("PASSWORD").expect("Error in password variable loop");
-
+        let driver = get_driver(&mut logbook, &username).await?;
         let mut current_exit_code = FailureType::default();
         let previous_exit_code = logbook.clone().state;
 
@@ -361,6 +360,7 @@ async fn main_loop(
             };
             retry_count += 1;
         }
+        driver.quit().await?;
         if running_errors.is_empty() {
             info!("Alles is in een keer goed gegaan, jippie!");
         } else if running_errors.len() < max_retry_count {
@@ -398,6 +398,20 @@ async fn main_loop(
     Ok(())
 }
 
+async fn get_driver(logbook: &mut ApplicationLogbook, username: &str) -> GenResult<WebDriver> {
+    let kuma_url = var("KUMA_URL").ok();
+    match initiate_webdriver().await {
+        Ok(driver) => Ok(driver),
+        Err(error) => {
+            error!("Kon driver niet opstarten: {:?}", &error);
+            send_errors(&vec![error], &set_get_name(None)).info("Send errors");
+            logbook.save(&FailureType::GeckoEngine).warn("Saving Logbook");
+            send_heartbeat(&FailureType::GeckoEngine, kuma_url.as_deref(), username).await.warn("Sending heartbeat");
+            return Err("driver fout".into());
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> GenResult<()> {
     dotenv_override().ok();
@@ -409,18 +423,6 @@ async fn main() -> GenResult<()> {
     let username = var("USERNAME").expect("Error in username variable");
     let kuma_url = var("KUMA_URL").ok();
 
-    let mut logbook = ApplicationLogbook::load();
-    let driver: WebDriver = match initiate_webdriver().await {
-        Ok(driver) => driver,
-        Err(error) => {
-            error!("Kon driver niet opstarten: {:?}", &error);
-            send_errors(&vec![error], &set_get_name(None)).info("Send errors");
-            logbook.save(&FailureType::GeckoEngine).warn("Saving Logbook");
-            send_heartbeat(&FailureType::GeckoEngine, kuma_url.as_deref(), &username).await.warn("Sending heartbeat");
-            return Err("driver fout".into());
-        }
-    };
-    let driver_clone= driver.clone();
     if let Some(url_unwrap) = kuma_url.clone() {
         if !url_unwrap.is_empty() {
             debug!("Checking if kuma needs to be created");
@@ -437,12 +439,11 @@ async fn main() -> GenResult<()> {
         false => {spawn(async move {execution_manager(tx, instant_run).await});},
         true => {tx.send(StartReason::Single).await?;}
     };
-    let main_program = spawn(async move {main_loop(driver_clone, &mut rx, kuma_url.as_deref()).await});
+    let main_program = spawn(async move {main_loop(&mut rx, kuma_url.as_deref()).await});
     if !args.single_run {
         start_pipe(tx_clone).warn("Start pipe");
     }
     _ = main_program.await;
     info!("Stopping webcom ical");
-    driver.quit().await?;
     Ok(())
 }

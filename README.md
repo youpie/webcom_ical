@@ -26,7 +26,6 @@ Om dit programma te gebruiken is enige technische kennis wel vereisd. Waarschijn
 - git
 - Container software (Ik ga uit van [docker](https://www.docker.com/) voor deze uitleg)
 - Een terminal/command prompt
-- (optioneel) Een manier om regelmatig een command uit te voeren
 - (optioneel) [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html)
 
 > [!NOTE]
@@ -115,15 +114,30 @@ OF
 docker-compose up
 ```
 
-## 8. Check regelmatig voor updates
-dit moet ik misschien gewoon toevoegen aan de app zelf lol
-maar voor nu kan het bijvoorbeeld met `crontab`, met [deze link](https://crontab-generator.org/) kan je crontabs genereren
-``` Bash
-crontab -e
+# Rust
+Je kan het programma ook zonder docker gebruiken. Je moet dan [Rust](https://www.rust-lang.org/learn/get-started) installeren op je computer. Vervolgens moet je 
+``` bash
+RUST_LOG=info cargo run
 ```
-voeg dan deze lijn toe
-``` Bash
-10 */1 * * * docker start docker start webcom_ical >/dev/null 2>&1
-```
+uitvoeren op je computer in het mapje van webcom ical. Dit kan de eerste keer meerdere minuten duren voor het programma start. Je kan de `RUST_LOG=` aanpassen om de hoeveelheid logboek informatie van webcom ical aan te passen. De opties zijn `debug`, `info`, `warn` en `error`. Door het `RUST_LOG=` weg te laten wordt `error` gekozen
+
+Het programma zal nu automatisch om de hoeveel seconden je de `PARSE_INTERVAL` variable hebt ingesteld je diensten inladen. Het programma zal, als het opgestart wordt beginnen met inladen van de agenda op de minuut van het uur bepaald in `./kuma/starting_minute` deze waarde is random gegenereerd, maar deze waarde kan je aanpassen door het bestand aan te passen.
+
+Als het programma opgestart is wordt een pipe aangemaakt op de computer. Door een waarde naar deze pipe te sturen zal het programma uitvoeren, afhankelijk van welke letter je stuurt zal het gedrag van het programma aangepast worden. In Linux kan je schrijven naar deze pipe door bijvoorbeeld `echo "f" > ./kuma/pipe` uit te voeren. Op windows moet je het zelf uitzoeken
+### Tabel met mogelijke pipe waardes
+| Letter | Gedrag |
+| - | -|
+| q | Stopt het programma |
+| f | Forceert inloggen, zelfs met incorrecte inloggegevens |
+| iets anders| Standaard uitvoering|
+
+Je kan ook het programma opstarten met een flag. Hoe dit moet met docker weet ik niet. In ieder geval de volgende flags zijn beschikbaar:
+| Flag | Gedrag |
+| - | - |
+| -h | Toon de mogelijke opties |
+| -s | Zal een keer de agenda inladen en vervolgens het programma stoppen |
+| -i | Zal bij het starten eerst direct de agenda inladen, niet wachten tot de minuut van het uur bepaald in `starting_minute`|
+
+---
 
 Als het je echt niet lukt met deze uitleg (en je hebt je best gedaan om het te begrijpen) voel je vrij om contact met me op te nemen! 😄

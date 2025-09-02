@@ -66,7 +66,7 @@ pub fn start_pipe(tx: Sender<StartReason>) -> Result<(), ipipe::Error> {
         info!("Previous pipe file found, removing");
         std::fs::remove_file(&pipe_path).warn("Removing previous pipe");
     }
-    let pipe = Pipe::open(&pipe_path, ipipe::OnCleanup::Delete)?;
+    let pipe = Pipe::open(&pipe_path, ipipe::OnCleanup::Delete).unwrap_or(Pipe::with_name("pipe")?);
     if let Ok(metadata) =  fs::metadata(&pipe_path) {
         let mut permissions = metadata.permissions();
         permissions.set_mode(0o666);   

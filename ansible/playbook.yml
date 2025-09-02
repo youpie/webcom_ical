@@ -83,11 +83,11 @@
       community.docker.docker_compose_v2:
        project_src: "~/Services/Webcom/{{ personeelsnummer }}"
 
-    - name: Add cron job to start Docker container every hour
-      ansible.builtin.cron:
-        name: "Start Docker container for {{ personeelsnummer }}"
-        #user: "{{remote_username}}"
-        minute: "{{59 | random}}"
-        hour: "*/{{timeout_time_hrs}}"
-        job: "docker start webcom_{{personeelsnummer}}-webcom_ical-1 >/dev/null 2>&1"
-      when: remote_username != ""
+    # - name: Add cron job to start Docker container every hour
+    #   ansible.builtin.cron:
+    #     name: "Start Docker container for {{ personeelsnummer }}"
+    #     #user: "{{remote_username}}"
+    #     minute: "{{59 | random}}"
+    #     hour: "*/{{timeout_time_hrs}}"
+    #     job: "docker start webcom_{{personeelsnummer}}-webcom_ical-1 >/dev/null 2>&1"
+    #   when: remote_username != ""

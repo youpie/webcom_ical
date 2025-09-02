@@ -6,7 +6,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use time::{Date, Duration, Time};
 
-use crate::{errors::OptionResult, GenResult};
+use crate::{errors::OptionResult, gebroken_shifts::BrokenShiftError, GenResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum ShiftState {
@@ -30,6 +30,8 @@ pub struct Shift {
     pub location: String,
     pub description: String,
     pub is_broken: bool,
+    #[serde(default)]
+    pub broken_state: Option<BrokenShiftError>,
     // If the shift is broken, between what time is the user free
     pub broken_period: Option<(Time, Time)>,
     pub original_end_time: Option<Time>,
@@ -117,6 +119,7 @@ impl Shift {
             location,
             description,
             is_broken,
+            broken_state: None,
             broken_period: None,
             original_end_time: None,
             magic_number,

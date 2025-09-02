@@ -164,9 +164,9 @@ fn event_to_shift(events: Vec<Event>) -> Vec<Shift> {
     for event in events {
         if let Some(shift_string) = event.property_value("X-BUSSIE-METADATA") {
             if let Ok(shift) = serde_json::from_str::<Shift>(shift_string) {
-                let mut shift = shift;
+                // let mut shift = shift;
                 // All shifts are marked to be deleted. As if they are not marked that later on we know they really should be deleted
-                shift.state = ShiftState::Deleted;
+                // shift.state = ShiftState::Deleted;
                 previous_shift_map.push(shift);
             }
         }
@@ -175,9 +175,7 @@ fn event_to_shift(events: Vec<Event>) -> Vec<Shift> {
 }
 
 // Save relevant shifts to disk
-pub fn save_partial_shift_files(
-    shifts: &Vec<Shift>,
-) -> GenResult<()> {
+pub fn save_partial_shift_files(shifts: &Vec<Shift>) -> GenResult<()> {
     let (relevant_shifts, non_relevant_shifts) = split_relevant_shifts(shifts.clone());
     write(
         RELEVANT_EVENTS_PATH,
@@ -244,6 +242,14 @@ pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
         let calendar_shifts = event_to_shift(calendar_events);
         let (previous_relevant_shifts, previous_non_relevant_shifts) =
             split_relevant_shifts(calendar_shifts);
+
+        let previous_relevant_shifts: Vec<Shift> = previous_relevant_shifts
+            .into_iter()
+            .map(|mut shift| {
+                shift.state = ShiftState::Deleted;
+                shift
+            })
+            .collect();
         debug!(
             "Got {} relevant and {} non-relevant events",
             previous_relevant_shifts.len(),

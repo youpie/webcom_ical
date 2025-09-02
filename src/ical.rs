@@ -160,18 +160,22 @@ fn is_partial_calendar_regeneration_needed() -> GenResult<Option<bool>> {
 }
 
 fn event_to_shift(events: Vec<Event>) -> Vec<Shift> {
-    let mut previous_shift_map = vec![];
+    let mut previous_shift_map: HashMap<i64, Shift> = HashMap::new();
     for event in events {
         if let Some(shift_string) = event.property_value("X-BUSSIE-METADATA") {
             if let Ok(shift) = serde_json::from_str::<Shift>(shift_string) {
                 // let mut shift = shift;
                 // All shifts are marked to be deleted. As if they are not marked that later on we know they really should be deleted
                 // shift.state = ShiftState::Deleted;
-                previous_shift_map.push(shift);
+                let shift_number = shift.number.clone();
+                match previous_shift_map.insert(shift.magic_number,shift) {
+                    Some(_) => debug!("Duplicate shift during loading from calendar. Shift {}", shift_number),
+                    None => ()
+                };
             }
         }
     }
-    previous_shift_map
+    previous_shift_map.values().cloned().collect()
 }
 
 // Save relevant shifts to disk

@@ -1,22 +1,26 @@
-use crate::{GenResult, Shift, shift::ShiftState};
+use crate::{errors::OptionResult, shift::ShiftState, GenResult, Shift};
 use async_recursion::async_recursion;
 use dotenvy::var;
+use serde::{Deserialize, Serialize};
 use thirtyfour::{
-    WebDriver, WebElement,
-    error::{WebDriverError, WebDriverResult},
-    prelude::*,
+    error::{WebDriverErrorInner, WebDriverResult}, prelude::*, WebDriver, WebElement
 };
 use thiserror::Error;
 use time::{Time, macros::format_description};
 
-#[derive(Debug, Error, Clone, PartialEq)]
-enum BrokenShiftErrorReason {
+#[derive(Debug, Error, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
+pub enum BrokenShiftError {
     #[error("Niet volledige gebroken dienst")]
     NotComplete,
     #[error("Geen eerste afstaptijd")]
     NoFirstAfstaptijd,
     #[error("Geen tweede opstaptijd")]
     NoSecondOpstaptijd,
+    #[error("Second attempt also failed")]
+    Failed,
+    #[error("An unknown error occured")]
+    #[default]
+    Other
 }
 
 /*
@@ -30,35 +34,59 @@ Does not return most errors as there are a few valid reason this function fails
 pub async fn load_broken_shift_information(
     driver: &WebDriver,
     all_shifts: &Vec<Shift>,
-) -> WebDriverResult<Vec<Shift>> {
+) -> GenResult<Vec<Shift>> {
     let mut shifts_clone = all_shifts.clone();
     for shift in shifts_clone.iter_mut() {
-        if shift.is_broken && (shift.state == ShiftState::Changed || shift.state == ShiftState::New)
-        {
+        if !shift.is_broken {
+            continue;
+        }
+        // Try to load the broken shift information. If it fails, that is not important
+        if shift.state == ShiftState::Changed || shift.state == ShiftState::New {
             info!("Creating broken shift: {}", shift.number);
-
-            match get_broken_shift_time(driver, shift).await {
-                Ok(_) => {
-                    info!("Added broken shift time to shift {}", shift.number);
-                }
-                Err(x) if x.downcast_ref::<BrokenShiftErrorReason>() == Some(&BrokenShiftErrorReason::NotComplete) => {
-                    info!("An error occured creating a broken shift: {}", x.to_string());
-                }
-                Err(x) => {
-                    warn!("An error occured creating a broken shift: {}", x.to_string());
-                }
-            };
-            navigate_to_subdirectory(driver, "/WebComm/roster.aspx").await?; //Ga terug naar de rooster pagina, anders laden de gebroken shifts niet goed
-            wait_for_response(driver, By::ClassName("calDay"), false).await?
-        } else if shift.is_broken && shift.state == ShiftState::Unchanged {
+            load_single_broken_info(driver, shift).await?;
+        } else if shift.broken_state.is_none() && shift.broken_period.is_none() {
+            info!("Should retry broken shift {} ",shift.number);
+            load_single_broken_info(driver, shift).await?;
+        // If the loading of a broken shift has failed before, try to load it again.
+        // If it fails again, mark the shift as failed
+        } else if shift.broken_state.is_some_and(|error| error != BrokenShiftError::Failed && error != BrokenShiftError::NotComplete) {
+            info!("Retrying creation of broken shift: {}", shift.number);
+            let shift_result = load_single_broken_info(driver, shift).await?;
+            if shift_result.is_some() {
+                warn!("Creating broken shift {}  also failed the second time",shift.number);
+                shift.broken_state = Some(BrokenShiftError::Failed);
+            }
+        } else if shift.state == ShiftState::Unchanged || shift.state == ShiftState::Unknown {
             info!(
                 "Shift {} is broken, but unchanged from last check",
                 shift.number
             );
-        }
+        } 
     }
     info!("Done generating broken shifts");
     Ok(shifts_clone)
+}
+
+async fn load_single_broken_info(driver: &WebDriver, shift: &mut Shift) -> GenResult<Option<BrokenShiftError>> {
+    let error;
+    match get_broken_shift_time(driver, shift).await {
+        Ok(_) => {
+            info!("Added broken shift time to shift {}", shift.number);
+            error = None;
+        }
+        Err(x) => {
+            warn!("An error occured creating a broken shift {}: {}",shift.number , x.to_string());
+            if let Some(reason) = x.downcast_ref::<BrokenShiftError>(){
+                error = Some(*reason);
+            } else {
+                error = Some(BrokenShiftError::Other)
+            }
+        }
+    };
+    shift.broken_state = error;
+    navigate_to_subdirectory(driver, "/WebComm/roster.aspx").await?; //Ga terug naar de rooster pagina, anders laden de gebroken shifts niet goed
+    wait_for_response(driver, By::ClassName("calDay"), false).await?;
+    Ok(error)
 }
 
 /*
@@ -130,7 +158,7 @@ pub async fn load_broken_dienst_page(
 ) -> GenResult<Vec<WebElement>> {
     let date = shift.date;
     let date_format = format_description!("[year]-[month]-[day]");
-    let formatted_date = date.format(date_format).unwrap();
+    let formatted_date = date.format(date_format)?;
     navigate_to_subdirectory(driver, &format!("/WebComm/shift.aspx?{}", formatted_date)).await?;
     //wait_until_loaded(&driver).await?;
     wait_for_response(driver, By::PartialLinkText("Werk en afwezigheden"), true).await?;
@@ -151,11 +179,11 @@ pub async fn find_broken_start_stop_time(
     let mut opstaptijden: Vec<String> = vec![];
     for row in shift_rows {
         let shift_columns = row.query(By::Tag("td")).all_from_selector().await?;
-        if shift_columns.last().unwrap().text().await? == "Afstaptijd" {
+        if shift_columns.last().result()?.text().await? == "Afstaptijd" {
             debug!("afstaptijd {}", shift_columns[3].text().await?);
             afstaptijden.push(shift_columns[1].text().await?);
         }
-        if shift_columns.last().unwrap().text().await? == "Opstaptijd" {
+        if shift_columns.last().result()?.text().await? == "Opstaptijd" {
             debug!("opstaptijd {}", shift_columns[1].text().await?);
             opstaptijden.push(shift_columns[1].text().await?);
         }
@@ -163,12 +191,12 @@ pub async fn find_broken_start_stop_time(
     let tijd_formaat = format_description!("[hour]:[minute]");
     match afstaptijden.len() {
         1 => {
-            return Err(Box::new(BrokenShiftErrorReason::NotComplete));
+            return Err(Box::new(BrokenShiftError::NotComplete));
         }
         _ => (),
     };
-    let afstaptijd = Time::parse(afstaptijden.first().ok_or(BrokenShiftErrorReason::NoFirstAfstaptijd)?, tijd_formaat)?;
-    let opstaptijd = Time::parse(opstaptijden.last().ok_or(BrokenShiftErrorReason::NoSecondOpstaptijd)?, tijd_formaat)?;
+    let afstaptijd = Time::parse(afstaptijden.first().ok_or(BrokenShiftError::NoFirstAfstaptijd)?, tijd_formaat)?;
+    let opstaptijd = Time::parse(opstaptijden.last().ok_or(BrokenShiftError::NoSecondOpstaptijd)?, tijd_formaat)?;
     Ok((afstaptijd, opstaptijd))
 }
 
@@ -223,11 +251,12 @@ pub async fn wait_for_response(
         true => query.wait_until().clickable().await,
         false => query.wait_until().displayed().await,
     };
-    match test {
-        Err(WebDriverError::ElementClickIntercepted(_)) => {
+    match test.map_err(WebDriverErrorInner::from) {
+        Err(WebDriverErrorInner::ElementClickIntercepted(_)) => {
             wait_for_response(driver, element, clickable).await?;
         }
-        x => return x,
+        _ => return Ok(()),
     };
+    //  
     Ok(())
 }

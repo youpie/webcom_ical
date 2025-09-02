@@ -11,11 +11,10 @@ use std::{
 use strfmt::strfmt;
 use thirtyfour::error::{WebDriverErrorInfo, WebDriverResult};
 use time::{macros::format_description, Date};
-use crate::ShiftState;
+use crate::errors::IncorrectCredentialsCount;
+use crate::{GenError, GenResult, ShiftState};
 
-use crate::{create_ical_filename, create_shift_link, set_get_name, IncorrectCredentialsCount, Shift, SignInFailure};
-
-type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
+use crate::{create_ical_filename, create_shift_link, set_get_name, Shift, SignInFailure};
 
 const ERROR_VALUE: &str = "HIER HOORT WAT ANDERS DAN DEZE TEKST TE STAAN, CONFIGURATIE INCORRECT";
 const SENDER_NAME: &str = "Peter";
@@ -371,7 +370,7 @@ fn send_removed_shifts_mail(
 Composes and sends email of found errors, in plaintext
 List of errors can be as long as possible, but for now is always 3
 */
-pub fn send_errors(errors: &Vec<Box<dyn std::error::Error>>, name: &str) -> GenResult<()> {
+pub fn send_errors(errors: &Vec<GenError>, name: &str) -> GenResult<()> {
     let env = EnvMailVariables::new(false)?;
     if !env.send_error_mail {
         info!("tried to send error mail, but is disabled");
@@ -516,18 +515,30 @@ pub fn send_failed_signin_mail(
     let still_not_working_modifier = if first_time { "" } else { "nog steeds " };
     let name = set_get_name(None);
     let verbose_error = match &error.error {
-        None => "Een onbekende fout...",
         Some(SignInFailure::IncorrectCredentials) => {
             "Incorrecte inloggegevens, heb je misschien je wachtwoord veranderd?"
         }
         Some(SignInFailure::TooManyTries) => "Te veel incorrecte inlogpogingen…",
         Some(SignInFailure::WebcomDown) => "Webcom heeft op dit moment een storing",
         Some(SignInFailure::Other(fault)) => fault,
+        _ => "Een onbekende fout...",
+    };
+    let password_change_text = if let Ok(url) = var("PASSWORD_CHANGE_URL") {
+        format!("
+<tr>
+    <td>
+        Als je je webcomm wachtwoord hebt veranderd. Vul je nieuwe wachtwoord in met behulp van de volgende link: <br>
+        <a href=\"{url}\" style=\"color:#003366; text-decoration:underline;\">{url}</a>
+    </td>
+</tr>")
+    } else {
+        String::new()
     };
 
     let login_failure_html = strfmt!(&login_failure_html, 
         still_not_working_modifier,
         name => set_get_name(None),
+        additional_text => password_change_text,
         retry_counter => error.retry_count,
         signin_error => verbose_error.to_string(),
         admin_email => env.mail_error_to.clone(),
@@ -627,7 +638,7 @@ mod tests {
     }
 
     fn create_example_shift() -> Shift {
-        Shift::new("Dienst: V2309 •  • Geldig vanaf: 29.06.2025 •  • Tijd: 06:14 - 13:54 •  • Dienstduur: 07:40 Uren •  • Loonuren: 07:40 Uren •  • Dagsoort:  • Donderdag •  • Dienstsoort:  • Rijdienst •  • Startplaats:  • ehvgas, Einhoven garage streek •  • Omschrijving:  • V".to_owned(),Date::from_calendar_date(2025, time::Month::June, 29).unwrap())
+        Shift::new("Dienst: V2309 •  • Geldig vanaf: 29.06.2025 •  • Tijd: 06:14 - 13:54 •  • Dienstduur: 07:40 Uren •  • Loonuren: 07:40 Uren •  • Dagsoort:  • Donderdag •  • Dienstsoort:  • Rijdienst •  • Startplaats:  • ehvgas, Einhoven garage streek •  • Omschrijving:  • V".to_owned(),Date::from_calendar_date(2025, time::Month::June, 29).unwrap()).unwrap()
     }
 
     fn get_mailer() -> GenResult<(EnvMailVariables,SmtpTransport)> {

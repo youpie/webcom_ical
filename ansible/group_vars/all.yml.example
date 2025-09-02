@@ -10,6 +10,8 @@ ical_domain: ""
 
 save_target: ""
 
+password_change_url=
+
 # System username, needed for cron. Can't leave empty
 remote_username: ""
 

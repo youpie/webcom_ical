@@ -3,12 +3,13 @@ use kuma_client::monitor::{MonitorGroup, MonitorType};
 use kuma_client::{Client, monitor, notification};
 use std::collections::HashMap;
 use std::fs::read_to_string;
+use std::thread;
+use std::time::Duration;
 use strfmt::strfmt;
 use url::Url;
 
-use crate::{email, set_get_name};
-
-type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
+use crate::errors::OptionResult;
+use crate::{email, set_get_name, GenResult};
 
 const COLOR_RED: &str = "#a51d2d";
 const COLOR_GREEN: &str = "#26a269";
@@ -18,6 +19,7 @@ pub async fn first_run(url: &str, personeelsnummer: &str) -> GenResult<()> {
     let username = var("KUMA_USERNAME")?;
     let password = var("KUMA_PASSWORD")?;
     let kuma_client = connect_to_kuma(&url, username, password).await?;
+    thread::sleep(Duration::from_millis(100));
     let notification_id = create_notification(&kuma_client, personeelsnummer, &url).await?;
     if let Some(monitor_id) =
         get_monitor_type_id(&kuma_client, personeelsnummer, MonitorType::Push, false).await?
@@ -68,7 +70,7 @@ async fn create_monitor(
         ..Default::default()
     };
     let monitor_response = kuma_client.add_monitor(monitor).await?;
-    let monitor_id = monitor_response.common().id().unwrap();
+    let monitor_id = monitor_response.common().id().result()?;
     info!("Monitor has been created, id: {monitor_id}");
     Ok(monitor_id)
 }
@@ -79,9 +81,9 @@ async fn create_notification(
     personeelsnummer: &str,
     kuma_url: &Url,
 ) -> GenResult<(i32, bool)> {
-    let base_html = read_to_string("./templates/email_base.html").unwrap();
-    let offline_html = read_to_string("./templates/kuma_offline.html").unwrap();
-    let online_html = read_to_string("./templates/kuma_online.html").unwrap();
+    let base_html = read_to_string("./templates/email_base.html").expect("Can't get email base template");
+    let offline_html = read_to_string("./templates/kuma_offline.html").expect("Can't get kuma offline template");
+    let online_html = read_to_string("./templates/kuma_online.html").expect("Can't get kuma online template");
 
     let body_online = strfmt!(&base_html,
         content => strfmt!(&online_html,
@@ -156,7 +158,7 @@ Webcom Ical weer online
     };
 
     let notification_response = kuma_client.add_notification(notification.clone()).await?;
-    let id = notification_response.id.unwrap();
+    let id = notification_response.id.result()?;
     info!("Created notification with ID {id}");
     Ok((id, true))
 }

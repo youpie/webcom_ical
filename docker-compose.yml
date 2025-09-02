@@ -10,6 +10,7 @@ services:
       - gecko_driver
     environment:
       - RUST_LOG=warn
+    restart: on-failure
   gecko_driver:
     image: docker.io/library/gecko_driver
     restart: on-failure

@@ -55,6 +55,10 @@ def main(include_hidden: bool, only_failed: bool, single_user: bool, condensed: 
     table.add_column("Exec (s)", justify="right")
     table.add_column("Shifts", justify="right")
     table.add_column("Broken", justify="right")
+    table.add_column("BrokenF", justify="right")
+    table.add_column("Failed", justify="right")
+    table.add_column("Old", justify="right")
+    table.add_column("Minute", justify="right")
     table.add_column("CalVer")
     table.add_column("Last Run")
     table.add_column("Folder Name")
@@ -90,7 +94,7 @@ def get_user(path, table, failures, only_failed, skip_docker):
 
     # user’s display name
     uname = (kuma / "name").read_text().strip() if (kuma / "name").exists() else path.name
-
+    execution_minute = (kuma / "starting_minute").read_text().strip() if (kuma / "starting_minute").exists() else "-"
     # container status
     if not skip_docker:
         up = check_container_up(compose) if compose.exists() else False
@@ -99,7 +103,7 @@ def get_user(path, table, failures, only_failed, skip_docker):
         up_str = ""
     # defaults if no logbook
     state = "–"
-    rc = exec_s = shifts = broken = 0
+    rc = exec_s = shifts = broken = failed_shifts = failed_broken = 0
     calver = "–"
     window = "–"
     last_run = "–"
@@ -131,8 +135,10 @@ def get_user(path, table, failures, only_failed, skip_docker):
         exec_s = round(app.get("execution_time_ms", 0)/1000,1)
         shifts = app.get("shifts", 0)
         broken = app.get("broken_shifts", 0)
+        failed_broken = app.get("failed_broken_shifts", 0)
+        failed_shifts = app.get("failed_shifts", 0)
+        non_relevant_shifts = app.get("non_relevant_shifts", 0)
         calver = app.get("calendar_version", "–")
-
         env = dotenv_values(envfile)
         parse_int = int(env.get("KUMA_HEARTBEAT_INTERVAL", 4001))
         window = ""
@@ -163,8 +169,11 @@ def get_user(path, table, failures, only_failed, skip_docker):
             str(exec_s) if logbook.exists() else "–",
             str(shifts) if logbook.exists() else "–",
             str(broken) if logbook.exists() else "–",
+            "%s%s" % ("[red][blink]" if failed_broken != 0 else "",str(failed_broken) if logbook.exists() or failed_broken != 0 else "–"),
+             "%s%s" % ("[red][blink]" if failed_shifts != 0 else "", str(failed_shifts) if logbook.exists() or failed_shifts != 0 else "–"),
+            str(non_relevant_shifts) if logbook.exists() else "–",
+            execution_minute,
             calver,
-            
             last_run,
             path.name
         )

@@ -23,7 +23,15 @@ function change_password
 
     # 5) restart the ical container
     set name (basename "$folder")
-    docker start webcom_$name-webcom_ical-1
+
+    if not test -f $folder/kuma/pipe
+        echo "❌ Missing pipe"
+        return 1
+    end
+
+    # docker start webcom_$name-webcom_ical-1
+    echo "e" > $folder/kuma/pipe
+
 
     # 6) wait for logbook.json to change
     set logfile "$folder/kuma/logbook.json"

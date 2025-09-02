@@ -60,6 +60,10 @@
       set_fact:
         timeout_time: "{{ timeout_time_hrs | int * 3600 + 400 }}"
 
+    - name: Set cycle time
+      set_fact:
+        cycle_time: "{{ timeout_time_hrs | int * 3600}}"
+
     - name: Create user directory
       ansible.builtin.file:
         path: "~/Services/Webcom/{{ personeelsnummer }}"
@@ -79,11 +83,11 @@
       community.docker.docker_compose_v2:
        project_src: "~/Services/Webcom/{{ personeelsnummer }}"
 
-    - name: Add cron job to start Docker container every hour
-      ansible.builtin.cron:
-        name: "Start Docker container for {{ personeelsnummer }}"
-        #user: "{{remote_username}}"
-        minute: "{{59 | random}}"
-        hour: "*/{{timeout_time_hrs}}"
-        job: "docker start webcom_{{personeelsnummer}}-webcom_ical-1 >/dev/null 2>&1"
-      when: remote_username != ""
+    # - name: Add cron job to start Docker container every hour
+    #   ansible.builtin.cron:
+    #     name: "Start Docker container for {{ personeelsnummer }}"
+    #     #user: "{{remote_username}}"
+    #     minute: "{{59 | random}}"
+    #     hour: "*/{{timeout_time_hrs}}"
+    #     job: "docker start webcom_{{personeelsnummer}}-webcom_ical-1 >/dev/null 2>&1"
+    #   when: remote_username != ""

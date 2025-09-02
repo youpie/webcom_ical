@@ -8,10 +8,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::{
-    BASE_DIRECTORY, FailureType, GenResult,
-    errors::SignInFailure,
-    ical::{CALENDAR_VERSION, get_ical_path, load_ical_file},
-    shift::Shift,
+    errors::SignInFailure, ical::{get_ical_path, load_ical_file, CALENDAR_VERSION}, shift::Shift, FailureType, GenResult, BASE_DIRECTORY
 };
 
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq, Clone)]
@@ -48,9 +45,11 @@ impl ApplicationLogbook {
     pub fn generate_shift_statistics(&mut self, shifts: &Vec<Shift>, non_relevant_shifts: usize) {
         let number_of_shifts = shifts.len() as u64;
         let number_of_broken_shifts = shifts.iter().filter(|shift| shift.is_broken).count() as u64;
+        let number_of_failed_broken_shifts = shifts.iter().filter(|shift| shift.broken_shift_failed()).count() as u64;
         self.application_state.broken_shifts = number_of_broken_shifts;
         self.application_state.shifts = number_of_shifts;
         self.application_state.non_relevant_shifts = non_relevant_shifts as u64;
+        self.application_state.failed_broken_shifts = number_of_failed_broken_shifts;
     }
 
     pub fn add_failed_shifts(&mut self, number: u64, replace: bool) {
@@ -98,6 +97,7 @@ pub struct ApplicationState {
     pub broken_shifts: u64,
     pub non_relevant_shifts: u64,
     pub failed_shifts: u64,
+    pub failed_broken_shifts: u64,
     pub calendar_version: String,
 }
 

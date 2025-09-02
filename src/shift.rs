@@ -145,6 +145,10 @@ impl Shift {
         Some(shifts)
     }
 
+    pub fn broken_shift_failed(&self) -> bool {
+        self.broken_state.is_some_and(|state| state != BrokenShiftError::NotComplete)
+    }
+
     // Create two new shifts from one broken shift.
     // Assumes second shift cannot start after midnight
     pub fn new_from_existing(

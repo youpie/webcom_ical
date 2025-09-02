@@ -292,7 +292,7 @@ let previous_execution_date = match Date::parse(&read_to_string(PREVIOUS_EXECUTI
             return (events,None)}
     }; */
 
-fn create_event(shift: &Shift, metadata: Option<&Shift>) -> Event {
+fn create_event(shift: &Shift, metadata: Option<&&Shift>) -> Event {
     let shift_link = create_shift_link(shift, true).unwrap_or("ERROR".to_owned());
     let cut_off_end_time = if let Some(end_time) = shift.original_end_time {
         format!(
@@ -303,22 +303,23 @@ fn create_event(shift: &Shift, metadata: Option<&Shift>) -> Event {
         String::new()
     };
     Event::new()
-        .summary(&format!("Dienst - {}{cut_off_end_time}", shift.number))
+        .summary(&format!("{}Dienst - {}{cut_off_end_time}",if shift.broken_shift_failed() {"!! "} else {""}, shift.number))
         .description(&format!(
             "Dienstsoort • {}
 Duur • {} uur {} minuten
 Omschrijving • {}
-Shift sheet • {}",
+Shift sheet • {}{}",
             shift.kind,
             shift.duration.whole_hours(),
             shift.duration.whole_minutes() % 60,
             shift.description,
-            shift_link
+            shift_link,
+            if shift.broken_shift_failed() {"\n!! Deze gebroken dienst kon niet correct ingeladen worden!"} else {""}
         ))
         .location(&shift.location)
         .append_property(icalendar::Property::new(
             "X-BUSSIE-METADATA",
-            &serde_json::to_string(metadata.unwrap_or(shift)).unwrap_or_default(),
+            &serde_json::to_string(metadata.unwrap_or(&shift)).unwrap_or_default(),
         ))
         .starts(create_dateperhapstime(shift.date, shift.start))
         .ends(create_dateperhapstime(shift.end_date, shift.end))
@@ -332,12 +333,12 @@ Will later be replaced with current exit code if its different
 */
 pub fn create_ical(
     shifts: &Vec<Shift>,
-    metadata: Vec<Shift>,
+    metadata: &Vec<Shift>,
     previous_exit_code: &FailureType,
 ) -> String {
-    let metadata_shifts_hashmap: HashMap<i64, Shift> = metadata
+    let metadata_shifts_hashmap: HashMap<i64, &Shift> = metadata
         .into_iter()
-        .map(|x| (x.magic_number, x)) // Replace `operation(x)` with your specific operation
+        .map(|x| (x.magic_number, x))
         .collect();
     let name = set_get_name(None);
     let admin_email = var("MAIL_ERROR_TO").unwrap_or_default();

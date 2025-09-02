@@ -267,14 +267,14 @@ async fn main_program(
     debug!("Saving {} shifts", night_split_shifts.len());
     let calendar = create_ical(
         &night_split_shifts,
-        all_shifts,
+        &all_shifts,
         &logbook.state,
     );
     send_welcome_mail(&ical_path)?;
     let mut output = File::create(&ical_path)?;
     info!("Writing to: {:?}", &ical_path);
     write!(output, "{}", calendar)?;
-    logbook.generate_shift_statistics(&relevant_shifts, non_relevant_shifts.len());
+    logbook.generate_shift_statistics(&all_shifts, non_relevant_shifts.len());
     Ok(())
 }
 

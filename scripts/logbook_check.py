@@ -55,6 +55,7 @@ def main(include_hidden: bool, only_failed: bool, single_user: bool, condensed: 
     table.add_column("Exec (s)", justify="right")
     table.add_column("Shifts", justify="right")
     table.add_column("Broken", justify="right")
+    table.add_column("BrokenF", justify="right")
     table.add_column("Failed", justify="right")
     table.add_column("Old", justify="right")
     table.add_column("Minute", justify="right")
@@ -134,6 +135,7 @@ def get_user(path, table, failures, only_failed, skip_docker):
         exec_s = round(app.get("execution_time_ms", 0)/1000,1)
         shifts = app.get("shifts", 0)
         broken = app.get("broken_shifts", 0)
+        failed_broken = app.get("failed_broken_shifts", 0)
         failed_shifts = app.get("failed_shifts", 0)
         non_relevant_shifts = app.get("non_relevant_shifts", 0)
         calver = app.get("calendar_version", "–")
@@ -167,6 +169,7 @@ def get_user(path, table, failures, only_failed, skip_docker):
             str(exec_s) if logbook.exists() else "–",
             str(shifts) if logbook.exists() else "–",
             str(broken) if logbook.exists() else "–",
+            str(failed_broken) if logbook.exists() else "–",
             str(failed_shifts) if logbook.exists() else "–",
             str(non_relevant_shifts) if logbook.exists() else "–",
             execution_minute,

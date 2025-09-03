@@ -296,7 +296,7 @@ async fn main_loop(
     loop {
         debug!("Waiting for notification");
         let continue_execution = receiver.recv().await.result()?;
-        dotenv_override().ok();
+        dotenv_override().warn("Getting ENV");
         let name = set_get_name(None);
         let mut logbook = ApplicationLogbook::load();
 

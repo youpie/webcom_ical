@@ -1,7 +1,7 @@
 use std::{fs::{self, read_to_string, write}, io::BufRead, os::unix::fs::PermissionsExt, time::Duration};
 
 use chrono::{Timelike, Utc};
-use dotenvy::var;
+use dotenvy::{dotenv_override, var};
 use ipipe::Pipe;
 use tokio::{sync::mpsc::Sender, time::sleep};
 
@@ -81,6 +81,10 @@ pub fn start_pipe(tx: Sender<StartReason>) -> Result<(), ipipe::Error> {
         let start_reason = match &line {
             Ok(line) if line == "q" => {return Ok(())},
             Ok(line) if line == "f" => Some(StartReason::Force),
+            Ok(line) if line == "p" => {
+                dotenv_override().warn("Loading ENV");
+                error!("Password is: {}",var("PASSWORD").warn_owned("Loading password").unwrap_or_default());
+                None},
             Ok(_) => Some(StartReason::Pipe),
             _ => None,
         };

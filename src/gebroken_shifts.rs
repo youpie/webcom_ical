@@ -1,9 +1,7 @@
-use std::ops::Deref;
-
 use crate::{
     GenResult, Shift,
     email::{DATE_DESCRIPTION, TIME_DESCRIPTION},
-    errors::{OptionResult, ResultLog},
+    errors::ResultLog,
     shift::ShiftState,
 };
 use async_recursion::async_recursion;
@@ -15,7 +13,7 @@ use thirtyfour::{
     prelude::*,
 };
 use thiserror::Error;
-use time::{Duration, Time, macros::format_description};
+use time::{Duration, Time};
 
 #[derive(Debug, Error, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub enum BrokenShiftError {

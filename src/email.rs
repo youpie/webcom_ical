@@ -419,14 +419,15 @@ pub fn send_gecko_error_mail<T: std::fmt::Debug>(error: WebDriverResult<T>) -> G
 
 pub fn send_welcome_mail(
     path: &PathBuf,
+    force: bool
 ) -> GenResult<()> {
-    if path.exists() {
+    if path.exists() && !force {
         return Ok(());
     }
     let send_welcome_mail =
         EnvMailVariables::str_to_bool(&var("SEND_WELCOME_MAIL").unwrap_or("false".to_string()));
 
-    if !send_welcome_mail {
+    if !send_welcome_mail && !force {
         debug!("{:?}",var("SEND_WELCOME_MAIL"));
         info!("Wanted to send welcome mail. But it is disabled");
         return Ok(());
@@ -619,7 +620,7 @@ mod tests {
 
     #[test]
     fn send_welcome_mail_test() -> GenResult<()>{
-        send_welcome_mail(&PathBuf::new())
+        send_welcome_mail(&PathBuf::new(), true)
     }
 
     #[test]

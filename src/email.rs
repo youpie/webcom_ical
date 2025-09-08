@@ -524,7 +524,7 @@ pub fn send_failed_signin_mail(
         Some(SignInFailure::Other(fault)) => fault,
         _ => "Een onbekende fout...",
     };
-    let password_change_text = if let Ok(url) = var("PASSWORD_CHANGE_URL") {
+    let password_change_text = if let Ok(url) = var("PASSWORD_CHANGE_URL") && error.error.clone().is_some_and(|error| error == SignInFailure::IncorrectCredentials){
         format!("
 <tr>
     <td>

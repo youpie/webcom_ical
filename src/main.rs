@@ -17,9 +17,7 @@ use dotenvy::var;
 use email::send_errors;
 use email::send_welcome_mail;
 use std::fs;
-use std::fs::File;
 use std::fs::write;
-use std::io::Write;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::sync::RwLock;
@@ -243,10 +241,7 @@ async fn main_program(
     info!("Found {} shifts", new_shifts.len());
     // If getting previous shift information failed, just create an empty one. Because it will cause a new calendar to be created
     let previous_shifts_information =
-        match get_previous_shifts().warn_owned("Getting previous shift information")? {
-            Some(previous_shifts) => previous_shifts,
-            None => PreviousShiftInformation::new(),
-        };
+        || -> Option<PreviousShiftInformation> {Some(get_previous_shifts().warn_owned("Getting previous shift information").ok()??)}().unwrap_or_default();
     non_relevant_shifts.append(
         &mut previous_shifts_information
             .previous_non_relevant_shifts
@@ -260,11 +255,12 @@ async fn main_program(
         Ok(shifts) => shifts,
         Err(err) => return Err(err),
     };
-    let mut all_shifts = relevant_shifts.clone();
-    all_shifts.append(&mut non_relevant_shifts.clone());
+    let mut all_shifts = relevant_shifts;
+    let non_relevant_shift_len = non_relevant_shifts.len();
+    all_shifts.append(&mut non_relevant_shifts);
     let all_shifts = gebroken_shifts::load_broken_shift_information(&driver, &all_shifts).await?; // Replace the shifts with the newly created list of broken shifts
-    ical::save_partial_shift_files(&all_shifts)?;
-    let broken_split_shifts = gebroken_shifts::split_broken_shifts(all_shifts.clone())?;
+    ical::save_partial_shift_files(&all_shifts).error("Saving partial shift files");
+    let broken_split_shifts = gebroken_shifts::split_broken_shifts(all_shifts.clone());
     let midnight_stopped_shifts = gebroken_shifts::stop_shift_at_midnight(&broken_split_shifts);
     let mut night_split_shifts = gebroken_shifts::split_night_shift(&midnight_stopped_shifts);
     night_split_shifts.sort_by_key(|shift| shift.magic_number);
@@ -272,10 +268,9 @@ async fn main_program(
     debug!("Saving {} shifts", night_split_shifts.len());
     let calendar = create_ical(&night_split_shifts, &all_shifts, &logbook.state);
     send_welcome_mail(&ical_path, false)?;
-    let mut output = File::create(&ical_path)?;
     info!("Writing to: {:?}", &ical_path);
-    write!(output, "{}", calendar)?;
-    logbook.generate_shift_statistics(&all_shifts, non_relevant_shifts.len());
+    write(ical_path, calendar.as_bytes())?;
+    logbook.generate_shift_statistics(&all_shifts, non_relevant_shift_len);
     Ok(())
 }
 
@@ -347,32 +342,18 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>)
                     update_signin_failure(false, None).warn("Updating signin failure");
                     retry_count = max_retry_count;
                 }
-                Err(x) => {
-                    match x.downcast_ref::<FailureType>() {
-                        Some(FailureType::SignInFailed(y)) => {
-                            // Do not stop webcom if the sign in failure reason is unknown
-                            if let SignInFailure::Other(x) = y {
-                                warn!(
-                                    "Kon niet inloggen, maar een onbekende fout: {}. Probeert opnieuw",
-                                    x
-                                )
-                            } else {
-                                retry_count = max_retry_count;
-                                update_signin_failure(true, Some(y.clone()))
-                                    .warn("Updating signin failure");
-                                current_exit_code = FailureType::SignInFailed(y.to_owned());
-                                error!("Inloggen niet succesvol, fout: {:?}", y)
-                            }
-                        }
-                        _ => {
-                            warn!(
-                                "Fout tijdens shift laden, opnieuw proberen, poging: {}. Fout: {}",
-                                retry_count + 1,
-                                &x.to_string()
-                            );
-                            running_errors.push(x);
+                Err(err) if let Some(webcom_error) = err.downcast_ref::<FailureType>() => {
+                    match webcom_error {
+                        FailureType::SignInFailed(signin_failure) if signin_failure != &SignInFailure::Other(_other_error) => {
+                            retry_count = max_retry_count;
+                            update_signin_failure(true, Some(y.clone()))
+                                .warn("Updating signin failure");
+                            current_exit_code = FailureType::SignInFailed(signin_failure.to_owned());
+                            error!("Inloggen niet succesvol, fout: {:?}", y)
                         }
                     }
+                }
+                _ => 
                 }
             };
             retry_count += 1;
@@ -420,6 +401,33 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>)
     }
     Ok(())
 }
+
+/*
+Err(x) => {
+                    match x.downcast_ref::<FailureType>() {
+                        Some(FailureType::SignInFailed(y)) => {
+                            // Do not stop webcom if the sign in failure reason is unknown
+                            if let SignInFailure::Other(x) = y {
+                                warn!(
+                                    "Kon niet inloggen, maar een onbekende fout: {}. Probeert opnieuw",
+                                    x
+                                )
+                            } else {
+                                retry_count = max_retry_count;
+                                update_signin_failure(true, Some(y.clone()))
+                                    .warn("Updating signin failure");
+                                current_exit_code = FailureType::SignInFailed(y.to_owned());
+                                error!("Inloggen niet succesvol, fout: {:?}", y)
+                            }
+                        }
+                        _ => {
+                            warn!(
+                                "Fout tijdens shift laden, opnieuw proberen, poging: {}/{max_retry_count}. Fout: {}",
+                                retry_count + 1,
+                                &x.to_string()
+                            );
+                            running_errors.push(x);
+                        } */
 
 async fn get_driver(logbook: &mut ApplicationLogbook, username: &str) -> GenResult<WebDriver> {
     let kuma_url = var("KUMA_URL").ok();

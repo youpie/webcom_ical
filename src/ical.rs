@@ -194,19 +194,10 @@ pub fn save_partial_shift_files(shifts: &Vec<Shift>) -> GenResult<()> {
     Ok(())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct PreviousShiftInformation {
     pub previous_relevant_shifts: Vec<Shift>,
     pub previous_non_relevant_shifts: Vec<Shift>,
-}
-
-impl PreviousShiftInformation {
-    pub fn new() -> Self {
-        Self {
-            previous_non_relevant_shifts: vec![],
-            previous_relevant_shifts: vec![],
-        }
-    }
 }
 
 pub fn get_ical_path() -> GenResult<PathBuf> {

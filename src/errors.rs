@@ -215,6 +215,7 @@ pub fn sign_in_failed_check() -> GenResult<Option<SignInFailure>> {
 }
 
 pub trait ResultLog<T,E> {
+    fn error(&self, function_name: &str);
     fn warn(&self, function_name: &str);
     fn warn_owned(self, function_name: &str) -> Self;
     fn info(&self, function_name: &str);
@@ -238,5 +239,10 @@ impl<T,E> ResultLog<T,E> for Result<T,E> where E: Display{
             _ => ()
         }
     }
-    
+    fn error(&self, function_name: &str) {
+        match self {
+            Err(err) => {error!("Error in function \"{function_name}\": {}",err.to_string())},
+            _ => ()
+        }
+    }
 }

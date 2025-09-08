@@ -8,7 +8,7 @@ function f
         set dest (cat $tmp)
         if test -n "$dest"
             cd $dest
-            ~/Services/Webcom/logbook_check.py -s
+            ~/Services/Webcom/logbook_check.py -s $dest
         end
     end
 end

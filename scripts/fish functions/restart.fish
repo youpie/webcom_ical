@@ -7,8 +7,15 @@ function restart
     end
 
     echo "e" > ./kuma/pipe
-    echo "Starting webcom ical"
-
+    
+    while true
+        sleep 3
+        if not test -f "$folder/kuma/active"
+            echo "Active file missing..."
+        else
+            break
+        end
+    end
     # 6) wait for logbook.json to change
     set logfile "$folder/kuma/logbook.json"
     if not test -f $logfile
@@ -25,5 +32,5 @@ function restart
         end
     end
     # 7) final check
-    ~/Services/Webcom/logbook_check.py -s
+    ~/Services/Webcom/logbook_check.py -s d
 end

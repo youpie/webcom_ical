@@ -33,7 +33,7 @@ impl ToNaive for time::Date {
 // UPDATE THIS WHENEVER ANYTHING CHANGES IN THE ICAL
 // Add B if it modifies of removes an already existing value
 // Add W if it is wanted to resend the welcome mail
-pub const CALENDAR_VERSION: &str = "3B";
+pub const CALENDAR_VERSION: &str = "4";
 
 const PREVIOUS_EXECUTION_DATE_PATH: &str = "./kuma/previous_execution_date";
 pub const NON_RELEVANT_EVENTS_PATH: &str = "./kuma/non_relevant_events";

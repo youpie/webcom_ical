@@ -473,8 +473,9 @@ async fn main() -> GenResult<()> {
     let main_program = spawn(async move { main_loop(&mut rx, kuma_url.as_deref()).await });
     if !args.single_run {
         start_pipe(tx_clone).await.warn("Start pipe");
+    } else {
+        _ = main_program.await;
     }
-    _ = main_program.await;
     info!("Stopping webcom ical");
     Ok(())
 }

@@ -1,8 +1,5 @@
 use crate::{
-    GenResult, Shift,
-    email::{DATE_DESCRIPTION, TIME_DESCRIPTION},
-    errors::ResultLog,
-    shift::ShiftState,
+    email::{DATE_DESCRIPTION, TIME_DESCRIPTION}, errors::ResultLog, shift::ShiftState, GenResult, Shift
 };
 use async_recursion::async_recursion;
 use dotenvy::var;
@@ -31,7 +28,10 @@ pub async fn load_broken_shift_information(
             continue;
         }
         // Try to load the broken shift information. If it fails, that is not important
-        if shift.state == ShiftState::Changed || shift.state == ShiftState::New || shift.broken_period.is_none() {
+        if shift.broken_period.is_none(){
+            info!("Creating broken shift: {}", shift.number);
+            load_single_broken_info(driver, shift).await?;
+        } else if matches!(shift.state, ShiftState::Changed | ShiftState::New) {
             info!("Creating broken shift: {}", shift.number);
             load_single_broken_info(driver, shift).await?;
         } else {
@@ -77,7 +77,8 @@ async fn get_broken_shift_time(driver: &WebDriver, shift: &mut Shift) -> GenResu
 }
 
 /*
-
+Looks for a time difference between one event in the shift info and the next
+If something boes wrong, skip it. 
 */
 pub async fn find_broken_start_stop_time(shift_rows: Vec<WebElement>) -> GenResult<Vec<(Time,Time)>> {
     let mut broken_periods: Vec<(Time, Time)> = vec![];

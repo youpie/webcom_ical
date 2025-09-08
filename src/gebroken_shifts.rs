@@ -72,7 +72,7 @@ A small function to combine the three functions needed for creating a broken shi
 async fn get_broken_shift_time(driver: &WebDriver, shift: &mut Shift) -> GenResult<()> {
     let broken_diensten = load_broken_dienst_page(driver, &shift).await?;
     let between_times = find_broken_start_stop_time(broken_diensten).await?;
-    shift.broken_period = if between_times.is_empty() {None} else {Some(between_times)};
+    shift.broken_period = Some(between_times);
     Ok(())
 }
 

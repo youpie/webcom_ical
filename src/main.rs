@@ -28,11 +28,9 @@ use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::channel;
 
 use crate::errors::FailureType;
-use crate::errors::OptionResult;
+use crate::errors::IncorrectCredentialsCount;
 use crate::errors::ResultLog;
 use crate::errors::SignInFailure;
-use crate::errors::sign_in_failed_check;
-use crate::errors::update_signin_failure;
 use crate::execution::StartReason;
 use crate::execution::execution_manager;
 use crate::execution::start_pipe;
@@ -302,18 +300,29 @@ fn create_delete_lock(start_reason: Option<&StartReason>) -> GenResult<()> {
 This starts the WebDriver session
 Loads the main logic, and retries if it fails
 */
-async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>) -> GenResult<()> {
+async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>) {
     loop {
         debug!("Waiting for notification");
-        let continue_execution = receiver.recv().await.result()?;
+        let continue_execution = receiver.recv().await.expect("Notification channel closed");
+
         dotenv_override().warn("Getting ENV");
+
         create_delete_lock(Some(&continue_execution)).warn("Creating Lock file");
+
         let name = set_get_name(None);
         let mut logbook = ApplicationLogbook::load();
+        let mut failure_counter = IncorrectCredentialsCount::load();
 
         let username = var("USERNAME").expect("Error in username variable loop");
         let password = var("PASSWORD").expect("Error in password variable loop");
-        let driver = get_driver(&mut logbook, &username).await?;
+        let driver = match get_driver(&mut logbook, &username).await {
+            Ok(driver) => driver,
+            Err(err) => {
+                error!("Failed to get driver! error: {}", err.to_string());
+                logbook.save(&FailureType::GeckoEngine).warn("Saving gecko driver error");
+                return ();
+            }
+        };
 
         let mut current_exit_code = FailureType::default();
         let previous_exit_code = logbook.clone().state;
@@ -326,7 +335,8 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>)
             .unwrap_or(3);
 
         // Check if the program is allowed to run, or not due to failed sign-in
-        let sign_in_check: Option<SignInFailure> = sign_in_failed_check().unwrap_or(None);
+        let sign_in_check: Option<SignInFailure> =
+            failure_counter.sign_in_failed_check().unwrap_or(None);
         if continue_execution != StartReason::Force {
             if let Some(failure) = sign_in_check {
                 retry_count = max_retry_count;
@@ -342,22 +352,23 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>)
                 .warn_owned("Main Program")
             {
                 Ok(()) => {
-                    update_signin_failure(false, None).warn("Updating signin failure");
+                    failure_counter
+                        .update_signin_failure(false, None)
+                        .warn("Updating signin failure");
                     retry_count = max_retry_count;
                 }
                 Err(err) if err.downcast_ref::<FailureType>().is_some() => {
-                    // Guaranteed succesful unwrap
                     let webcom_error = err
                         .downcast_ref::<FailureType>()
                         .cloned()
                         .unwrap_or_default();
-                    match webcom_error {
+                    match webcom_error.clone() {
                         FailureType::SignInFailed(signin_failure) => {
                             retry_count = max_retry_count;
-                            update_signin_failure(true, Some(signin_failure.clone()))
-                                .warn("Updating signin failure");
-                            current_exit_code =
-                                FailureType::SignInFailed(signin_failure.to_owned());
+                            failure_counter
+                                .update_signin_failure(true, Some(signin_failure.clone()))
+                                .warn("Updating signin failure 2");
+                            current_exit_code = webcom_error;
                         }
                         FailureType::ConnectError => {
                             retry_count = max_retry_count;
@@ -374,7 +385,6 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>)
             };
             retry_count += 1;
         }
-        driver.quit().await?;
         if running_errors.is_empty() {
             info!("Alles is in een keer goed gegaan, jippie!");
         } else if running_errors.len() < max_retry_count {
@@ -383,6 +393,8 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>)
             current_exit_code = FailureType::TriesExceeded;
             send_errors(&running_errors, &name).warn("Sending errors in loop");
         }
+
+        _ = driver.quit().await.is_err_and(|_| {current_exit_code = FailureType::GeckoEngine; true});
 
         if current_exit_code != FailureType::TriesExceeded {
             send_heartbeat(&current_exit_code, kuma_url, &username)
@@ -407,7 +419,6 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>)
             break;
         }
     }
-    Ok(())
 }
 
 async fn get_driver(logbook: &mut ApplicationLogbook, username: &str) -> GenResult<WebDriver> {
@@ -463,7 +474,7 @@ async fn main() -> GenResult<()> {
     if !args.single_run {
         start_pipe(tx_clone).await.warn("Start pipe");
     } else {
-        _ = main_program.await;
+        main_program.await.info("Main program");
     }
     info!("Stopping webcom ical");
     Ok(())

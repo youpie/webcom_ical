@@ -45,7 +45,7 @@ impl ApplicationLogbook {
     pub fn generate_shift_statistics(&mut self, shifts: &Vec<Shift>, non_relevant_shifts: usize) {
         let number_of_shifts = shifts.len() as u64;
         let number_of_broken_shifts = shifts.iter().filter(|shift| shift.is_broken).count() as u64;
-        let number_of_failed_broken_shifts = shifts.iter().filter(|shift| shift.broken_shift_failed()).count() as u64;
+        let number_of_failed_broken_shifts = shifts.iter().filter(|shift| shift.is_broken && shift.broken_period.is_none()).count() as u64;
         self.application_state.broken_shifts = number_of_broken_shifts;
         self.application_state.shifts = number_of_shifts;
         self.application_state.non_relevant_shifts = non_relevant_shifts as u64;

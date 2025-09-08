@@ -303,18 +303,17 @@ fn create_event(shift: &Shift, metadata: Option<&&Shift>) -> Event {
         String::new()
     };
     Event::new()
-        .summary(&format!("{}Dienst - {}{cut_off_end_time}",if shift.broken_shift_failed() {"!! "} else {""}, shift.number))
+        .summary(&format!("Dienst - {}{cut_off_end_time}", shift.number))
         .description(&format!(
             "Dienstsoort • {}
 Duur • {} uur {} minuten
 Omschrijving • {}
-Shift sheet • {}{}",
+Shift sheet • {}",
             shift.kind,
             shift.duration.whole_hours(),
             shift.duration.whole_minutes() % 60,
             shift.description,
-            shift_link,
-            if shift.broken_shift_failed() {"\n!! Deze gebroken dienst kon niet correct ingeladen worden!"} else {""}
+            shift_link
         ))
         .location(&shift.location)
         .append_property(icalendar::Property::new(

@@ -195,8 +195,8 @@ pub async fn navigate_to_subdirectory(
 }
 
 // This function clones a vec of shifts and splits broken shifts, if that value is set
-pub fn split_broken_shifts(shifts: Vec<Shift>) -> Vec<Shift> {
-    let mut shifts_clone = shifts.clone();
+pub fn split_broken_shifts(shifts: &Vec<Shift>) -> Vec<Shift> {
+    let mut shifts_clone: Vec<Shift> = shifts.iter().cloned().collect();
     let mut shifts_to_append = vec![];
     let vec_len = shifts_clone.len() - 1;
     for shift in shifts.iter().rev().enumerate() {

@@ -156,12 +156,12 @@ pub fn create_path(filename: &str) -> PathBuf {
     path
 }
 
-fn set_get_name(new_name_option: Option<String>) -> String {
+fn set_get_name(set_new_name: Option<String>) -> String {
     let path = create_path("name");
     // Just return constant name if already set
     if let Ok(const_name_option) = NAME.read() {
         if let Some(const_name) = const_name_option.clone()
-            && new_name_option.is_none()
+            && set_new_name.is_none()
         {
             return const_name;
         }
@@ -171,12 +171,10 @@ fn set_get_name(new_name_option: Option<String>) -> String {
         .unwrap_or("FOUT BIJ LADEN VAN NAAM".to_owned());
 
     // Write new name if previous name is different (deadname protection lmao)
-    if let Some(new_name) = new_name_option
+    if let Some(new_name) = set_new_name
         && new_name != name
     {
-        if let Err(error) = write(&path, &new_name) {
-            error!("Fout tijdens opslaan van naam: {}", error.to_string());
-        }
+        write(&path, &new_name).error("Opslaan van naam");
         name = new_name;
     }
     if let Ok(mut const_name) = NAME.write() {
@@ -215,18 +213,18 @@ async fn main_program(
     let ical_path = get_ical_path()?;
     if !ical_path.exists() {
         info!(
-            "An existing calendar file has not been found, adding two extra months of shifts, also removing partial calendars"
+            "Existing calendar file not found, adding two extra months of shifts and removing partial calendars"
         );
         || -> GenResult<()> {
             fs::remove_file(PathBuf::from(NON_RELEVANT_EVENTS_PATH))?;
-            Ok(fs::remove_file(PathBuf::from(RELEVANT_EVENTS_PATH))?)
+            fs::remove_file(PathBuf::from(RELEVANT_EVENTS_PATH))?;
+            Ok(())
         }()
-        .warn("Removing partial shifts");
+        .info("Removing partial shifts");
         let found_shifts = load_previous_month_shifts(&driver, 2).await?;
         debug!("Found a total of {} shifts", found_shifts.len());
         let mut found_shifts_split = split_relevant_shifts(found_shifts);
         new_shifts.append(&mut found_shifts_split.0);
-        // Because the non-relevant shifts do need to be saved even on first run, which doesn't happen otherwise
         non_relevant_shifts.append(&mut found_shifts_split.1);
         debug!(
             "Got {} relevant and {} non-relevant events",
@@ -240,18 +238,20 @@ async fn main_program(
     new_shifts.append(&mut load_next_month_shifts(&driver, logbook).await?);
     info!("Found {} shifts", new_shifts.len());
     // If getting previous shift information failed, just create an empty one. Because it will cause a new calendar to be created
-    let previous_shifts_information =
-        || -> Option<PreviousShiftInformation> {Some(get_previous_shifts().warn_owned("Getting previous shift information").ok()??)}().unwrap_or_default();
-    non_relevant_shifts.append(
-        &mut previous_shifts_information
-            .previous_non_relevant_shifts
-            .clone(),
-    );
-    let mut previous_shifts = previous_shifts_information.previous_relevant_shifts;
+    let mut previous_shifts_information = || -> Option<PreviousShiftInformation> {
+        Some(
+            get_previous_shifts()
+                .warn_owned("Getting previous shift information")
+                .ok()??,
+        )
+    }()
+    .unwrap_or_default();
+    non_relevant_shifts.append(&mut previous_shifts_information.previous_non_relevant_shifts);
+    let previous_shifts = previous_shifts_information.previous_relevant_shifts;
     // The main send email function will return the broken shifts that are new or have changed.
     // This is because the send email functions uses the previous shifts and scanns for new shifts
     // write("./shifts.json",serde_json::to_string_pretty(&new_shifts).unwrap());
-    let relevant_shifts = match email::send_emails(&mut new_shifts, &mut previous_shifts) {
+    let relevant_shifts = match email::send_emails(new_shifts, previous_shifts) {
         Ok(shifts) => shifts,
         Err(err) => return Err(err),
     };
@@ -260,7 +260,7 @@ async fn main_program(
     all_shifts.append(&mut non_relevant_shifts);
     let all_shifts = gebroken_shifts::load_broken_shift_information(&driver, &all_shifts).await?; // Replace the shifts with the newly created list of broken shifts
     ical::save_partial_shift_files(&all_shifts).error("Saving partial shift files");
-    let broken_split_shifts = gebroken_shifts::split_broken_shifts(all_shifts.clone());
+    let broken_split_shifts = gebroken_shifts::split_broken_shifts(&all_shifts);
     let midnight_stopped_shifts = gebroken_shifts::stop_shift_at_midnight(&broken_split_shifts);
     let mut night_split_shifts = gebroken_shifts::split_night_shift(&midnight_stopped_shifts);
     night_split_shifts.sort_by_key(|shift| shift.magic_number);
@@ -314,9 +314,9 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>)
         let username = var("USERNAME").expect("Error in username variable loop");
         let password = var("PASSWORD").expect("Error in password variable loop");
         let driver = get_driver(&mut logbook, &username).await?;
+
         let mut current_exit_code = FailureType::default();
         let previous_exit_code = logbook.clone().state;
-
         let mut running_errors: Vec<GenError> = vec![];
 
         let mut retry_count: usize = 0;
@@ -337,23 +337,39 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>)
         }
 
         while retry_count < max_retry_count {
-            match main_program(&driver, &username, &password, retry_count, &mut logbook).await {
+            match main_program(&driver, &username, &password, retry_count, &mut logbook)
+                .await
+                .warn_owned("Main Program")
+            {
                 Ok(()) => {
                     update_signin_failure(false, None).warn("Updating signin failure");
                     retry_count = max_retry_count;
                 }
-                Err(err) if let Some(webcom_error) = err.downcast_ref::<FailureType>() => {
+                Err(err) if err.downcast_ref::<FailureType>().is_some() => {
+                    // Guaranteed succesful unwrap
+                    let webcom_error = err
+                        .downcast_ref::<FailureType>()
+                        .cloned()
+                        .unwrap_or_default();
                     match webcom_error {
-                        FailureType::SignInFailed(signin_failure) if signin_failure != &SignInFailure::Other(_other_error) => {
+                        FailureType::SignInFailed(signin_failure) => {
                             retry_count = max_retry_count;
-                            update_signin_failure(true, Some(y.clone()))
+                            update_signin_failure(true, Some(signin_failure.clone()))
                                 .warn("Updating signin failure");
-                            current_exit_code = FailureType::SignInFailed(signin_failure.to_owned());
-                            error!("Inloggen niet succesvol, fout: {:?}", y)
+                            current_exit_code =
+                                FailureType::SignInFailed(signin_failure.to_owned());
+                        }
+                        FailureType::ConnectError => {
+                            retry_count = max_retry_count;
+                            current_exit_code = FailureType::ConnectError;
+                        }
+                        _ => {
+                            running_errors.push(err);
                         }
                     }
                 }
-                _ => 
+                Err(err) => {
+                    running_errors.push(err);
                 }
             };
             retry_count += 1;
@@ -367,67 +383,32 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>)
             current_exit_code = FailureType::TriesExceeded;
             send_errors(&running_errors, &name).warn("Sending errors in loop");
         }
-        // TODO the logic for selecting the error reason is quite confusing. This should be cleaned up someday
-        // Could be done by always returning a failuretype. Wrapping it around all error types. Possible based on the type of error
-        // Then having one big match on what to do based on the failure type?
-        // But that is for later
-        // This currently informs the user if webcom is down
-        if let Some(last_error) = running_errors.last() {
-            if let Some(failure_type) = last_error.downcast_ref::<FailureType>()
-                && failure_type == &FailureType::ConnectError
-            {
-                info!("Failure reason is because webcom is down");
-                current_exit_code = FailureType::ConnectError;
-            }
-        }
+
         if current_exit_code != FailureType::TriesExceeded {
             send_heartbeat(&current_exit_code, kuma_url, &username)
                 .await
                 .warn("Sending Heartbeat in loop");
         }
+
         logbook
             .save(&current_exit_code)
             .warn("Saving logbook in loop");
+
         // Update the exit code in the calendar if it is not equal to the previous value
         if previous_exit_code != current_exit_code {
             warn!("Previous exit code was different than current, need to update");
             update_calendar_exit_code(&previous_exit_code, &current_exit_code)
                 .warn("Updating calendar exit code");
         }
+
         create_delete_lock(None).warn("Removing Lock file");
+
         if continue_execution == StartReason::Single {
             break;
         }
     }
     Ok(())
 }
-
-/*
-Err(x) => {
-                    match x.downcast_ref::<FailureType>() {
-                        Some(FailureType::SignInFailed(y)) => {
-                            // Do not stop webcom if the sign in failure reason is unknown
-                            if let SignInFailure::Other(x) = y {
-                                warn!(
-                                    "Kon niet inloggen, maar een onbekende fout: {}. Probeert opnieuw",
-                                    x
-                                )
-                            } else {
-                                retry_count = max_retry_count;
-                                update_signin_failure(true, Some(y.clone()))
-                                    .warn("Updating signin failure");
-                                current_exit_code = FailureType::SignInFailed(y.to_owned());
-                                error!("Inloggen niet succesvol, fout: {:?}", y)
-                            }
-                        }
-                        _ => {
-                            warn!(
-                                "Fout tijdens shift laden, opnieuw proberen, poging: {}/{max_retry_count}. Fout: {}",
-                                retry_count + 1,
-                                &x.to_string()
-                            );
-                            running_errors.push(x);
-                        } */
 
 async fn get_driver(logbook: &mut ApplicationLogbook, username: &str) -> GenResult<WebDriver> {
     let kuma_url = var("KUMA_URL").ok();

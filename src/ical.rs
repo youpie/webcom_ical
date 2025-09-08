@@ -168,9 +168,12 @@ fn event_to_shift(events: Vec<Event>) -> Vec<Shift> {
                 // All shifts are marked to be deleted. As if they are not marked that later on we know they really should be deleted
                 // shift.state = ShiftState::Deleted;
                 let shift_number = shift.number.clone();
-                match previous_shift_map.insert(shift.magic_number,shift) {
-                    Some(_) => debug!("Duplicate shift during loading from calendar. Shift {}", shift_number),
-                    None => ()
+                match previous_shift_map.insert(shift.magic_number, shift) {
+                    Some(_) => debug!(
+                        "Duplicate shift during loading from calendar. Shift {}",
+                        shift_number
+                    ),
+                    None => (),
                 };
             }
         }
@@ -201,7 +204,6 @@ pub struct PreviousShiftInformation {
 }
 
 pub fn get_ical_path() -> GenResult<PathBuf> {
-    // var("SAVE_TARGET")?
     let mut ical_path = PathBuf::new();
     ical_path.push(var("SAVE_TARGET")?);
     ical_path.push(create_ical_filename()?);
@@ -276,13 +278,6 @@ pub fn get_previous_shifts() -> GenResult<Option<PreviousShiftInformation>> {
     }
 }
 
-/*
-let previous_execution_date = match Date::parse(&read_to_string(PREVIOUS_EXECUTION_DATE_PATH).unwrap_or_default(), DATE_DESCRIPTION) {
-        Ok(date) => (date.year()-2025 * 365) + 31*date.month().into() + date.day(),
-        Err(err) => {warn!("Getting previous execution date went wrong. Err: {}",err.to_string());
-            return (events,None)}
-    }; */
-
 fn create_event(shift: &Shift, metadata: Option<&&Shift>) -> Event {
     let shift_link = create_shift_link(shift, true).unwrap_or("ERROR".to_owned());
     let cut_off_end_time = if let Some(end_time) = shift.original_end_time {
@@ -326,10 +321,8 @@ pub fn create_ical(
     metadata: &Vec<Shift>,
     previous_exit_code: &FailureType,
 ) -> String {
-    let metadata_shifts_hashmap: HashMap<i64, &Shift> = metadata
-        .into_iter()
-        .map(|x| (x.magic_number, x))
-        .collect();
+    let metadata_shifts_hashmap: HashMap<i64, &Shift> =
+        metadata.into_iter().map(|x| (x.magic_number, x)).collect();
     let name = set_get_name(None);
     let admin_email = var("MAIL_ERROR_TO").unwrap_or_default();
     // get the current systemtime as a unix timestamp

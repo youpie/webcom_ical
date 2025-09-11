@@ -112,14 +112,12 @@ async fn create_notification(
     debug!("Searching if notification already exists");
     let current_notifications = kuma_client.get_notifications().await?;
     for notification in current_notifications {
-        if let Some(name) = notification.name {
-            if name == format!("{}_mail", personeelsnummer) {
-                debug!(
-                    "Notification for user {personeelsnummer} already exists, ID: {:?}. Not creating new one",
-                    notification.id
-                );
-                return Ok((notification.id.unwrap_or_default(), false));
-            }
+        if let Some(name) = notification.name && name == format!("{}_mail", personeelsnummer) {
+            debug!(
+                "Notification for user {personeelsnummer} already exists, ID: {:?}. Not creating new one",
+                notification.id
+            );
+            return Ok((notification.id.unwrap_or_default(), false));
         }
     }
     info!("Notification for user {personeelsnummer} does NOT yet exist, creating one");

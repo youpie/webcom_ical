@@ -6,11 +6,6 @@ services:
       - .env:/usr/src/webcom_ical/.env
       - {{save_target}}:/usr/src/webcom_ical/calendar/
       - ./kuma/:/usr/src/webcom_ical/kuma/
-    depends_on:
-      - gecko_driver
     environment:
       - RUST_LOG=warn
-    restart: on-failure
-  gecko_driver:
-    image: docker.io/library/gecko_driver
     restart: on-failure

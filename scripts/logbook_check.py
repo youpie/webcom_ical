@@ -44,7 +44,7 @@ def normalize_state(raw_state):
         return f"{key}: {val}"
     return str(raw_state)
 
-def main(include_hidden: bool, only_failed: bool, single_user: bool, condensed: bool):
+def main(include_hidden: bool, only_failed: bool, single_user: str, condensed: bool):
     console = Console()
     table = Table(box=None, show_lines=True)
     table.add_column("User", style="bold")
@@ -66,18 +66,18 @@ def main(include_hidden: bool, only_failed: bool, single_user: bool, condensed: 
     failures = []
 
     root = Path(".")
-    if not single_user: 
+    if single_user == "": 
         for d in sorted(root.iterdir()):
             if not d.is_dir() or (d.name.startswith("_") and not include_hidden or not (d/"docker-compose.yml").exists()):
                 continue
             get_user(d,table,failures,only_failed,False if not condensed else True)
     else:
-        get_user(Path().resolve(),table,failures,only_failed,False)
+        get_user(path=Path().resolve() if single_user=="d" else Path(single_user),table=table,failures=failures,only_failed=only_failed,skip_docker=False)
     if not condensed:
         console.print(table)
         console.print("\n")
 
-    if not single_user:
+    if single_user == "":
         if failures:
             console.print("[bold red]Failed Users:[/]")
             for f in failures:
@@ -195,7 +195,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-s", "--single-user",
-        action="store_true",
+        type=str,
+        default="",
         help="only execute for the current directory"
     )
     parser.add_argument(

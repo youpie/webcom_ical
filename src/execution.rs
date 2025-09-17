@@ -48,7 +48,7 @@ pub async fn execution_manager(tx: Sender<StartReason>, instant_run: bool) {
         let mut waiting_minutes = execution_properties.1 as i32 - current_minute;
         let exectution_hour_interval = execution_properties.0.as_secs() / 3600;
         // Pick how many hours it should randomly wait so that the site is not bombarded with requests for users who all run less than every hour
-        let hour_randomization = rand::random_range(0..exectution_hour_interval-1) as i32;
+        let hour_randomization = rand::random_range(0..exectution_hour_interval) as i32;
         waiting_minutes += hour_randomization*60;
         if waiting_minutes < 0 {
             waiting_minutes += 60;

@@ -63,15 +63,12 @@ pub async fn check_sign_in_error(driver: &WebDriver) -> GenResult<FailureType> {
             let element_text = element.text().await?;
             let sign_in_error_type = get_sign_in_error_type(&element_text);
             info!("Found error banner: {:?}", &sign_in_error_type);
-            return Ok(FailureType::SignInFailed(sign_in_error_type));
+            Ok(FailureType::SignInFailed(sign_in_error_type))
         }
         Err(_) => {
-            info!("Geen fout banner gevonden");
+            Err("Geen fout banner gevonden".into())
         }
-    };
-    Ok(FailureType::SignInFailed(SignInFailure::Other(
-        "Geen idee waarom er niet ingelogd kon worden".to_string(),
-    )))
+    }
 }
 
 // See if there is a text which indicated webcom is offline
@@ -109,8 +106,11 @@ impl IncorrectCredentialsCount {
         let path = create_path("sign_in_failure_count.json");
         || -> GenResult<IncorrectCredentialsCount> {
             let failure_count_json = std::fs::read_to_string(path)?;
-            Ok(serde_json::from_str::<IncorrectCredentialsCount>(&failure_count_json)?)
-        }().unwrap_or_default()
+            Ok(serde_json::from_str::<IncorrectCredentialsCount>(
+                &failure_count_json,
+            )?)
+        }()
+        .unwrap_or_default()
     }
 
     fn save(&self) -> GenResult<()> {
@@ -118,7 +118,7 @@ impl IncorrectCredentialsCount {
         let failure_counter_serialised = serde_json::to_string(self)?;
         Ok(write(path, failure_counter_serialised.as_bytes())?)
     }
-    
+
     fn get_password_hash() -> GenResult<u64> {
         let current_password = var("PASSWORD")?;
         let mut hasher = DefaultHasher::new();
@@ -148,7 +148,11 @@ impl IncorrectCredentialsCount {
         // else check if retry counter == reduce_ammount, if not, stop running
         // If incorrect credentials. Never execute unless the password has has changes
         return_value = match self.error.as_ref() {
-            Some(SignInFailure::IncorrectCredentials) => self.error.clone(),
+            Some(SignInFailure::IncorrectCredentials) => {
+                info!("Permanently Skipping execution due to incorrect credentials");
+                self.error.clone()
+            
+            },
             _ => {
                 if self.retry_count % sign_in_attempt_reduce == 0 {
                     warn!(
@@ -163,15 +167,18 @@ impl IncorrectCredentialsCount {
             }
         };
 
-        if self.retry_count % resend_error_mail_count == 0 && self.error.is_some()
-        {
+        if self.retry_count % resend_error_mail_count == 0 && self.error.is_some() {
             email::send_failed_signin_mail(&self, false)?;
         }
         self.save()?;
         Ok(return_value)
     }
 
-    pub fn update_signin_failure(&mut self, failed: bool, failure_type: Option<SignInFailure>) -> GenResult<()> {
+    pub fn update_signin_failure(
+        &mut self,
+        failed: bool,
+        failure_type: Option<SignInFailure>,
+    ) -> GenResult<()> {
         if let Ok(current_password_hash) = Self::get_password_hash() {
             debug!("Got current password hash: {current_password_hash}");
             self.previous_password_hash = Some(current_password_hash);
@@ -184,7 +191,8 @@ impl IncorrectCredentialsCount {
                 self.retry_count += 1;
                 email::send_failed_signin_mail(&self, true)?;
             }
-        } else {         // if failed == false, reset counter
+        } else {
+            // if failed == false, reset counter
             if self.error.is_some() {
                 info!("Sign in succesful again!");
                 email::send_sign_in_succesful()?;

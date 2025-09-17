@@ -1,11 +1,10 @@
 use crate::{
     email::{DATE_DESCRIPTION, TIME_DESCRIPTION}, errors::ResultLog, shift::ShiftState, GenResult, Shift
 };
-use async_recursion::async_recursion;
 use dotenvy::var;
 use thirtyfour::{
     WebDriver, WebElement,
-    error::{WebDriverErrorInner, WebDriverResult},
+    error::WebDriverResult,
     prelude::*,
 };
 use time::{Duration, Time};
@@ -221,23 +220,15 @@ A simple function to wait until a page is truly fully loaded
 You need to provide a element on the page to wait for
 If clickable is false it will only check if it is displayed, not clickable
 */
-#[async_recursion]
 pub async fn wait_for_response(
     driver: &WebDriver,
     element: By,
     clickable: bool,
 ) -> WebDriverResult<()> {
     let query = driver.query(element.clone()).first().await?;
-    let test = match clickable {
-        true => query.wait_until().clickable().await,
-        false => query.wait_until().displayed().await,
+    match clickable {
+        true => query.wait_until().wait(std::time::Duration::from_secs(60), std::time::Duration::from_secs(1)).clickable().await?,
+        false => query.wait_until().wait(std::time::Duration::from_secs(60), std::time::Duration::from_secs(1)).displayed().await?,
     };
-    match test.map_err(WebDriverErrorInner::from) {
-        Err(WebDriverErrorInner::ElementClickIntercepted(_)) => {
-            wait_for_response(driver, element, clickable).await?;
-        }
-        _ => return Ok(()),
-    };
-    //
     Ok(())
 }

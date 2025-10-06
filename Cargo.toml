@@ -3,6 +3,9 @@ name = "webcom_ical"
 version = "0.3.0"
 edition = "2024"
 
+[workspace]
+members = [".", "migration"]
+
 [dependencies]
 serde = { version = "1.0.219", features = ["derive"] }
 reqwest = "0.12.23"
@@ -15,6 +18,7 @@ time = { version = "0.3.41", features = [
     "formatting",
     "serde",
 ] }
+migration = { path = "migration" }
 kuma-client = "1.0.0"
 url = "2.5.7"
 icalendar = {version = "0.17.3", features = ["serde_json", "serde", "default"]} 

@@ -3,13 +3,13 @@ use kuma_client::monitor::{MonitorGroup, MonitorType};
 use kuma_client::{Client, monitor, notification};
 use std::collections::HashMap;
 use std::fs::read_to_string;
+use std::thread;
+use std::time::Duration;
 use strfmt::strfmt;
 use url::Url;
 
 use crate::errors::OptionResult;
-use crate::{email, set_get_name};
-
-type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
+use crate::{email, set_get_name, GenResult};
 
 const COLOR_RED: &str = "#a51d2d";
 const COLOR_GREEN: &str = "#26a269";
@@ -19,6 +19,7 @@ pub async fn first_run(url: &str, personeelsnummer: &str) -> GenResult<()> {
     let username = var("KUMA_USERNAME")?;
     let password = var("KUMA_PASSWORD")?;
     let kuma_client = connect_to_kuma(&url, username, password).await?;
+    thread::sleep(Duration::from_millis(100));
     let notification_id = create_notification(&kuma_client, personeelsnummer, &url).await?;
     if let Some(monitor_id) =
         get_monitor_type_id(&kuma_client, personeelsnummer, MonitorType::Push, false).await?
@@ -111,14 +112,12 @@ async fn create_notification(
     debug!("Searching if notification already exists");
     let current_notifications = kuma_client.get_notifications().await?;
     for notification in current_notifications {
-        if let Some(name) = notification.name {
-            if name == format!("{}_mail", personeelsnummer) {
-                debug!(
-                    "Notification for user {personeelsnummer} already exists, ID: {:?}. Not creating new one",
-                    notification.id
-                );
-                return Ok((notification.id.unwrap_or_default(), false));
-            }
+        if let Some(name) = notification.name && name == format!("{}_mail", personeelsnummer) {
+            debug!(
+                "Notification for user {personeelsnummer} already exists, ID: {:?}. Not creating new one",
+                notification.id
+            );
+            return Ok((notification.id.unwrap_or_default(), false));
         }
     }
     info!("Notification for user {personeelsnummer} does NOT yet exist, creating one");

@@ -64,7 +64,7 @@ restart_directory() {
 
     # Run Docker Compose commands in the background
     if [ -f "docker-compose.yml" ]; then
-        (docker compose down >/dev/null 2>&1 && docker compose up -d >/dev/null 2>&1) &
+        (docker compose up -d >/dev/null 2>&1) &
         show_progress $! "Restarting Docker in $dir_name"
     else
         echo -e "${YELLOW}No docker-compose.yml found${RESET} in ${GREEN}$dir_name${RESET}, skipping..."

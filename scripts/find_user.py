@@ -140,6 +140,8 @@ def main():
         env = dotenv_values(f"{folder}/.env")
         email = env.get("MAIL_TO", "")
         print(email)
+    filename = env.get("RANDOM_FILENAME", "")
+    print("{0}.ics".format(filename))
     sys.exit(0 if folder else 1)
 
 if __name__=="__main__":

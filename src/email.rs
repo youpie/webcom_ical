@@ -12,11 +12,9 @@ use strfmt::strfmt;
 use thirtyfour::error::{WebDriverErrorInfo, WebDriverResult};
 use time::{macros::format_description, Date};
 use crate::errors::IncorrectCredentialsCount;
-use crate::ShiftState;
+use crate::{GenError, GenResult, ShiftState};
 
 use crate::{create_ical_filename, create_shift_link, set_get_name, Shift, SignInFailure};
-
-type GenResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 const ERROR_VALUE: &str = "HIER HOORT WAT ANDERS DAN DEZE TEKST TE STAAN, CONFIGURATIE INCORRECT";
 const SENDER_NAME: &str = "Peter";
@@ -107,13 +105,13 @@ If loading previous shifts fails for whatever it will not error but just do an e
 Because if the previous shifts file is not, it will just not send mails that time
 Returns the list of previously known shifts, updated with new shits
 */
-pub fn send_emails(current_shifts: &mut Vec<Shift>, previous_shifts: &Vec<Shift>) -> GenResult<Vec<Shift>> {
+pub fn send_emails(current_shifts: Vec<Shift>, previous_shifts: Vec<Shift>) -> GenResult<Vec<Shift>> {
     let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
     if previous_shifts.is_empty() {
         // if the previous were empty, just return the list of current shifts as all new
         error!("!!! PREVIOUS SHIFTS WAS EMPTY. SKIPPING !!!");
-        return Ok(current_shifts.iter().cloned().map(|mut shift| {shift.state = ShiftState::New; shift}).collect());
+        return Ok(current_shifts.into_iter().map(|mut shift| {shift.state = ShiftState::New; shift}).collect());
     }
     Ok(find_send_shift_mails(&mailer, previous_shifts, current_shifts, &env)?)
     
@@ -136,20 +134,19 @@ It doesn't make a lot of sense that this function is in Email
 */
 fn find_send_shift_mails(
     mailer: &SmtpTransport,
-    previous_shifts: &Vec<Shift>,
-    new_shifts: &mut Vec<Shift>,
+    previous_shifts: Vec<Shift>,
+    new_shifts: Vec<Shift>,
     env: &EnvMailVariables,
 ) -> GenResult<Vec<Shift>> {
     let current_date: Date = Date::parse(
         &chrono::offset::Local::now().format("%d-%m-%Y").to_string(),
         DATE_DESCRIPTION,
     )?;
-    let mut previous_shifts_map  = previous_shifts.iter().cloned().map(|shift| {(shift.magic_number,shift)}).collect::<HashMap<i64,Shift>>();
+    let mut previous_shifts_map  = previous_shifts.into_iter().map(|shift| {(shift.magic_number,shift)}).collect::<HashMap<i64,Shift>>();
     // Iterate through the current shifts to check for updates or new shifts
-
     // We start with a list of previously valid shifts. All marked as deleted
     // we will then loop over a list of newly loaded shifts from the website
-    for new_shift in &mut *new_shifts { 
+    for mut new_shift in new_shifts { 
         // If the hash of this current shift is found in the previously valid shift list,
         // we know this shift has remained unchanged. So mark it as such
         if let Some(previous_shift) = previous_shifts_map.get_mut(&new_shift.magic_number) {
@@ -176,13 +173,13 @@ fn find_send_shift_mails(
             // we know it is a new shift, so we mark it as such and add it to the list of known shifts
             if new_shift.state != ShiftState::Changed {
                 new_shift.state = ShiftState::New;
-                previous_shifts_map.insert(new_shift.magic_number, new_shift.clone());
+                previous_shifts_map.insert(new_shift.magic_number, new_shift);
             }
-            
+            // Because we only loop over new shifts, all old and deleted shifts do not even get looked at. And since they start as deleted
+            // They will be deleted
         }
-
     }
-    let current_shift_vec: Vec<Shift> = previous_shifts_map.values().cloned().collect();
+    let current_shift_vec: Vec<Shift> = previous_shifts_map.into_values().collect();
     let mut new_shifts: Vec<&Shift> = current_shift_vec.iter().filter(|item| {
         item.state == ShiftState::New
     }).collect();
@@ -372,7 +369,7 @@ fn send_removed_shifts_mail(
 Composes and sends email of found errors, in plaintext
 List of errors can be as long as possible, but for now is always 3
 */
-pub fn send_errors(errors: &Vec<Box<dyn std::error::Error>>, name: &str) -> GenResult<()> {
+pub fn send_errors(errors: &Vec<GenError>, name: &str) -> GenResult<()> {
     let env = EnvMailVariables::new(false)?;
     if !env.send_error_mail {
         info!("tried to send error mail, but is disabled");
@@ -421,14 +418,15 @@ pub fn send_gecko_error_mail<T: std::fmt::Debug>(error: WebDriverResult<T>) -> G
 
 pub fn send_welcome_mail(
     path: &PathBuf,
+    force: bool
 ) -> GenResult<()> {
-    if path.exists() {
+    if path.exists() && !force {
         return Ok(());
     }
     let send_welcome_mail =
         EnvMailVariables::str_to_bool(&var("SEND_WELCOME_MAIL").unwrap_or("false".to_string()));
 
-    if !send_welcome_mail {
+    if !send_welcome_mail && !force {
         debug!("{:?}",var("SEND_WELCOME_MAIL"));
         info!("Wanted to send welcome mail. But it is disabled");
         return Ok(());
@@ -517,18 +515,30 @@ pub fn send_failed_signin_mail(
     let still_not_working_modifier = if first_time { "" } else { "nog steeds " };
     let name = set_get_name(None);
     let verbose_error = match &error.error {
-        None => "Een onbekende fout...",
         Some(SignInFailure::IncorrectCredentials) => {
             "Incorrecte inloggegevens, heb je misschien je wachtwoord veranderd?"
         }
         Some(SignInFailure::TooManyTries) => "Te veel incorrecte inlogpogingen…",
         Some(SignInFailure::WebcomDown) => "Webcom heeft op dit moment een storing",
         Some(SignInFailure::Other(fault)) => fault,
+        _ => "Een onbekende fout...",
+    };
+    let password_change_text = if let Ok(url) = var("PASSWORD_CHANGE_URL") && error.error.clone().is_some_and(|error| error == SignInFailure::IncorrectCredentials){
+        format!("
+<tr>
+    <td>
+        Als je je webcomm wachtwoord hebt veranderd. Vul je nieuwe wachtwoord in met behulp van de volgende link: <br>
+        <a href=\"{url}\" style=\"color:#003366; text-decoration:underline;\">{url}</a>
+    </td>
+</tr>")
+    } else {
+        String::new()
     };
 
     let login_failure_html = strfmt!(&login_failure_html, 
         still_not_working_modifier,
         name => set_get_name(None),
+        additional_text => password_change_text,
         retry_counter => error.retry_count,
         signin_error => verbose_error.to_string(),
         admin_email => env.mail_error_to.clone(),
@@ -609,7 +619,7 @@ mod tests {
 
     #[test]
     fn send_welcome_mail_test() -> GenResult<()>{
-        send_welcome_mail(&PathBuf::new())
+        send_welcome_mail(&PathBuf::new(), true)
     }
 
     #[test]

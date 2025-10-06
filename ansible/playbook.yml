@@ -20,12 +20,7 @@
     - name: timeout_time_hrs
       prompt: "How often should shifts be parsed"
       private: no
-      default: "1"
-    
-    - name: use_email
-      prompt: "Use email (true/false)"
-      private: no
-      default: "true"
+      default: "4"
       
     - name: new_shift
       prompt: "Mail on new shift (true/false)"
@@ -62,7 +57,7 @@
 
     - name: Set cycle time
       set_fact:
-        timeout_time: "{{ timeout_time_hrs | int * 3600}}"
+        cycle_time: "{{ timeout_time_hrs | int * 3600}}"
 
     - name: Create user directory
       ansible.builtin.file:
@@ -83,11 +78,11 @@
       community.docker.docker_compose_v2:
        project_src: "~/Services/Webcom/{{ personeelsnummer }}"
 
-    - name: Add cron job to start Docker container every hour
-      ansible.builtin.cron:
-        name: "Start Docker container for {{ personeelsnummer }}"
-        #user: "{{remote_username}}"
-        minute: "{{59 | random}}"
-        hour: "*/{{timeout_time_hrs}}"
-        job: "docker start webcom_{{personeelsnummer}}-webcom_ical-1 >/dev/null 2>&1"
-      when: remote_username != ""
+    # - name: Add cron job to start Docker container every hour
+    #   ansible.builtin.cron:
+    #     name: "Start Docker container for {{ personeelsnummer }}"
+    #     #user: "{{remote_username}}"
+    #     minute: "{{59 | random}}"
+    #     hour: "*/{{timeout_time_hrs}}"
+    #     job: "docker start webcom_{{personeelsnummer}}-webcom_ical-1 >/dev/null 2>&1"
+    #   when: remote_username != ""

@@ -4,9 +4,10 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, DefaultOnError};
 use time::{Date, Duration, Time};
 
-use crate::{errors::OptionResult, GenResult};
+use crate::{GenResult, errors::OptionResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum ShiftState {
@@ -18,6 +19,7 @@ pub enum ShiftState {
     Unknown,
 }
 
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Shift {
     pub date: Date,
@@ -30,8 +32,11 @@ pub struct Shift {
     pub location: String,
     pub description: String,
     pub is_broken: bool,
-    // If the shift is broken, between what time is the user free
-    pub broken_period: Option<(Time, Time)>,
+    // If the shift is broken, between what times is the user free
+    // If none, something went wrong
+    #[serde(default)]
+    #[serde_as(deserialize_as = "DefaultOnError")]
+    pub broken_period: Option<Vec<(Time, Time)>>,
     pub original_end_time: Option<Time>,
     pub magic_number: i64,
     // This field is not always needed. Especially when serializing.
@@ -87,20 +92,15 @@ impl Shift {
             is_broken = true;
         }
 
-        let duration_split = shift_duration.split_whitespace().nth(0).result()?.split(":");
-        let duration_minutes = Duration::minutes(
-            duration_split
-                .clone()
-                .nth(1)
-                .result()?
-                .parse::<i64>()?
-        );
-        let duration_hours = Duration::hours(
-            duration_split
-                .clone()
-                .nth(0).result()?
-                .parse::<i64>()?,
-        );
+        let duration_split = shift_duration
+            .split_whitespace()
+            .nth(0)
+            .result()?
+            .split(":");
+        let duration_minutes =
+            Duration::minutes(duration_split.clone().nth(1).result()?.parse::<i64>()?);
+        let duration_hours =
+            Duration::hours(duration_split.clone().nth(0).result()?.parse::<i64>()?);
         let duration = duration_hours + duration_minutes;
         let mut end_date = date;
         if end < start {
@@ -124,22 +124,24 @@ impl Shift {
         })
     }
 
-    // Create two new shifts from one broken shift.
+    // Create new shifts from one broken shift.
     // Assumes second shift cannot start after midnight
     // None means no broken times have been found for the shift
     pub fn split_broken(&self) -> Option<Vec<Self>> {
-        let break_period = match self.broken_period {
-            Some(period) => period,
-            None => {
-                return None;
+        if let Some(broken_periods) = self.broken_period.as_deref() && !broken_periods.is_empty() {
+            let mut split_shifts = vec![];
+            for period in broken_periods {
+                let mut part_one = self.clone();
+                part_one.end = period.0;
+                let mut part_two = self.clone();
+                part_two.start = period.1;
+                split_shifts.push(part_one);
+                split_shifts.push(part_two);
             }
-        };
-        let mut part_one = self.clone();
-        part_one.end = break_period.0;
-        let mut part_two = self.clone();
-        part_two.start = break_period.1;
-        let shifts: Vec<Self> = vec![part_one, part_two];
-        Some(shifts)
+            Some(split_shifts)
+        } else {
+            None
+        }
     }
 
     // Create two new shifts from one broken shift.

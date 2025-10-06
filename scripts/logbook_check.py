@@ -44,7 +44,7 @@ def normalize_state(raw_state):
         return f"{key}: {val}"
     return str(raw_state)
 
-def main(include_hidden: bool, only_failed: bool, single_user: bool, condensed: bool):
+def main(include_hidden: bool, only_failed: bool, single_user: str, condensed: bool):
     console = Console()
     table = Table(box=None, show_lines=True)
     table.add_column("User", style="bold")
@@ -55,6 +55,10 @@ def main(include_hidden: bool, only_failed: bool, single_user: bool, condensed: 
     table.add_column("Exec (s)", justify="right")
     table.add_column("Shifts", justify="right")
     table.add_column("Broken", justify="right")
+    table.add_column("BrokenF", justify="right")
+    table.add_column("Failed", justify="right")
+    table.add_column("Old", justify="right")
+    table.add_column("Minute", justify="right")
     table.add_column("CalVer")
     table.add_column("Last Run")
     table.add_column("Folder Name")
@@ -62,18 +66,18 @@ def main(include_hidden: bool, only_failed: bool, single_user: bool, condensed: 
     failures = []
 
     root = Path(".")
-    if not single_user: 
+    if single_user == "": 
         for d in sorted(root.iterdir()):
             if not d.is_dir() or (d.name.startswith("_") and not include_hidden or not (d/"docker-compose.yml").exists()):
                 continue
             get_user(d,table,failures,only_failed,False if not condensed else True)
     else:
-        get_user(Path().resolve(),table,failures,only_failed,False)
+        get_user(path=Path().resolve() if single_user=="d" else Path(single_user),table=table,failures=failures,only_failed=only_failed,skip_docker=False)
     if not condensed:
         console.print(table)
         console.print("\n")
 
-    if not single_user:
+    if single_user == "":
         if failures:
             console.print("[bold red]Failed Users:[/]")
             for f in failures:
@@ -90,7 +94,7 @@ def get_user(path, table, failures, only_failed, skip_docker):
 
     # user’s display name
     uname = (kuma / "name").read_text().strip() if (kuma / "name").exists() else path.name
-
+    execution_minute = (kuma / "starting_minute").read_text().strip() if (kuma / "starting_minute").exists() else "-"
     # container status
     if not skip_docker:
         up = check_container_up(compose) if compose.exists() else False
@@ -99,7 +103,7 @@ def get_user(path, table, failures, only_failed, skip_docker):
         up_str = ""
     # defaults if no logbook
     state = "–"
-    rc = exec_s = shifts = broken = 0
+    rc = exec_s = shifts = broken = failed_shifts = failed_broken = 0
     calver = "–"
     window = "–"
     last_run = "–"
@@ -131,8 +135,10 @@ def get_user(path, table, failures, only_failed, skip_docker):
         exec_s = round(app.get("execution_time_ms", 0)/1000,1)
         shifts = app.get("shifts", 0)
         broken = app.get("broken_shifts", 0)
+        failed_broken = app.get("failed_broken_shifts", 0)
+        failed_shifts = app.get("failed_shifts", 0)
+        non_relevant_shifts = app.get("non_relevant_shifts", 0)
         calver = app.get("calendar_version", "–")
-
         env = dotenv_values(envfile)
         parse_int = int(env.get("KUMA_HEARTBEAT_INTERVAL", 4001))
         window = ""
@@ -163,8 +169,11 @@ def get_user(path, table, failures, only_failed, skip_docker):
             str(exec_s) if logbook.exists() else "–",
             str(shifts) if logbook.exists() else "–",
             str(broken) if logbook.exists() else "–",
+            "%s%s" % ("[red][blink]" if failed_broken != 0 else "",str(failed_broken) if logbook.exists() and failed_broken != 0 else "–"),
+             "%s%s" % ("[red][blink]" if failed_shifts != 0 else "", str(failed_shifts) if logbook.exists() and failed_shifts != 0 else "–"),
+            str(non_relevant_shifts) if logbook.exists() else "–",
+            execution_minute,
             calver,
-            
             last_run,
             path.name
         )
@@ -186,7 +195,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-s", "--single-user",
-        action="store_true",
+        type=str,
+        default="",
         help="only execute for the current directory"
     )
     parser.add_argument(

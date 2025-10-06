@@ -27,6 +27,7 @@ use tokio::spawn;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::channel;
 
+use crate::database::get_kuma_email;
 use crate::errors::FailureType;
 use crate::errors::IncorrectCredentialsCount;
 use crate::errors::ResultLog;
@@ -51,6 +52,7 @@ pub mod kuma;
 mod parsing;
 pub mod shift;
 mod database;
+pub mod variables;
 
 type GenResult<T> = Result<T, GenError>;
 type GenError = Box<dyn std::error::Error + Send + Sync + 'static>;
@@ -446,7 +448,8 @@ async fn main() -> GenResult<()> {
     dotenv_override().ok();
     pretty_env_logger::init();
     info!("Starting Webcom Ical");
-
+    get_kuma_email().await;
+    panic!("klaar");
     let args = Args::parse();
 
     let username = var("USERNAME").expect("Error in username variable");

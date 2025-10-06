@@ -1,3 +1,5 @@
+use sea_orm::FromQueryResult;
+
 struct UserData {
     personeelsnummer: String,
     wachtwoord: String,
@@ -18,6 +20,7 @@ struct UserProperties {
     stop_midnight_shift: bool,
 }
 
+#[derive(FromQueryResult, Debug)]
 struct EmailProperties {
     smtp_server: String,
     smtp_username: String,
@@ -26,33 +29,39 @@ struct EmailProperties {
     support_mail: String,
 }
 
+#[derive(FromQueryResult, Debug)]
 struct KumaProperties {
     domain: String,
     smtp_server: String,
     smtp_username: String,
     smtp_password: String,
     mail_from: String,
-    mail_port: usize,
+    mail_port: u32,
     use_ssl: bool,
-    hearbeat_retry: usize,
-    offline_mail_resend_hours: usize
+    hearbeat_retry: u32,
+    offline_mail_resend_hours: u32
 }
 
-struct GeneralProperties {
+#[derive(FromQueryResult, Debug)]
+pub struct GeneralProperties {
     save_target: String,
     ical_domain: String,
     webcal_domain: String,
     pdf_shift_domain: String,
-    signin_fail_execution_reduce: usize,
-    signin_fail_mail_reduce: usize,
-    execution_interval_minutes: usize,
-    expected_execution_time_seconds: usize,
-    execution_retry_count: usize,
-    email_properties: EmailProperties,
-    kuma_properties: KumaProperties,
-    donation_texts: DonationText
+    signin_fail_execution_reduce: u32,
+    signin_fail_mail_reduce: u32,
+    execution_interval_minutes: u32,
+    expected_execution_time_seconds: u32,
+    execution_retry_count: u32,
+    #[sea_orm(nested)]
+    email_properties: Option<EmailProperties>,
+    #[sea_orm(nested)]
+    kuma_properties: Option<KumaProperties>,
+    #[sea_orm(nested)]
+    donation_texts: Option<DonationText>
 }
 
+#[derive(FromQueryResult, Debug)]
 struct DonationText {
     donate_link: String,
     donate_text: String,

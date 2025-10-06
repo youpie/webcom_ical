@@ -4,9 +4,10 @@ version = "0.3.0"
 edition = "2024"
 
 [workspace]
-members = [".", "migration"]
+members = [".", "entity", "migration"]
 
 [dependencies]
+entity = { path = "entity" }
 serde = { version = "1.0.219", features = ["derive"] }
 reqwest = "0.12.23"
 dotenvy = "0.15.7"

@@ -50,6 +50,7 @@ mod ical;
 pub mod kuma;
 mod parsing;
 pub mod shift;
+mod database;
 
 type GenResult<T> = Result<T, GenError>;
 type GenError = Box<dyn std::error::Error + Send + Sync + 'static>;
@@ -422,6 +423,7 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>)
 }
 
 async fn get_driver(logbook: &mut ApplicationLogbook, username: &str) -> GenResult<WebDriver> {
+
     let kuma_url = var("KUMA_URL").ok();
     match initiate_webdriver().await {
         Ok(driver) => Ok(driver),

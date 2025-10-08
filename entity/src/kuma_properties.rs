@@ -8,25 +8,36 @@ pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
     pub domain: String,
-    pub smtp_server: String,
-    pub smtp_username: String,
-    pub smtp_password: String,
-    pub mail_from: String,
-    pub mail_port: i32,
-    pub use_ssl: bool,
     pub hearbeat_retry: i32,
     pub offline_mail_resend_hours: i32,
+    pub email_properties: i32,
+    pub mail_port: i32,
+    pub use_ssl: bool,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::general_properties::Entity")]
-    GeneralProperties,
+    #[sea_orm(
+        belongs_to = "super::email_properties::Entity",
+        from = "Column::EmailProperties",
+        to = "super::email_properties::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Cascade"
+    )]
+    EmailProperties,
+    #[sea_orm(has_many = "super::general_properties_db::Entity")]
+    GeneralPropertiesDb,
 }
 
-impl Related<super::general_properties::Entity> for Entity {
+impl Related<super::email_properties::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::GeneralProperties.def()
+        Relation::EmailProperties.def()
+    }
+}
+
+impl Related<super::general_properties_db::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::GeneralPropertiesDb.def()
     }
 }
 

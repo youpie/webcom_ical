@@ -1,4 +1,6 @@
-use sea_orm::FromQueryResult;
+use entity::{donation_text, email_properties, kuma_properties, general_properties_db};
+use entity::prelude::GeneralPropertiesDb;
+use sea_orm::DerivePartialModel;
 
 struct UserData {
     personeelsnummer: String,
@@ -20,49 +22,46 @@ struct UserProperties {
     stop_midnight_shift: bool,
 }
 
-#[derive(FromQueryResult, Debug)]
-struct EmailProperties {
+struct EmailPropertiesA {
     smtp_server: String,
     smtp_username: String,
     smtp_password: String,
     mail_from: String,
-    support_mail: String,
 }
 
-#[derive(FromQueryResult, Debug)]
-struct KumaProperties {
+pub struct KumaPropertiesA {
     domain: String,
-    smtp_server: String,
-    smtp_username: String,
-    smtp_password: String,
-    mail_from: String,
-    mail_port: u32,
+    hearbeat_retry: i32,
+    offline_mail_resend_hours: i32,
+    email_properties: EmailPropertiesA,
+    mail_port: i32,
     use_ssl: bool,
-    hearbeat_retry: u32,
-    offline_mail_resend_hours: u32
 }
 
-#[derive(FromQueryResult, Debug)]
+#[derive(DerivePartialModel, Debug)]
+#[sea_orm(entity = "GeneralPropertiesDb")]
 pub struct GeneralProperties {
     save_target: String,
     ical_domain: String,
     webcal_domain: String,
     pdf_shift_domain: String,
-    signin_fail_execution_reduce: u32,
-    signin_fail_mail_reduce: u32,
-    execution_interval_minutes: u32,
-    expected_execution_time_seconds: u32,
-    execution_retry_count: u32,
+    signin_fail_execution_reduce: i32,
+    signin_fail_mail_reduce: i32,
+    execution_interval_minutes: i32,
+    expected_exectution_time_seconds: i32,
+    execution_retry_count: i32,
+    support_mail: String,
+    password_reset_link: String,
     #[sea_orm(nested)]
-    email_properties: Option<EmailProperties>,
+    pub kuma_properties: kuma_properties::Model,
     #[sea_orm(nested)]
-    kuma_properties: Option<KumaProperties>,
+    email_properties: email_properties::Model,
     #[sea_orm(nested)]
-    donation_texts: Option<DonationText>
+    donation_text: donation_text::Model,
+
 }
 
-#[derive(FromQueryResult, Debug)]
-struct DonationText {
+struct DonationTextA {
     donate_link: String,
     donate_text: String,
     donate_service_name: String,

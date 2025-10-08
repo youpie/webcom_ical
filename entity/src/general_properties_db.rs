@@ -3,11 +3,12 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "general_properties")]
+#[sea_orm(table_name = "general_properties_db")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
     pub save_target: String,
+    pub ical_domain: String,
     pub webcal_domain: String,
     pub pdf_shift_domain: String,
     pub signin_fail_execution_reduce: i32,
@@ -15,11 +16,31 @@ pub struct Model {
     pub execution_interval_minutes: i32,
     pub expected_exectution_time_seconds: i32,
     pub execution_retry_count: i32,
+    pub support_mail: String,
+    pub password_reset_link: String,
     pub kuma_properties: i32,
+    pub email_properties: i32,
+    pub donation_text: i32,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(
+        belongs_to = "super::donation_text::Entity",
+        from = "Column::DonationText",
+        to = "super::donation_text::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Cascade"
+    )]
+    DonationText,
+    #[sea_orm(
+        belongs_to = "super::email_properties::Entity",
+        from = "Column::EmailProperties",
+        to = "super::email_properties::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Cascade"
+    )]
+    EmailProperties,
     #[sea_orm(
         belongs_to = "super::kuma_properties::Entity",
         from = "Column::KumaProperties",
@@ -28,6 +49,18 @@ pub enum Relation {
         on_delete = "Cascade"
     )]
     KumaProperties,
+}
+
+impl Related<super::donation_text::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::DonationText.def()
+    }
+}
+
+impl Related<super::email_properties::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::EmailProperties.def()
+    }
 }
 
 impl Related<super::kuma_properties::Entity> for Entity {

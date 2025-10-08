@@ -2,5 +2,7 @@
 
 pub mod prelude;
 
-pub mod general_properties;
+pub mod donation_text;
+pub mod email_properties;
+pub mod general_properties_db;
 pub mod kuma_properties;

@@ -3,26 +3,34 @@ use entity::{donation_text, email_properties, general_properties_db, kuma_proper
 use sea_orm::{DerivePartialModel, FromQueryResult};
 use thirtyfour::WebDriver;
 
-#[allow(dead_code)]
-struct UserData {
-    personeelsnummer: String,
-    wachtwoord: String,
-    email: String,
-    filename: String,
-    properties: UserProperties,
-    custom_general_properties: Option<GeneralProperties>,
-}
+// If you are reading this i'll try to explain it
+// The Foreign keys to the email properties are created in migration/src/m20251006_141509_kuma.rs
+// And migration/src/m20251006_143409_general_settings.rs
+
+// I understand this might be an unconventional approach, but I really like this workflow so if I could get this working I would be really happy
+// Thank you for taking your time looking at my issue btw!
 
 #[allow(dead_code)]
-struct UserProperties {
-    send_mail_new_shift: bool,
-    send_mail_updated_shift: bool,
-    send_mail_removed_shift: bool,
-    send_failed_signin_mail: bool,
-    send_welcome_mail: bool,
-    send_error_mail: bool,
-    split_night_shift: bool,
-    stop_midnight_shift: bool,
+#[derive(DerivePartialModel, Debug)]
+#[sea_orm(entity = "GeneralPropertiesDb")]
+pub struct GeneralProperties {
+    save_target: String,
+    ical_domain: String,
+    webcal_domain: String,
+    pdf_shift_domain: String,
+    signin_fail_execution_reduce: i32,
+    signin_fail_mail_reduce: i32,
+    execution_interval_minutes: i32,
+    expected_execution_time_seconds: i32,
+    execution_retry_count: i32,
+    support_mail: String,
+    password_reset_link: String,
+    #[sea_orm(nested)]
+    kuma_properties: KumaPropertiesA, // The general properties contains a kuma_properties nested relation
+    #[sea_orm(nested)]
+    general_email_properties: email_properties::Model, // Both the general properties and kuma properties have a email properties relation, but to a different ID of email properties
+    #[sea_orm(nested)]
+    donation_text: DonationTextA,
 }
 
 #[allow(dead_code)]
@@ -43,32 +51,9 @@ pub struct KumaPropertiesA {
     hearbeat_retry: i32,
     offline_mail_resend_hours: i32,
     #[sea_orm(nested)]
-    kuma_email_properties: email_properties::Model,
+    kuma_email_properties: email_properties::Model, // The kuma needs to send mails from a different SMTP server
     mail_port: i32,
     use_ssl: bool,
-}
-
-#[allow(dead_code)]
-#[derive(DerivePartialModel, Debug)]
-#[sea_orm(entity = "GeneralPropertiesDb")]
-pub struct GeneralProperties {
-    save_target: String,
-    ical_domain: String,
-    webcal_domain: String,
-    pdf_shift_domain: String,
-    signin_fail_execution_reduce: i32,
-    signin_fail_mail_reduce: i32,
-    execution_interval_minutes: i32,
-    expected_execution_time_seconds: i32,
-    execution_retry_count: i32,
-    support_mail: String,
-    password_reset_link: String,
-    #[sea_orm(nested)]
-    kuma_properties: KumaPropertiesA,
-    #[sea_orm(nested)]
-    general_email_properties: email_properties::Model,
-    #[sea_orm(nested)]
-    donation_text: DonationTextA,
 }
 
 #[allow(dead_code)]
@@ -80,6 +65,28 @@ struct DonationTextA {
     donate_service_name: String,
     iban: String,
     iban_name: String,
+}
+
+#[allow(dead_code)]
+struct UserData {
+    personeelsnummer: String,
+    wachtwoord: String,
+    email: String,
+    filename: String,
+    properties: UserProperties,
+    custom_general_properties: Option<GeneralProperties>,
+}
+
+#[allow(dead_code)]
+struct UserProperties {
+    send_mail_new_shift: bool,
+    send_mail_updated_shift: bool,
+    send_mail_removed_shift: bool,
+    send_failed_signin_mail: bool,
+    send_welcome_mail: bool,
+    send_error_mail: bool,
+    split_night_shift: bool,
+    stop_midnight_shift: bool,
 }
 
 // #[allow(dead_code)]

@@ -6,7 +6,7 @@ use sea_orm::entity::prelude::*;
 #[sea_orm(table_name = "email_properties")]
 pub struct Model {
     #[sea_orm(primary_key)]
-    pub id: i32,
+    pub email_id: i32,
     pub mail_from: String,
     pub smtp_server: String,
     pub smtp_username: String,

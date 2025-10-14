@@ -13,19 +13,21 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(KumaProperties::Table)
                     .if_not_exists()
-                    .col(pk_auto(KumaProperties::Id))
+                    .col(pk_auto(KumaProperties::KumaId))
                     .col(string(KumaProperties::Domain))
                     .col(integer(KumaProperties::HearbeatRetry))
                     .col(integer(KumaProperties::OfflineMailResendHours))
-                    .col(integer(KumaProperties::EmailProperties).default(1))
+                    .col(integer(KumaProperties::KumaEmailProperties).default(1))
                     .col(integer(KumaProperties::MailPort))
                     .col(boolean(KumaProperties::UseSsl))
                     .foreign_key(
-                        ForeignKey::create().name("email_properties_kuma_fk")
-                            .from(KumaProperties::Table, KumaProperties::EmailProperties)
-                            .to(EmailProperties::Table, EmailProperties::Id)
+                        ForeignKey::create()
+                            .name("email_properties_kuma_fk")
+                            .from(KumaProperties::Table, KumaProperties::KumaEmailProperties)
+                            .to(EmailProperties::Table, EmailProperties::EmailId)
                             .on_delete(ForeignKeyAction::Cascade)
-                            .on_update(ForeignKeyAction::Cascade))
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .to_owned(),
             )
             .await
@@ -41,11 +43,11 @@ impl MigrationTrait for Migration {
 #[derive(DeriveIden)]
 pub enum KumaProperties {
     Table,
-    Id,
+    KumaId,
     Domain,
     HearbeatRetry,
     OfflineMailResendHours,
-    EmailProperties,
+    KumaEmailProperties,
     MailPort,
     UseSsl,
 }

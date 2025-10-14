@@ -11,13 +11,13 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(DonationText::Table)
                     .if_not_exists()
-                    .col(pk_auto(DonationText::Id))
+                    .col(pk_auto(DonationText::DonationId))
                     .col(string(DonationText::DonateLink))
                     .col(string(DonationText::DonateServiceName))
                     .col(string(DonationText::DonateText))
                     .col(string(DonationText::Iban))
                     .col(string(DonationText::IbanName))
-                    .to_owned()
+                    .to_owned(),
             )
             .await
     }
@@ -32,10 +32,10 @@ impl MigrationTrait for Migration {
 #[derive(DeriveIden)]
 pub enum DonationText {
     Table,
-    Id,
+    DonationId,
     DonateLink,
     DonateText,
     DonateServiceName,
     Iban,
-    IbanName
+    IbanName,
 }

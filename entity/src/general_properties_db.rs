@@ -6,7 +6,7 @@ use sea_orm::entity::prelude::*;
 #[sea_orm(table_name = "general_properties_db")]
 pub struct Model {
     #[sea_orm(primary_key)]
-    pub id: i32,
+    pub general_properties_id: i32,
     pub save_target: String,
     pub ical_domain: String,
     pub webcal_domain: String,
@@ -14,12 +14,12 @@ pub struct Model {
     pub signin_fail_execution_reduce: i32,
     pub signin_fail_mail_reduce: i32,
     pub execution_interval_minutes: i32,
-    pub expected_exectution_time_seconds: i32,
+    pub expected_execution_time_seconds: i32,
     pub execution_retry_count: i32,
     pub support_mail: String,
     pub password_reset_link: String,
     pub kuma_properties: i32,
-    pub email_properties: i32,
+    pub general_email_properties: i32,
     pub donation_text: i32,
 }
 
@@ -28,15 +28,15 @@ pub enum Relation {
     #[sea_orm(
         belongs_to = "super::donation_text::Entity",
         from = "Column::DonationText",
-        to = "super::donation_text::Column::Id",
+        to = "super::donation_text::Column::DonationId",
         on_update = "Cascade",
         on_delete = "Cascade"
     )]
     DonationText,
     #[sea_orm(
         belongs_to = "super::email_properties::Entity",
-        from = "Column::EmailProperties",
-        to = "super::email_properties::Column::Id",
+        from = "Column::GeneralEmailProperties",
+        to = "super::email_properties::Column::EmailId",
         on_update = "Cascade",
         on_delete = "Cascade"
     )]
@@ -44,7 +44,7 @@ pub enum Relation {
     #[sea_orm(
         belongs_to = "super::kuma_properties::Entity",
         from = "Column::KumaProperties",
-        to = "super::kuma_properties::Column::Id",
+        to = "super::kuma_properties::Column::KumaId",
         on_update = "Cascade",
         on_delete = "Cascade"
     )]

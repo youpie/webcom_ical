@@ -11,12 +11,12 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(EmailProperties::Table)
                     .if_not_exists()
-                    .col(pk_auto(EmailProperties::Id))
+                    .col(pk_auto(EmailProperties::EmailId))
                     .col(string(EmailProperties::MailFrom))
                     .col(string(EmailProperties::SmtpServer))
                     .col(string(EmailProperties::SmtpUsername))
                     .col(string(EmailProperties::SmtpPassword))
-                    .to_owned()
+                    .to_owned(),
             )
             .await
     }
@@ -31,7 +31,7 @@ impl MigrationTrait for Migration {
 #[derive(DeriveIden)]
 pub enum EmailProperties {
     Table,
-    Id,
+    EmailId,
     SmtpServer,
     SmtpUsername,
     SmtpPassword,

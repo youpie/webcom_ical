@@ -76,7 +76,7 @@ impl MigrationTrait for Migration {
 }
 
 #[derive(DeriveIden)]
-enum GeneralPropertiesDB {
+pub enum GeneralPropertiesDB {
     Table,
     GeneralPropertiesId,
     SaveTarget,

@@ -7,6 +7,8 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key)]
     pub user_data_id: i32,
+    #[sea_orm(unique)]
+    pub user_name: String,
     pub personeelsnummer: String,
     pub password: String,
     pub email: String,
@@ -18,6 +20,14 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(
+        belongs_to = "super::general_properties_db::Entity",
+        from = "Column::CustomGeneralProperties",
+        to = "super::general_properties_db::Column::GeneralPropertiesId",
+        on_update = "Cascade",
+        on_delete = "Cascade"
+    )]
+    GeneralPropertiesDb,
+    #[sea_orm(
         belongs_to = "super::user_properties::Entity",
         from = "Column::UserProperties",
         to = "super::user_properties::Column::UserPropertiesId",
@@ -25,6 +35,12 @@ pub enum Relation {
         on_delete = "Cascade"
     )]
     UserProperties,
+}
+
+impl Related<super::general_properties_db::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::GeneralPropertiesDb.def()
+    }
 }
 
 impl Related<super::user_properties::Entity> for Entity {

@@ -49,6 +49,8 @@ pub enum Relation {
         on_delete = "Cascade"
     )]
     KumaProperties,
+    #[sea_orm(has_many = "super::user_data::Entity")]
+    UserData,
 }
 
 impl Related<super::donation_text::Entity> for Entity {
@@ -66,6 +68,12 @@ impl Related<super::email_properties::Entity> for Entity {
 impl Related<super::kuma_properties::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::KumaProperties.def()
+    }
+}
+
+impl Related<super::user_data::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::UserData.def()
     }
 }
 

@@ -1,7 +1,4 @@
-use entity::{
-    donation_text, email_properties, general_properties_db, kuma_properties,
-    prelude::{DonationText, EmailProperties, GeneralPropertiesDb, KumaProperties},
-};
+use entity::*;
 use migration::Alias;
 use sea_orm::{Database, EntityTrait, QuerySelect, RelationTrait};
 
@@ -12,7 +9,7 @@ pub async fn get_kuma_email() {
         .await
         .unwrap();
 
-    let properties: GeneralProperties = GeneralPropertiesDb::find_by_id(1)
+    let properties: GeneralProperties = general_properties_db::Entity::find_by_id(1)
         .left_join(kuma_properties::Entity)
         .left_join(email_properties::Entity)
         .left_join(donation_text::Entity)

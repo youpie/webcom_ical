@@ -14,6 +14,7 @@ use dotenvy::dotenv_override;
 use dotenvy::var;
 use email::send_errors;
 use email::send_welcome_mail;
+use sea_orm::Database;
 use std::fs;
 use std::fs::write;
 use std::path::PathBuf;
@@ -33,6 +34,7 @@ use crate::health::update_calendar_exit_code;
 use crate::ical::*;
 use crate::parsing::*;
 use crate::shift::*;
+use crate::variables::UserInstance;
 
 mod database;
 pub mod email;
@@ -421,8 +423,11 @@ async fn main() -> GenResult<()> {
     dotenv_override().ok();
     pretty_env_logger::init();
     info!("Starting Webcom Ical");
-    get_kuma_email().await;
-
+    // get_kuma_email().await;
+    let db = Database::connect("postgres://postgres:123qwerty@localhost/postgres")
+        .await
+        .unwrap();
+    info!("{:#?}", UserInstance::load_user(&db, "25348").await);
     let username = var("USERNAME").expect("Error in username variable");
     let password = var("PASSWORD").expect("Error in password variable");
 
@@ -435,7 +440,7 @@ async fn main() -> GenResult<()> {
         kuma::first_run(&kuma_url, &username).await.warn("Kuma Run");
     }
     let driver = get_driver(&mut logbook, &username).await?;
-    main_program(&driver, &username, &password, 1, &mut logbook).await?;
+    // main_program(&driver, &username, &password, 1, &mut logbook).await?;
 
     info!("Stopping webcom ical");
     Ok(())

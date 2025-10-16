@@ -5,7 +5,7 @@ use entity::{
 use migration::Alias;
 use sea_orm::{Database, EntityTrait, QuerySelect, RelationTrait};
 
-use crate::variables::{GeneralProperties, KumaPropertiesA};
+use crate::variables::{GeneralProperties, KumaProperties};
 
 pub async fn get_kuma_email() {
     let db = Database::connect("postgres://postgres:123qwerty@localhost/postgres")

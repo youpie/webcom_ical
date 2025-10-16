@@ -14,6 +14,7 @@ impl MigrationTrait for Migration {
                     .table(UserData::Table)
                     .if_not_exists()
                     .col(pk_auto(UserData::UserDataId))
+                    .col(string(UserData::UserName))
                     .col(string(UserData::Personeelsnummer).not_null())
                     .col(string(UserData::Password))
                     .col(string(UserData::Email))
@@ -44,6 +45,7 @@ impl MigrationTrait for Migration {
 enum UserData {
     Table,
     UserDataId,
+    UserName,
     Personeelsnummer,
     Password,
     Email,

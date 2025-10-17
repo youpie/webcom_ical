@@ -455,12 +455,12 @@ async fn main() -> GenResult<()> {
     let username = var("USERNAME").expect("Error in username variable");
     let kuma_url = var("KUMA_URL").ok();
 
-    // if let Some(kuma_url) = kuma_url.clone()
-    //     && !kuma_url.is_empty()
-    // {
-    //     debug!("Checking if kuma needs to be created");
-    //     kuma::first_run(&kuma_url, &username).await.warn("Kuma Run");
-    // }
+    if let Some(kuma_url) = kuma_url.clone()
+        && !kuma_url.is_empty()
+    {
+        debug!("Checking if kuma needs to be created");
+        kuma::first_run(&kuma_url, &username).await.warn("Kuma Run");
+    }
 
     let (tx, mut rx) = channel(1);
     let tx_clone = tx.clone();

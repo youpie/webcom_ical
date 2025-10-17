@@ -13,6 +13,8 @@ pub struct Model {
     pub kuma_email_properties: i32,
     pub mail_port: i32,
     pub use_ssl: bool,
+    pub kuma_username: String,
+    pub kuma_password: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

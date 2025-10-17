@@ -1,4 +1,7 @@
 use arc_swap::ArcSwap;
+use base64::Engine;
+use base64::prelude::BASE64_STANDARD_NO_PAD;
+use dotenvy::var;
 use entity::{
     donation_text, email_properties, general_properties_db, kuma_properties, user_data,
     user_properties,
@@ -12,14 +15,14 @@ use crate::GenResult;
 const DEFAULT_PREFERENCES_ID: i32 = 1;
 
 #[derive(Debug)]
-pub struct UserInstance {
+pub struct UserInstanceData {
     pub user_data: ArcSwap<UserData>,
     pub general_settings: ArcSwap<GeneralProperties>,
 }
 
-impl UserInstance {
+impl UserInstanceData {
     pub async fn load_user(db: &DatabaseConnection, username: &str) -> GenResult<Option<Self>> {
-        let userdata = UserData::get_username(db, username).await?;
+        let userdata = UserData::get_from_username(db, username).await?;
         if let Some(user_data) = userdata {
             let custom_properties_id = user_data.custom_general_properties.clone();
             Ok(Some(Self {
@@ -52,26 +55,24 @@ impl UserInstance {
 #[derive(DerivePartialModel, Debug)]
 #[sea_orm(entity = "general_properties_db::Entity")]
 pub struct GeneralProperties {
-    general_properties_id: i32,
-    save_target: String,
-    ical_domain: String,
-    webcal_domain: String,
-    pdf_shift_domain: String,
-    signin_fail_execution_reduce: i32,
-    signin_fail_mail_reduce: i32,
-    execution_interval_minutes: i32,
-    expected_execution_time_seconds: i32,
-    execution_retry_count: i32,
-    support_mail: String,
-    password_reset_link: String,
+    pub general_properties_id: i32,
+    pub save_target: String,
+    pub ical_domain: String,
+    pub webcal_domain: String,
+    pub pdf_shift_domain: String,
+    pub signin_fail_execution_reduce: i32,
+    pub signin_fail_mail_reduce: i32,
+    pub execution_interval_minutes: i32,
+    pub expected_execution_time_seconds: i32,
+    pub execution_retry_count: i32,
+    pub support_mail: String,
+    pub password_reset_link: String,
     #[sea_orm(nested)]
-    kuma_properties: KumaProperties,
-    #[sea_orm(from_col = "general_email_properties")]
-    email_id: i32,
+    pub kuma_properties: KumaProperties,
     #[sea_orm(nested, alias = "general_email")]
-    general_email_properties: email_properties::Model,
+    pub general_email_properties: email_properties::Model,
     #[sea_orm(nested)]
-    donation_text: DonationText,
+    pub donation_text: donation_text::Model,
 }
 
 impl GeneralProperties {
@@ -98,38 +99,19 @@ impl GeneralProperties {
 
 #[allow(dead_code)]
 #[derive(DerivePartialModel, Debug)]
-#[sea_orm(entity = "email_properties::Entity")]
-struct EmailProperties {
-    smtp_server: String,
-    smtp_username: String,
-    smtp_password: String,
-    mail_from: String,
-}
-
-#[allow(dead_code)]
-#[derive(DerivePartialModel, Debug)]
 #[sea_orm(entity = "kuma_properties::Entity")]
 pub struct KumaProperties {
-    domain: String,
-    hearbeat_retry: i32,
-    offline_mail_resend_hours: i32,
-    #[sea_orm(from_col = "kuma_email_properties")]
-    email_id: i32,
+    pub domain: String,
+    #[sea_orm(from_col = "kuma_username")]
+    pub username: String,
+    #[sea_orm(from_col = "kuma_password")]
+    pub password: String,
+    pub hearbeat_retry: i32,
+    pub offline_mail_resend_hours: i32,
     #[sea_orm(nested, alias = "kuma_email")]
-    kuma_email_properties: email_properties::Model,
-    mail_port: i32,
-    use_ssl: bool,
-}
-
-#[allow(dead_code)]
-#[derive(DerivePartialModel, Debug)]
-#[sea_orm(entity = "donation_text::Entity")]
-struct DonationText {
-    donate_link: String,
-    donate_text: String,
-    donate_service_name: String,
-    iban: String,
-    iban_name: String,
+    pub kuma_email_properties: email_properties::Model,
+    pub mail_port: i32,
+    pub use_ssl: bool,
 }
 
 #[allow(dead_code)]
@@ -137,6 +119,7 @@ struct DonationText {
 #[sea_orm(entity = "user_data::Entity")]
 pub struct UserData {
     pub personeelsnummer: String,
+
     pub password: String,
     pub email: String,
     pub file_name: String,
@@ -146,7 +129,10 @@ pub struct UserData {
 }
 
 impl UserData {
-    pub async fn get_username(db: &DatabaseConnection, username: &str) -> GenResult<Option<Self>> {
+    pub async fn get_from_username(
+        db: &DatabaseConnection,
+        username: &str,
+    ) -> GenResult<Option<Self>> {
         if let Some(id) = user_data::Entity::find()
             .filter(user_data::Column::UserName.contains(username))
             .column(user_data::Column::UserDataId)
@@ -160,7 +146,7 @@ impl UserData {
         }
     }
     pub async fn get_id(db: &DatabaseConnection, id: i32) -> GenResult<Option<Self>> {
-        Ok(user_data::Entity::find_by_id(id)
+        let mut userdata = user_data::Entity::find_by_id(id)
             .left_join(user_properties::Entity)
             .left_join(general_properties_db::Entity)
             .join_as(
@@ -170,6 +156,39 @@ impl UserData {
             )
             .into_partial_model::<UserData>()
             .one(db)
-            .await?)
+            .await?;
+        if let Some(data) = userdata.as_mut() {
+            data.decrypt_password()?;
+        }
+        Ok(userdata)
+    }
+
+    pub async fn get_all_usernames(db: &DatabaseConnection) -> GenResult<Vec<String>> {
+        let data: Vec<String> = user_data::Entity::find()
+            .select_only()
+            .column(user_data::Column::UserName)
+            .into_tuple()
+            .all(db)
+            .await?;
+        Ok(data)
+    }
+
+    fn decrypt_password(&mut self) -> GenResult<()> {
+        let secret_string = var("PASSWORD_SECRET")?;
+        let secret = secret_string.as_bytes();
+        info!(
+            "{:?}",
+            BASE64_STANDARD_NO_PAD.encode(
+                simplestcrypt::encrypt_and_serialize(secret, self.password.as_bytes()).unwrap()
+            )
+        );
+        self.password = String::from_utf8(
+            simplestcrypt::deserialize_and_decrypt(
+                secret,
+                &BASE64_STANDARD_NO_PAD.decode(&self.password)?,
+            )
+            .unwrap(),
+        )?;
+        Ok(())
     }
 }

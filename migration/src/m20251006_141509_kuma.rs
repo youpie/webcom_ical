@@ -15,6 +15,8 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(pk_auto(KumaProperties::KumaId))
                     .col(string(KumaProperties::Domain))
+                    .col(string(KumaProperties::KumaUsername))
+                    .col(string(KumaProperties::KumaPassword))
                     .col(integer(KumaProperties::HearbeatRetry))
                     .col(integer(KumaProperties::OfflineMailResendHours))
                     .col(integer(KumaProperties::KumaEmailProperties).default(1))
@@ -45,6 +47,8 @@ pub enum KumaProperties {
     Table,
     KumaId,
     Domain,
+    KumaUsername,
+    KumaPassword,
     HearbeatRetry,
     OfflineMailResendHours,
     KumaEmailProperties,

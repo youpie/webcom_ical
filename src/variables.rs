@@ -16,11 +16,28 @@ const DEFAULT_PREFERENCES_ID: i32 = 1;
 
 #[derive(Debug)]
 pub struct UserInstanceData {
+    pub user_data: UserData,
+    pub general_settings: GeneralProperties,
+}
+
+impl UserInstanceData {
+    pub fn new(arc_data: ArcUserInstanceData) -> Self {
+        let user_data = **arc_data.user_data.load();
+        let general_settings = **arc_data.general_settings.load();
+        Self {
+            user_data,
+            general_settings,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ArcUserInstanceData {
     pub user_data: ArcSwap<UserData>,
     pub general_settings: ArcSwap<GeneralProperties>,
 }
 
-impl UserInstanceData {
+impl ArcUserInstanceData {
     pub async fn load_user(db: &DatabaseConnection, username: &str) -> GenResult<Option<Self>> {
         let userdata = UserData::get_from_username(db, username).await?;
         if let Some(user_data) = userdata {

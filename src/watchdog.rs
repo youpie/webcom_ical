@@ -5,12 +5,12 @@ use tokio::task::JoinHandle;
 
 use crate::{
     GenResult,
-    variables::{UserData, UserInstanceData},
+    variables::{ArcUserInstanceData, UserData},
 };
 
 pub struct UserInstance {
-    user_instance_data: UserInstanceData,
-    thread_handle: JoinHandle<GenResult<()>>,
+    pub user_instance_data: ArcUserInstanceData,
+    pub thread_handle: JoinHandle<GenResult<()>>,
 }
 
 type InstanceName = String;

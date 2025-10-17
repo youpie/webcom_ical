@@ -48,57 +48,6 @@ pub enum PreviousShiftsError {
     Io(String)
 }
 
-pub struct EnvMailVariables {
-    pub smtp_server: String,
-    pub smtp_username: String,
-    pub smtp_password: String,
-    pub mail_from: String,
-    pub mail_to: String,
-    mail_error_to: String,
-    send_email_new_shift: bool,
-    send_mail_updated_shift: bool,
-    send_error_mail: bool,
-}
-
-/*
-Loads all env variables needed for sending mails
-Does not load defaults if they are not found and will just error
-If kuma is true, it adds KUMA_ to the var names to find ones specific for KUMA
-*/
-impl EnvMailVariables {
-    pub fn new(kuma: bool) -> GenResult<Self> {
-        let smtp_server = var(format!("{}SMTP_SERVER",if kuma {"KUMA_"} else {""}))?;
-        let smtp_username = var(format!("{}SMTP_USERNAME",if kuma {"KUMA_"} else {""}))?;
-        let smtp_password = var(format!("{}SMTP_PASSWORD",if kuma {"KUMA_"} else {""}))?;
-        let mail_from = var(format!("{}MAIL_FROM",if kuma {"KUMA_"} else {""}))?;
-        let mail_to = var("MAIL_TO")?;
-        let mail_error_to = var("MAIL_ERROR_TO")?;
-        let send_email_new_shift = Self::str_to_bool(&var("SEND_EMAIL_NEW_SHIFT")?);
-        let send_mail_updated_shift = Self::str_to_bool(&var("SEND_MAIL_UPDATED_SHIFT")?);
-        let send_error_mail = Self::str_to_bool(&var("SEND_ERROR_MAIL")?);
-        Ok(Self {
-            smtp_server,
-            smtp_username,
-            smtp_password,
-            mail_from,
-            mail_to,
-            mail_error_to,
-            send_email_new_shift,
-            send_mail_updated_shift,
-            send_error_mail,
-        })
-    }
-    /*
-    Simple function to convert "true" to true, and anything else to false
-    */
-    fn str_to_bool(input: &str) -> bool {
-        match input {
-            "true" => true,
-            _ => false,
-        }
-    }
-}
-
 /*
 Main function for sending mails, it will always be called and will individually check if that function needs to be called
 If loading previous shifts fails for whatever it will not error but just do an early return.
@@ -370,7 +319,6 @@ Composes and sends email of found errors, in plaintext
 List of errors can be as long as possible, but for now is always 3
 */
 pub fn send_errors(errors: &Vec<GenError>, name: &str) -> GenResult<()> {
-    let env = EnvMailVariables::new(false)?;
     if !env.send_error_mail {
         info!("tried to send error mail, but is disabled");
         return Ok(());

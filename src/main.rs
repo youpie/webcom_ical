@@ -17,6 +17,7 @@ use dotenvy::var;
 use email::send_errors;
 use email::send_welcome_mail;
 use sea_orm::Database;
+use std::cell::RefCell;
 use std::fs;
 use std::fs::write;
 use std::path::PathBuf;
@@ -41,6 +42,7 @@ use crate::health::update_calendar_exit_code;
 use crate::ical::*;
 use crate::parsing::*;
 use crate::shift::*;
+use crate::variables::ArcUserInstanceData;
 use crate::variables::UserInstanceData;
 use crate::watchdog::watchdog;
 
@@ -60,6 +62,10 @@ type GenResult<T> = Result<T, GenError>;
 type GenError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 static NAME: LazyLock<RwLock<Option<String>>> = LazyLock::new(|| RwLock::new(None));
+
+thread_local! {
+    pub static INSTANCE_DATA: RefCell<Option<UserInstanceData>> = RefCell::new(None);
+}
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -305,12 +311,13 @@ fn create_delete_lock(start_reason: Option<&StartReason>) -> GenResult<()> {
 This starts the WebDriver session
 Loads the main logic, and retries if it fails
 */
-async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>) {
+async fn main_loop(receiver: &mut Receiver<StartReason>, user: ArcUserInstanceData) {
     loop {
         debug!("Waiting for notification");
         let continue_execution = receiver.recv().await.expect("Notification channel closed");
 
-        dotenv_override().warn("Getting ENV");
+        let instance_data = UserInstanceData::new(user);
+        INSTANCE_DATA.replace(Some(instance_data));
 
         create_delete_lock(Some(&continue_execution)).warn("Creating Lock file");
 
@@ -318,8 +325,8 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>)
         let mut logbook = ApplicationLogbook::load();
         let mut failure_counter = IncorrectCredentialsCount::load();
 
-        let username = var("USERNAME").expect("Error in username variable loop");
-        let password = var("PASSWORD").expect("Error in password variable loop");
+        let username = .personeelsnummer;
+        let password = user_data.password;
         let driver = match get_driver(&mut logbook, &username).await {
             Ok(driver) => driver,
             Err(err) => {
@@ -336,10 +343,7 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>)
         let mut running_errors: Vec<GenError> = vec![];
 
         let mut retry_count: usize = 0;
-        let max_retry_count: usize = var("RETRY_COUNT")
-            .unwrap_or("3".to_string())
-            .parse()
-            .unwrap_or(3);
+        let max_retry_count: usize = settings.execution_retry_count as usize;
 
         // Check if the program is allowed to run, or not due to failed sign-in
         let sign_in_check: Option<SignInFailure> =
@@ -431,8 +435,11 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>)
     }
 }
 
-async fn get_driver(logbook: &mut ApplicationLogbook, username: &str) -> GenResult<WebDriver> {
-    let kuma_url = var("KUMA_URL").ok();
+async fn get_driver(
+    logbook: &mut ApplicationLogbook,
+    username: &str,
+    kuma_url: Option<String>,
+) -> GenResult<WebDriver> {
     match initiate_webdriver().await {
         Ok(driver) => Ok(driver),
         Err(error) => {
@@ -460,7 +467,7 @@ async fn main() -> GenResult<()> {
     let db = Database::connect("postgres://postgres:123qwerty@localhost/postgres")
         .await
         .unwrap();
-    let user = UserInstanceData::load_user(&db, "25348")
+    let user = ArcUserInstanceData::load_user(&db, "25348")
         .await?
         .expect("No user found");
     watchdog(&db).await?;

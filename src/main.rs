@@ -319,7 +319,9 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>)
             Ok(driver) => driver,
             Err(err) => {
                 error!("Failed to get driver! error: {}", err.to_string());
-                logbook.save(&FailureType::GeckoEngine).warn("Saving gecko driver error");
+                logbook
+                    .save(&FailureType::GeckoEngine)
+                    .warn("Saving gecko driver error");
                 return ();
             }
         };
@@ -394,7 +396,10 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, kuma_url: Option<&str>)
             send_errors(&running_errors, &name).warn("Sending errors in loop");
         }
 
-        _ = driver.quit().await.is_err_and(|_| {current_exit_code = FailureType::GeckoEngine; true});
+        _ = driver.quit().await.is_err_and(|_| {
+            current_exit_code = FailureType::GeckoEngine;
+            true
+        });
 
         if current_exit_code != FailureType::TriesExceeded {
             send_heartbeat(&current_exit_code, kuma_url, &username)
@@ -450,12 +455,12 @@ async fn main() -> GenResult<()> {
     let username = var("USERNAME").expect("Error in username variable");
     let kuma_url = var("KUMA_URL").ok();
 
-    if let Some(kuma_url) = kuma_url.clone()
-        && !kuma_url.is_empty()
-    {
-        debug!("Checking if kuma needs to be created");
-        kuma::first_run(&kuma_url, &username).await.warn("Kuma Run");
-    }
+    // if let Some(kuma_url) = kuma_url.clone()
+    //     && !kuma_url.is_empty()
+    // {
+    //     debug!("Checking if kuma needs to be created");
+    //     kuma::first_run(&kuma_url, &username).await.warn("Kuma Run");
+    // }
 
     let (tx, mut rx) = channel(1);
     let tx_clone = tx.clone();

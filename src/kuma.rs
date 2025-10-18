@@ -55,9 +55,9 @@ async fn create_monitor(
     user_name: &str,
     notification_id: i32,
 ) -> GenResult<i32> {
-    let (_user, properties) = get_instance()?;
-    let heartbeat_interval: i32 =
-        (properties.execution_interval_minutes * 60) + properties.expected_execution_time_seconds;
+    let (user, properties) = get_instance()?;
+    let heartbeat_interval: i32 = (user.user_properties.execution_interval_minutes * 60)
+        + properties.expected_execution_time_seconds;
     let heartbeat_retry: i32 = properties.kuma_properties.hearbeat_retry;
     let group_id: i32 = get_monitor_type_id(kuma_client, "Webcom Ical", MonitorType::Group, true)
         .await?

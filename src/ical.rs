@@ -205,7 +205,7 @@ pub struct PreviousShiftInformation {
 pub fn get_ical_path() -> GenResult<PathBuf> {
     let (_user, properties) = get_instance()?;
     let mut ical_path = PathBuf::new();
-    ical_path.push(&properties.save_target);
+    ical_path.push(&properties.calendar_target);
     ical_path.push(create_ical_filename()?);
     Ok(ical_path)
 }
@@ -321,7 +321,7 @@ pub fn create_ical(
     metadata: &Vec<Shift>,
     previous_exit_code: &FailureType,
 ) -> GenResult<String> {
-    let (_user, properties) = get_instance()?;
+    let (user, properties) = get_instance()?;
     let metadata_shifts_hashmap: HashMap<i64, &Shift> =
         metadata.into_iter().map(|x| (x.magic_number, x)).collect();
     let name = set_get_name(None);
@@ -330,8 +330,8 @@ pub fn create_ical(
     let current_timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or(Duration::from_secs(0));
-    let heartbeat_interval: i32 =
-        properties.expected_execution_time_seconds + (properties.execution_interval_minutes * 60);
+    let heartbeat_interval: i32 = properties.expected_execution_time_seconds
+        + (user.user_properties.execution_interval_minutes * 60);
     info!("Creating calendar file...");
     let mut calendar = Calendar::new()
         .name(&format!("Hermes rooster - {}", name))

@@ -21,6 +21,7 @@ use std::cell::RefCell;
 use std::fs;
 use std::fs::write;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::LazyLock;
 use std::sync::RwLock;
 use thirtyfour::prelude::*;
@@ -31,6 +32,7 @@ use tokio::sync::mpsc::channel;
 
 use crate::errors::FailureType;
 use crate::errors::IncorrectCredentialsCount;
+use crate::errors::OptionResult;
 use crate::errors::ResultLog;
 use crate::errors::SignInFailure;
 use crate::execution::StartReason;
@@ -43,6 +45,8 @@ use crate::ical::*;
 use crate::parsing::*;
 use crate::shift::*;
 use crate::variables::ArcUserInstanceData;
+use crate::variables::GeneralProperties;
+use crate::variables::UserData;
 use crate::variables::UserInstanceData;
 use crate::watchdog::watchdog;
 
@@ -64,7 +68,8 @@ type GenError = Box<dyn std::error::Error + Send + Sync + 'static>;
 static NAME: LazyLock<RwLock<Option<String>>> = LazyLock::new(|| RwLock::new(None));
 
 thread_local! {
-    pub static INSTANCE_DATA: RefCell<Option<UserInstanceData>> = RefCell::new(None);
+    pub static USER_PROPERTIES: RefCell<Option<Arc<UserData>>> = RefCell::new(None);
+    pub static GENERAL_PROPERTIES: RefCell<Option<Arc<GeneralProperties>>> = RefCell::new(None);
 }
 
 #[derive(Parser)]
@@ -192,14 +197,25 @@ fn set_get_name(set_new_name: Option<String>) -> String {
     name
 }
 
+pub fn get_instance() -> GenResult<(Arc<UserData>, Arc<GeneralProperties>)> {
+    let user = USER_PROPERTIES
+        .with_borrow(|user| user.as_ref().cloned())
+        .result()?;
+    let properties = GENERAL_PROPERTIES
+        .with_borrow(|user| user.as_ref().cloned())
+        .result()?;
+    Ok((user, properties))
+}
+
 // Main program logic that has to run, if it fails it will all be reran.
 async fn main_program(
     driver: &WebDriver,
-    username: &str,
-    password: &str,
     retry_count: usize,
     logbook: &mut ApplicationLogbook,
 ) -> GenResult<()> {
+    let (user, _properties) = get_instance()?;
+    let personeelsnummer = &user.personeelsnummer;
+    let password = &user.password;
     driver.delete_all_cookies().await?;
     info!("Loading site: {}..", MAIN_URL);
     match driver.goto(MAIN_URL).await {
@@ -215,7 +231,7 @@ async fn main_program(
                 .map_err(|_| Box::new(FailureType::ConnectError))?
         }
     };
-    load_calendar(&driver, &username, &password).await?;
+    load_calendar(&driver, personeelsnummer, password).await?;
     wait_until_loaded(&driver).await?;
     let mut new_shifts = load_current_month_shifts(&driver, logbook).await?;
     let mut non_relevant_shifts = vec![];
@@ -311,13 +327,14 @@ fn create_delete_lock(start_reason: Option<&StartReason>) -> GenResult<()> {
 This starts the WebDriver session
 Loads the main logic, and retries if it fails
 */
-async fn main_loop(receiver: &mut Receiver<StartReason>, user: ArcUserInstanceData) {
+async fn main_loop(receiver: &mut Receiver<StartReason>, instance: ArcUserInstanceData) {
     loop {
         debug!("Waiting for notification");
         let continue_execution = receiver.recv().await.expect("Notification channel closed");
 
-        let instance_data = UserInstanceData::new(user);
-        INSTANCE_DATA.replace(Some(instance_data));
+        USER_PROPERTIES.replace(Some(instance.user_data.load_full()));
+        GENERAL_PROPERTIES.replace(Some(instance.general_settings.load_full()));
+        let (user, properties) = get_instance().expect("Failed to get instance data");
 
         create_delete_lock(Some(&continue_execution)).warn("Creating Lock file");
 
@@ -325,9 +342,7 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, user: ArcUserInstanceDa
         let mut logbook = ApplicationLogbook::load();
         let mut failure_counter = IncorrectCredentialsCount::load();
 
-        let username = .personeelsnummer;
-        let password = user_data.password;
-        let driver = match get_driver(&mut logbook, &username).await {
+        let driver = match get_driver(&mut logbook).await {
             Ok(driver) => driver,
             Err(err) => {
                 error!("Failed to get driver! error: {}", err.to_string());
@@ -343,7 +358,7 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, user: ArcUserInstanceDa
         let mut running_errors: Vec<GenError> = vec![];
 
         let mut retry_count: usize = 0;
-        let max_retry_count: usize = settings.execution_retry_count as usize;
+        let max_retry_count: usize = properties.execution_retry_count as usize;
 
         // Check if the program is allowed to run, or not due to failed sign-in
         let sign_in_check: Option<SignInFailure> =
@@ -358,7 +373,7 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, user: ArcUserInstanceDa
         }
 
         while retry_count < max_retry_count {
-            match main_program(&driver, &username, &password, retry_count, &mut logbook)
+            match main_program(&driver retry_count, &mut logbook)
                 .await
                 .warn_owned("Main Program")
             {
@@ -411,7 +426,7 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, user: ArcUserInstanceDa
         });
 
         if current_exit_code != FailureType::TriesExceeded {
-            send_heartbeat(&current_exit_code, kuma_url, &username)
+            send_heartbeat(&current_exit_code)
                 .await
                 .warn("Sending Heartbeat in loop");
         }
@@ -435,11 +450,10 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, user: ArcUserInstanceDa
     }
 }
 
-async fn get_driver(
-    logbook: &mut ApplicationLogbook,
-    username: &str,
-    kuma_url: Option<String>,
-) -> GenResult<WebDriver> {
+async fn get_driver(logbook: &mut ApplicationLogbook) -> GenResult<WebDriver> {
+    let (user, properties) = get_instance()?;
+    let kuma_url = &properties.kuma_properties.domain;
+    let personeelsnummer = &user.personeelsnummer;
     match initiate_webdriver().await {
         Ok(driver) => Ok(driver),
         Err(error) => {
@@ -448,7 +462,7 @@ async fn get_driver(
             logbook
                 .save(&FailureType::GeckoEngine)
                 .warn("Saving Logbook");
-            send_heartbeat(&FailureType::GeckoEngine, kuma_url.as_deref(), username)
+            send_heartbeat(&FailureType::GeckoEngine, kuma_url, personeelsnummer)
                 .await
                 .warn("Sending heartbeat");
             return Err("driver fout".into());
@@ -471,15 +485,7 @@ async fn main() -> GenResult<()> {
         .await?
         .expect("No user found");
     watchdog(&db).await?;
-    let username = var("USERNAME").expect("Error in username variable");
-    let kuma_url = var("KUMA_URL").ok();
 
-    if let Some(kuma_url) = kuma_url.clone()
-        && !kuma_url.is_empty()
-    {
-        debug!("Checking if kuma needs to be created");
-        kuma::first_run(&kuma_url, &username).await.warn("Kuma Run");
-    }
     let (tx, mut rx) = channel(1);
     let tx_clone = tx.clone();
     let instant_run = args.instant_run;
@@ -493,7 +499,7 @@ async fn main() -> GenResult<()> {
             tx.send(StartReason::Single).await?;
         }
     };
-    let main_program = spawn(async move { main_loop(&mut rx, kuma_url.as_deref()).await });
+    let main_program = spawn(async move { main_loop(&mut rx, user).await });
     if !args.single_run {
         start_pipe(tx_clone).await.warn("Start pipe");
     } else {
@@ -502,3 +508,11 @@ async fn main() -> GenResult<()> {
     info!("Stopping webcom ical");
     Ok(())
 }
+
+// OLD CODE
+// if let Some(kuma_url) = kuma_url.clone()
+//     && !kuma_url.is_empty()
+// {
+//     debug!("Checking if kuma needs to be created");
+//     kuma::first_run(&kuma_url, &username).await.warn("Kuma Run");
+// }

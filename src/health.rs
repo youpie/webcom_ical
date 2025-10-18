@@ -8,7 +8,11 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::{
-    errors::SignInFailure, ical::{get_ical_path, load_ical_file, CALENDAR_VERSION}, shift::Shift, FailureType, GenResult, BASE_DIRECTORY
+    BASE_DIRECTORY, FailureType, GenResult,
+    errors::SignInFailure,
+    get_instance,
+    ical::{CALENDAR_VERSION, get_ical_path, load_ical_file},
+    shift::Shift,
 };
 
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq, Clone)]
@@ -45,7 +49,10 @@ impl ApplicationLogbook {
     pub fn generate_shift_statistics(&mut self, shifts: &Vec<Shift>, non_relevant_shifts: usize) {
         let number_of_shifts = shifts.len() as u64;
         let number_of_broken_shifts = shifts.iter().filter(|shift| shift.is_broken).count() as u64;
-        let number_of_failed_broken_shifts = shifts.iter().filter(|shift| shift.is_broken && shift.broken_period.is_none()).count() as u64;
+        let number_of_failed_broken_shifts = shifts
+            .iter()
+            .filter(|shift| shift.is_broken && shift.broken_period.is_none())
+            .count() as u64;
         self.application_state.broken_shifts = number_of_broken_shifts;
         self.application_state.shifts = number_of_shifts;
         self.application_state.non_relevant_shifts = non_relevant_shifts as u64;
@@ -101,16 +108,10 @@ pub struct ApplicationState {
     pub calendar_version: String,
 }
 
-pub async fn send_heartbeat(
-    reason: &FailureType,
-    url: Option<&str>,
-    personeelsnummer: &str,
-) -> GenResult<()> {
-    if url.is_none() || reason == &FailureType::TriesExceeded {
-        info!("no heartbeat URL");
-        return Ok(());
-    }
-    let mut request_url: Url = url.clone().expect("Can't get heartbeat URL").parse()?;
+pub async fn send_heartbeat(reason: &FailureType) -> GenResult<()> {
+    let (user, properties) = get_instance()?;
+    let personeelsnummer = &user.user_name;
+    let mut request_url: Url = properties.kuma_properties.domain.clone().parse()?;
     request_url.set_path(&format!("/api/push/{personeelsnummer}"));
     request_url.set_query(Some(&format!(
         "status={}&msg={}&ping=",

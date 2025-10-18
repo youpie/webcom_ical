@@ -6,13 +6,13 @@ use std::{
 };
 
 use chrono::{Timelike, Utc};
-use dotenvy::{dotenv_override, var};
 use ipipe::Pipe;
 use serde::Serialize;
 use tokio::{sync::mpsc::Sender, time::sleep};
 
 use crate::{
-    GenResult, create_path, email::send_welcome_mail, errors::ResultLog, ical::get_ical_path, kuma,
+    GenResult, create_path, email::send_welcome_mail, errors::ResultLog, get_instance,
+    ical::get_ical_path, kuma,
 };
 
 type StartMinute = u8;
@@ -27,12 +27,8 @@ pub enum StartReason {
 }
 
 fn get_execution_properties() -> (Duration, StartMinute) {
-    let cycle_time = || -> GenResult<u64> {
-        Ok(var("CYCLE_TIME")
-            .unwrap_or((var("KUMA_HEARTBEAT_INTERVAL")?.parse::<u64>()? - 400).to_string())
-            .parse::<u64>()?)
-    }()
-    .unwrap_or(7200);
+    let (_user, properties) = get_instance().expect("No instance");
+    let cycle_time = properties.execution_interval_minutes as u64;
     let starting_minute = || -> GenResult<u8> {
         let path = create_path("starting_minute");
         let starting_minute_str =
@@ -72,7 +68,8 @@ pub async fn execution_manager(tx: Sender<StartReason>, instant_run: bool) {
     }
 }
 
-pub async fn start_pipe(tx: Sender<StartReason>) -> Result<(), ipipe::Error> {
+pub async fn start_pipe(tx: Sender<StartReason>) -> GenResult<()> {
+    let (user, _properties) = get_instance()?;
     let pipe_path = create_path("pipe");
     if pipe_path.exists() {
         info!("Previous pipe file found, removing");
@@ -106,26 +103,12 @@ pub async fn start_pipe(tx: Sender<StartReason>) -> Result<(), ipipe::Error> {
                 None
             }
             Ok(line) if line == "k" => {
-                let username = var("USERNAME").expect("Error in username variable in pipe");
-                let kuma_url = var("KUMA_URL").ok();
-                if let Some(kuma_url) = kuma_url
-                    && !kuma_url.is_empty()
-                {
-                    debug!("Checking if kuma needs to be created");
-                    kuma::first_run(&kuma_url, &username)
-                        .await
-                        .warn("Kuma Run in pipe");
-                }
+                debug!("Checking if kuma needs to be created");
+                kuma::first_run().await.warn("Kuma Run in pipe");
                 None
             }
             Ok(line) if line == "p" => {
-                dotenv_override().warn("Loading ENV");
-                error!(
-                    "Password is: {}",
-                    var("PASSWORD")
-                        .warn_owned("Loading password")
-                        .unwrap_or_default()
-                );
+                error!("Password is: {}", user.password);
                 None
             }
             Ok(_) => Some(StartReason::Pipe),

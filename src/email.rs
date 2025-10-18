@@ -1,20 +1,17 @@
-use dotenvy::var;
+use crate::errors::IncorrectCredentialsCount;
+use crate::{GenError, GenResult, ShiftState, get_instance};
 use lettre::{
-    message::header::ContentType, transport::smtp::authentication::Credentials, Message,
-    SmtpTransport, Transport,
+    Message, SmtpTransport, Transport, message::header::ContentType,
+    transport::smtp::authentication::Credentials,
 };
-use thiserror::Error;
-use url::Url;
-use std::{
-    collections::HashMap, fs, path::PathBuf
-};
+use std::{collections::HashMap, fs, path::PathBuf};
 use strfmt::strfmt;
 use thirtyfour::error::{WebDriverErrorInfo, WebDriverResult};
-use time::{macros::format_description, Date};
-use crate::errors::IncorrectCredentialsCount;
-use crate::{GenError, GenResult, ShiftState};
+use thiserror::Error;
+use time::{Date, macros::format_description};
+use url::Url;
 
-use crate::{create_ical_filename, create_shift_link, set_get_name, Shift, SignInFailure};
+use crate::{Shift, SignInFailure, create_ical_filename, create_shift_link, set_get_name};
 
 const ERROR_VALUE: &str = "HIER HOORT WAT ANDERS DAN DEZE TEKST TE STAAN, CONFIGURATIE INCORRECT";
 const SENDER_NAME: &str = "Peter";
@@ -33,10 +30,9 @@ trait StrikethroughString {
 
 impl StrikethroughString for String {
     fn strikethrough(&self) -> String {
-    self
-        .chars()
-        .map(|c| format!("{}{}", c, '\u{0336}'))
-        .collect()
+        self.chars()
+            .map(|c| format!("{}{}", c, '\u{0336}'))
+            .collect()
     }
 }
 
@@ -45,7 +41,85 @@ pub enum PreviousShiftsError {
     #[error("Parsing of previous shifts has failed. Error: {0}")]
     Generic(String),
     #[error("Previous shifts file IO error. Error: {0}")]
-    Io(String)
+    Io(String),
+}
+
+pub struct EnvMailVariables {
+    pub smtp_server: String,
+    pub smtp_username: String,
+    pub smtp_password: String,
+    pub mail_from: String,
+    pub mail_to: String,
+    mail_error_to: String,
+    send_email_new_shift: bool,
+    send_mail_updated_shift: bool,
+    send_welcome_mail: bool,
+    send_failed_signin_mail: bool,
+    send_error_mail: bool,
+}
+
+/*
+Loads all env variables needed for sending mails
+Does not load defaults if they are not found and will just error
+If kuma is true, it adds KUMA_ to the var names to find ones specific for KUMA
+*/
+impl EnvMailVariables {
+    pub fn new() -> GenResult<Self> {
+        let (user, properties) = get_instance()?;
+        let email_properties = properties.general_email_properties.clone();
+        let smtp_server = email_properties.smtp_server;
+        let smtp_username = email_properties.smtp_username;
+        let smtp_password = email_properties.smtp_password;
+        let mail_from = email_properties.mail_from;
+        let mail_to = user.email.clone();
+        let mail_error_to = properties.support_mail.clone();
+        let send_email_new_shift = user.user_properties.send_mail_new_shift;
+        let send_mail_updated_shift = user.user_properties.send_mail_updated_shift;
+        let send_error_mail = user.user_properties.send_error_mail;
+        let send_welcome_mail = user.user_properties.send_welcome_mail;
+        let send_failed_signin_mail = user.user_properties.send_failed_signin_mail;
+        Ok(Self {
+            smtp_server,
+            smtp_username,
+            smtp_password,
+            mail_from,
+            mail_to,
+            mail_error_to,
+            send_email_new_shift,
+            send_mail_updated_shift,
+            send_error_mail,
+            send_welcome_mail,
+            send_failed_signin_mail,
+        })
+    }
+    pub fn new_kuma() -> GenResult<Self> {
+        let (user, properties) = get_instance()?;
+        let kuma_properties = properties.kuma_properties.clone();
+        let smtp_server = kuma_properties.kuma_email_properties.smtp_server;
+        let smtp_username = kuma_properties.kuma_email_properties.smtp_username;
+        let smtp_password = kuma_properties.kuma_email_properties.smtp_password;
+        let mail_from = kuma_properties.kuma_email_properties.mail_from;
+        let mail_to = user.email.clone();
+        let mail_error_to = properties.support_mail.clone();
+        let send_email_new_shift = user.user_properties.send_mail_new_shift;
+        let send_mail_updated_shift = user.user_properties.send_mail_updated_shift;
+        let send_error_mail = user.user_properties.send_error_mail;
+        let send_welcome_mail = user.user_properties.send_welcome_mail;
+        let send_failed_signin_mail = user.user_properties.send_failed_signin_mail;
+        Ok(Self {
+            smtp_server,
+            smtp_username,
+            smtp_password,
+            mail_from,
+            mail_to,
+            mail_error_to,
+            send_email_new_shift,
+            send_mail_updated_shift,
+            send_error_mail,
+            send_welcome_mail,
+            send_failed_signin_mail,
+        })
+    }
 }
 
 /*
@@ -54,16 +128,29 @@ If loading previous shifts fails for whatever it will not error but just do an e
 Because if the previous shifts file is not, it will just not send mails that time
 Returns the list of previously known shifts, updated with new shits
 */
-pub fn send_emails(current_shifts: Vec<Shift>, previous_shifts: Vec<Shift>) -> GenResult<Vec<Shift>> {
-    let env = EnvMailVariables::new(false)?;
+pub fn send_emails(
+    current_shifts: Vec<Shift>,
+    previous_shifts: Vec<Shift>,
+) -> GenResult<Vec<Shift>> {
+    let env = EnvMailVariables::new()?;
     let mailer = load_mailer(&env)?;
     if previous_shifts.is_empty() {
         // if the previous were empty, just return the list of current shifts as all new
         error!("!!! PREVIOUS SHIFTS WAS EMPTY. SKIPPING !!!");
-        return Ok(current_shifts.into_iter().map(|mut shift| {shift.state = ShiftState::New; shift}).collect());
+        return Ok(current_shifts
+            .into_iter()
+            .map(|mut shift| {
+                shift.state = ShiftState::New;
+                shift
+            })
+            .collect());
     }
-    Ok(find_send_shift_mails(&mailer, previous_shifts, current_shifts, &env)?)
-    
+    Ok(find_send_shift_mails(
+        &mailer,
+        previous_shifts,
+        current_shifts,
+        &env,
+    )?)
 }
 
 // Creates SMTPtransport from username, password and server found in env
@@ -91,11 +178,14 @@ fn find_send_shift_mails(
         &chrono::offset::Local::now().format("%d-%m-%Y").to_string(),
         DATE_DESCRIPTION,
     )?;
-    let mut previous_shifts_map  = previous_shifts.into_iter().map(|shift| {(shift.magic_number,shift)}).collect::<HashMap<i64,Shift>>();
+    let mut previous_shifts_map = previous_shifts
+        .into_iter()
+        .map(|shift| (shift.magic_number, shift))
+        .collect::<HashMap<i64, Shift>>();
     // Iterate through the current shifts to check for updates or new shifts
     // We start with a list of previously valid shifts. All marked as deleted
     // we will then loop over a list of newly loaded shifts from the website
-    for mut new_shift in new_shifts { 
+    for mut new_shift in new_shifts {
         // If the hash of this current shift is found in the previously valid shift list,
         // we know this shift has remained unchanged. So mark it as such
         if let Some(previous_shift) = previous_shifts_map.get_mut(&new_shift.magic_number) {
@@ -111,7 +201,10 @@ fn find_send_shift_mails(
                 if previous_shift.1.date == new_shift.date {
                     match previous_shifts_map.remove(&previous_shift.0) {
                         Some(_) => (),
-                        None => warn!("Tried to remove shift {} as it has been updated, but that failed", previous_shift.1.number)
+                        None => warn!(
+                            "Tried to remove shift {} as it has been updated, but that failed",
+                            previous_shift.1.number
+                        ),
                     };
                     new_shift.state = ShiftState::Changed;
                     previous_shifts_map.insert(new_shift.magic_number, new_shift.clone());
@@ -129,15 +222,18 @@ fn find_send_shift_mails(
         }
     }
     let current_shift_vec: Vec<Shift> = previous_shifts_map.into_values().collect();
-    let mut new_shifts: Vec<&Shift> = current_shift_vec.iter().filter(|item| {
-        item.state == ShiftState::New
-    }).collect();
-    let mut updated_shifts: Vec<&Shift> = current_shift_vec.iter().filter(|item| {
-        item.state == ShiftState::Changed
-    }).collect();
-    let mut removed_shifts: Vec<&Shift> = current_shift_vec.iter().filter(|item| {
-        item.state == ShiftState::Deleted
-    }).collect();
+    let mut new_shifts: Vec<&Shift> = current_shift_vec
+        .iter()
+        .filter(|item| item.state == ShiftState::New)
+        .collect();
+    let mut updated_shifts: Vec<&Shift> = current_shift_vec
+        .iter()
+        .filter(|item| item.state == ShiftState::Changed)
+        .collect();
+    let mut removed_shifts: Vec<&Shift> = current_shift_vec
+        .iter()
+        .filter(|item| item.state == ShiftState::Deleted)
+        .collect();
     // debug!("shift vec : {:#?}",current_shift_vec);
     debug!("Removed shift vec size: {}", removed_shifts.len());
     new_shifts.retain(|shift| shift.date >= current_date);
@@ -147,7 +243,10 @@ fn find_send_shift_mails(
     }
     updated_shifts.retain(|shift| shift.date >= current_date);
     if !updated_shifts.is_empty() && env.send_mail_updated_shift {
-        info!("Found {} updated shifts, sending email", updated_shifts.len());
+        info!(
+            "Found {} updated shifts, sending email",
+            updated_shifts.len()
+        );
         create_send_new_email(mailer, updated_shifts, env, true)?;
     }
     if !removed_shifts.is_empty() && env.send_mail_updated_shift {
@@ -156,10 +255,12 @@ fn find_send_shift_mails(
         if !removed_shifts.is_empty() {
             send_removed_shifts_mail(mailer, env, removed_shifts)?;
         }
-        
     }
     // At last remove all shifts marked as removed from the vec
-    let current_shift_vec = current_shift_vec.into_iter().filter(|shift| shift.state != ShiftState::Deleted).collect();
+    let current_shift_vec = current_shift_vec
+        .into_iter()
+        .filter(|shift| shift.state != ShiftState::Deleted)
+        .collect();
     Ok(current_shift_vec)
 }
 
@@ -207,7 +308,7 @@ fn create_send_new_email(
         single_plural => enkel_meervoud.to_string(),
         shift_tables => shift_tables.to_string()
     )?;
-    let email_body_html = strfmt!(&base_html, 
+    let email_body_html = strfmt!(&base_html,
         content => changed_mail_html,
         banner_color => COLOR_BLUE,
         footer => create_footer(false).unwrap_or(ERROR_VALUE.to_owned())
@@ -228,7 +329,8 @@ fn create_send_new_email(
     Ok(())
 }
 
-fn create_footer(only_url:bool) -> GenResult<String> {
+fn create_footer(only_url: bool) -> GenResult<String> {
+    let (_user, properties) = get_instance()?;
     let footer_text = r#"<tr>
       <td style="background-color:#FFFFFF; text-align:center; padding-top:0px;font-size:12px;">
         <a style="color:#9a9996;">{footer_text}
@@ -242,17 +344,18 @@ fn create_footer(only_url:bool) -> GenResult<String> {
         <a style="color:#9a9996;">{admin_email_comment}</a>
       </td>
       </tr>"#;
-    let domain = var("DOMAIN").unwrap_or(ERROR_VALUE.to_string());
-    let url = Url::parse(&domain)?;
+    let domain = &properties.ical_domain;
+    let url = Url::parse(domain)?;
     let url = url.join(&create_ical_filename()?)?;
-    let admin_email = var("MAIL_ERROR_TO").ok();
+    let admin_email = &properties.support_mail;
     let return_value = match only_url {
         true => url.to_string(),
         false => strfmt!(footer_text,
             footer_text => "Je agenda link:",
             footer_url => url.to_string(),
-            admin_email_comment => if let Some(email) = admin_email {format!("Vragen of opmerkingen? Neem contact op met {email}")} else {"".to_owned()}).unwrap_or("".to_owned()),
-        };
+            admin_email_comment => format!("Vragen of opmerkingen? Neem contact op met {admin_email}"))
+        .unwrap_or_default(),
+    };
     Ok(return_value)
 }
 
@@ -289,18 +392,18 @@ fn send_removed_shifts_mail(
     }
     let removed_shift_html = strfmt!(&removed_shift_html,
         name => name.clone(),
-        shift_changed_ammount => removed_shifts.len().to_string(), 
-        single_plural_en => email_shift_s, 
+        shift_changed_ammount => removed_shifts.len().to_string(),
+        single_plural_en => email_shift_s,
         single_plural => enkelvoud_meervoud,
         shift_tables
     )?;
-    let email_body_html = strfmt!(&base_html, 
+    let email_body_html = strfmt!(&base_html,
         content => removed_shift_html,
         banner_color => COLOR_BLUE,
         footer => create_footer(false).unwrap_or_default()
     )?;
     let email = Message::builder()
-        .from(format!("{} <{}>",SENDER_NAME, &env.mail_from).parse()?)
+        .from(format!("{} <{}>", SENDER_NAME, &env.mail_from).parse()?)
         .to(format!("{} <{}>", &name, &env.mail_to).parse()?)
         .subject(&format!(
             "{} dienst{} {} verwijderd",
@@ -319,6 +422,7 @@ Composes and sends email of found errors, in plaintext
 List of errors can be as long as possible, but for now is always 3
 */
 pub fn send_errors(errors: &Vec<GenError>, name: &str) -> GenResult<()> {
+    let env = EnvMailVariables::new()?;
     if !env.send_error_mail {
         info!("tried to send error mail, but is disabled");
         return Ok(());
@@ -343,7 +447,7 @@ pub fn send_errors(errors: &Vec<GenError>, name: &str) -> GenResult<()> {
 }
 
 pub fn send_gecko_error_mail<T: std::fmt::Debug>(error: WebDriverResult<T>) -> GenResult<()> {
-    let env = EnvMailVariables::new(false)?;
+    let env = EnvMailVariables::new()?;
     if !env.send_error_mail {
         info!("tried to send GECKO error mail, but is disabled");
         return Ok(());
@@ -352,7 +456,12 @@ pub fn send_gecko_error_mail<T: std::fmt::Debug>(error: WebDriverResult<T>) -> G
     let mut email_errors = "!!! KAN NIET VERBINDEN MET GECKO !!!\n".to_string();
     email_errors.push_str(&format!(
         "Error: \n{}\n\n",
-        error.err().unwrap_or(thirtyfour::error::WebDriverError::UnknownError(WebDriverErrorInfo::new("Unknown".to_owned()))).to_string()
+        error
+            .err()
+            .unwrap_or(thirtyfour::error::WebDriverError::UnknownError(
+                WebDriverErrorInfo::new("Unknown".to_owned())
+            ))
+            .to_string()
     ));
     let email = Message::builder()
         .from(format!("Foutje Berichtmans <{}>", &env.mail_from).parse()?)
@@ -364,56 +473,63 @@ pub fn send_gecko_error_mail<T: std::fmt::Debug>(error: WebDriverResult<T>) -> G
     Ok(())
 }
 
-pub fn send_welcome_mail(
-    path: &PathBuf,
-    force: bool
-) -> GenResult<()> {
+pub fn send_welcome_mail(path: &PathBuf, force: bool) -> GenResult<()> {
     if path.exists() && !force {
         return Ok(());
     }
-    let send_welcome_mail =
-        EnvMailVariables::str_to_bool(&var("SEND_WELCOME_MAIL").unwrap_or("false".to_string()));
 
-    if !send_welcome_mail && !force {
-        debug!("{:?}",var("SEND_WELCOME_MAIL"));
+    let env = EnvMailVariables::new()?;
+
+    if !env.send_welcome_mail && !force {
         info!("Wanted to send welcome mail. But it is disabled");
         return Ok(());
     }
+
+    let mailer = load_mailer(&env)?;
+    let (_user, properties) = get_instance()?;
+
     let base_html = fs::read_to_string("./templates/email_base.html").unwrap();
     let onboarding_html = fs::read_to_string("./templates/onboarding_base.html").unwrap();
-    let auth_html = fs::read_to_string("./templates/onboarding_auth.html").unwrap();
-
-    let env = EnvMailVariables::new(false)?;
-    let mailer = load_mailer(&env)?;
-    let ical_username = var("ICAL_USER").unwrap_or_default();
-    let ical_password = var("ICAL_PASS").unwrap_or(ERROR_VALUE.to_string());
 
     let name = set_get_name(None);
-
-    let auth_html = strfmt!(&auth_html, 
-        auth_username => ical_username.clone(), 
-        auth_password => ical_password.clone(), 
-        admin_email => env.mail_error_to.clone())?;
 
     let agenda_url = create_footer(true).unwrap_or(ERROR_VALUE.to_owned());
     let agenda_url_webcal = agenda_url.clone().replace("https", "webcal");
     // A lot of email clients don't want to open webcal links. So by pointing to a website which returns a 302 to a webcal link it tricks the email client
-    let rewrite_url = var("WEBCAL_REWRITE_URL").unwrap_or_default();
-    let webcal_rewrite_url = format!("{rewrite_url}{}",if !rewrite_url.is_empty() {create_ical_filename().unwrap_or_default()} else{agenda_url_webcal.clone()});
-    let kuma_info = if let Ok(kuma_url) = var("KUMA_URL") {
-        let extracted_kuma_mail = var("KUMA_MAIL_FROM").unwrap_or(ERROR_VALUE.to_owned()).split("<").last().unwrap_or_default().replace(">", "");
-        format!("Als Webcom Ical een storing heeft ontvang je meestal een mail van <em>{}</em> (deze kan in je spam belanden!), op <a href=\"{kuma_url}\" style=\"color:#d97706;text-decoration:none;\">{kuma_url}</a> kan je de actuele status van Webcom Ical bekijken.",
-            extracted_kuma_mail)
+    let rewrite_url = &properties.webcal_domain;
+    let webcal_rewrite_url = format!(
+        "{rewrite_url}{}",
+        if !rewrite_url.is_empty() {
+            create_ical_filename().unwrap_or_default()
+        } else {
+            agenda_url_webcal.clone()
+        }
+    );
+    let kuma_url = &properties.kuma_properties.domain;
+    let kuma_info = if !kuma_url.is_empty() {
+        let extracted_kuma_mail = &properties
+            .kuma_properties
+            .kuma_email_properties
+            .mail_from
+            .split("<")
+            .last()
+            .unwrap_or_default()
+            .replace(">", "");
+        format!(
+            "Als Webcom Ical een storing heeft ontvang je meestal een mail van <em>{}</em> (deze kan in je spam belanden!), op <a href=\"{kuma_url}\" style=\"color:#d97706;text-decoration:none;\">{kuma_url}</a> kan je de actuele status van Webcom Ical bekijken.",
+            extracted_kuma_mail
+        )
     } else {
         "".to_owned()
     };
-    let donation_text = var("DONATION_TEXT").unwrap_or(ERROR_VALUE.to_owned());
-    let donation_service = var("DONATION_SERVICE").unwrap_or(ERROR_VALUE.to_owned());
-    let donation_link = var("DONATION_LINK").unwrap();
-    let iban = var("IBAN").unwrap_or(ERROR_VALUE.to_owned());
-    let iban_name = var("IBAN_NAME").unwrap_or(ERROR_VALUE.to_owned());
-    let admin_email = var("MAIL_ERROR_TO").unwrap_or_default();
-    let onboarding_html = strfmt!(&onboarding_html, 
+    let donation_properties = properties.donation_text.clone();
+    let donation_text = donation_properties.donate_text;
+    let donation_service = donation_properties.donate_service_name;
+    let donation_link = donation_properties.donate_link;
+    let iban = donation_properties.iban;
+    let iban_name = donation_properties.iban_name;
+    let admin_email = env.mail_error_to;
+    let onboarding_html = strfmt!(&onboarding_html,
         name => name.clone(),
         agenda_url,
         agenda_url_webcal,
@@ -424,7 +540,6 @@ pub fn send_welcome_mail(
         donation_link,
         iban,
         iban_name,
-        auth_credentials => if ical_username.is_empty() {String::new()} else {auth_html},
         admin_email
     )?;
     let email_body_html = strfmt!(&base_html,
@@ -434,7 +549,7 @@ pub fn send_welcome_mail(
     )?;
     warn!("welkom mail sturen");
     let email = Message::builder()
-        .from(format!("{} <{}>",SENDER_NAME, &env.mail_from).parse()?)
+        .from(format!("{} <{}>", SENDER_NAME, &env.mail_from).parse()?)
         .to(format!("{} <{}>", name, &env.mail_to).parse()?)
         .subject(format!("Welkom bij Webcom Ical {}!", &name))
         .header(ContentType::TEXT_HTML)
@@ -447,18 +562,15 @@ pub fn send_failed_signin_mail(
     error: &IncorrectCredentialsCount,
     first_time: bool,
 ) -> GenResult<()> {
-    let send_failed_sign_in = EnvMailVariables::str_to_bool(
-        &var("SEND_MAIL_SIGNIN_FAILED").unwrap_or("true".to_string()),
-    );
-    if !send_failed_sign_in {
+    let env = EnvMailVariables::new()?;
+    if !env.send_failed_signin_mail {
         return Ok(());
     }
 
     let base_html = fs::read_to_string("./templates/email_base.html").unwrap();
     let login_failure_html = fs::read_to_string("./templates/failed_signin.html").unwrap();
-
+    let (_user, properties) = get_instance()?;
     info!("Sending failed sign in mail");
-    let env = EnvMailVariables::new(false)?;
     let mailer = load_mailer(&env)?;
     let still_not_working_modifier = if first_time { "" } else { "nog steeds " };
     let name = set_get_name(None);
@@ -471,19 +583,24 @@ pub fn send_failed_signin_mail(
         Some(SignInFailure::Other(fault)) => fault,
         _ => "Een onbekende fout...",
     };
-    let password_change_text = if let Ok(url) = var("PASSWORD_CHANGE_URL") && error.error.clone().is_some_and(|error| error == SignInFailure::IncorrectCredentials){
+    let password_reset_link = &properties.password_reset_link;
+    let password_change_text = if error
+        .error
+        .clone()
+        .is_some_and(|error| error == SignInFailure::IncorrectCredentials)
+    {
         format!("
 <tr>
     <td>
         Als je je webcomm wachtwoord hebt veranderd. Vul je nieuwe wachtwoord in met behulp van de volgende link: <br>
-        <a href=\"{url}\" style=\"color:#003366; text-decoration:underline;\">{url}</a>
+        <a href=\"{password_reset_link}\" style=\"color:#003366; text-decoration:underline;\">{password_reset_link}</a>
     </td>
 </tr>")
     } else {
         String::new()
     };
 
-    let login_failure_html = strfmt!(&login_failure_html, 
+    let login_failure_html = strfmt!(&login_failure_html,
         still_not_working_modifier,
         name => set_get_name(None),
         additional_text => password_change_text,
@@ -492,7 +609,7 @@ pub fn send_failed_signin_mail(
         admin_email => env.mail_error_to.clone(),
         name => name.clone()
     )?;
-    let email_body_html = strfmt!(&base_html, 
+    let email_body_html = strfmt!(&base_html,
         content => login_failure_html,
         banner_color => COLOR_RED,
         footer => create_footer(false).unwrap_or_default()
@@ -509,10 +626,9 @@ pub fn send_failed_signin_mail(
 }
 
 pub fn send_sign_in_succesful() -> GenResult<()> {
-    let send_failed_sign_in = EnvMailVariables::str_to_bool(
-        &var("SEND_MAIL_SIGNIN_FAILED").unwrap_or("true".to_string()),
-    );
-    if !send_failed_sign_in {
+    let env = EnvMailVariables::new()?;
+
+    if !env.send_error_mail {
         return Ok(());
     }
 
@@ -520,17 +636,17 @@ pub fn send_sign_in_succesful() -> GenResult<()> {
     let login_success_html = fs::read_to_string("./templates/signin_succesful.html").unwrap();
     let name = set_get_name(None);
     info!("Sending succesful sign in mail");
-    let env = EnvMailVariables::new(false)?;
+
     let mailer = load_mailer(&env)?;
     let sign_in_email_html = strfmt!(&login_success_html,
         name => name.clone()
     )?;
-    let email_body_html = strfmt!(&base_html, 
+    let email_body_html = strfmt!(&base_html,
         content => sign_in_email_html,
         banner_color => COLOR_GREEN,
         footer => create_footer(false).unwrap_or_default()
     )?;
-    
+
     let email = Message::builder()
         .from(format!("WEBCOM ICAL <{}>", &env.mail_from).parse()?)
         .to(format!("{} <{}>", name, &env.mail_to).parse()?)
@@ -545,37 +661,37 @@ pub fn send_sign_in_succesful() -> GenResult<()> {
 mod tests {
     use super::*;
     #[test]
-    fn send_new_shift_mail() -> GenResult<()>{
+    fn send_new_shift_mail() -> GenResult<()> {
         let shift = create_example_shift();
         let (env, mailer) = get_mailer()?;
         create_send_new_email(&mailer, vec![&shift, &shift], &env, false)
     }
 
     #[test]
-    fn send_updated_shift_mail() -> GenResult<()>{
+    fn send_updated_shift_mail() -> GenResult<()> {
         let shift = create_example_shift();
         let (env, mailer) = get_mailer()?;
         create_send_new_email(&mailer, vec![&shift, &shift], &env, true)
     }
 
     #[test]
-    fn send_deleted_shift_mail() -> GenResult<()>{
+    fn send_deleted_shift_mail() -> GenResult<()> {
         let shift = create_example_shift();
         let (env, mailer) = get_mailer()?;
-        send_removed_shifts_mail(&mailer, &env,vec![&shift, &shift])
+        send_removed_shifts_mail(&mailer, &env, vec![&shift, &shift])
     }
 
     #[test]
-    fn send_welcome_mail_test() -> GenResult<()>{
+    fn send_welcome_mail_test() -> GenResult<()> {
         send_welcome_mail(&PathBuf::new(), true)
     }
 
     #[test]
     fn send_failed_signin_test() -> GenResult<()> {
-        let credential_error = IncorrectCredentialsCount{
+        let credential_error = IncorrectCredentialsCount {
             retry_count: 30,
             error: Some(SignInFailure::IncorrectCredentials),
-            previous_password_hash: None
+            previous_password_hash: None,
         };
         send_failed_signin_mail(&credential_error, false)
     }
@@ -589,8 +705,8 @@ mod tests {
         Shift::new("Dienst: V2309 •  • Geldig vanaf: 29.06.2025 •  • Tijd: 06:14 - 13:54 •  • Dienstduur: 07:40 Uren •  • Loonuren: 07:40 Uren •  • Dagsoort:  • Donderdag •  • Dienstsoort:  • Rijdienst •  • Startplaats:  • ehvgas, Einhoven garage streek •  • Omschrijving:  • V".to_owned(),Date::from_calendar_date(2025, time::Month::June, 29).unwrap()).unwrap()
     }
 
-    fn get_mailer() -> GenResult<(EnvMailVariables,SmtpTransport)> {
-        let env = EnvMailVariables::new(false)?;
+    fn get_mailer() -> GenResult<(EnvMailVariables, SmtpTransport)> {
+        let env = EnvMailVariables::new()?;
         let mailer = load_mailer(&env)?;
         Ok((env, mailer))
     }

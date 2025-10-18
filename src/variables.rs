@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use arc_swap::ArcSwap;
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD_NO_PAD;
@@ -14,16 +16,16 @@ use crate::GenResult;
 
 const DEFAULT_PREFERENCES_ID: i32 = 1;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UserInstanceData {
-    pub user_data: UserData,
-    pub general_settings: GeneralProperties,
+    pub user_data: Arc<UserData>,
+    pub general_settings: Arc<GeneralProperties>,
 }
 
 impl UserInstanceData {
     pub fn new(arc_data: ArcUserInstanceData) -> Self {
-        let user_data = **arc_data.user_data.load();
-        let general_settings = **arc_data.general_settings.load();
+        let user_data = arc_data.user_data.load_full();
+        let general_settings = arc_data.general_settings.load_full();
         Self {
             user_data,
             general_settings,
@@ -69,7 +71,7 @@ impl ArcUserInstanceData {
 }
 
 #[allow(dead_code)]
-#[derive(DerivePartialModel, Debug)]
+#[derive(DerivePartialModel, Debug, Clone)]
 #[sea_orm(entity = "general_properties_db::Entity")]
 pub struct GeneralProperties {
     pub general_properties_id: i32,
@@ -115,7 +117,7 @@ impl GeneralProperties {
 }
 
 #[allow(dead_code)]
-#[derive(DerivePartialModel, Debug)]
+#[derive(DerivePartialModel, Debug, Clone)]
 #[sea_orm(entity = "kuma_properties::Entity")]
 pub struct KumaProperties {
     pub domain: String,
@@ -132,11 +134,11 @@ pub struct KumaProperties {
 }
 
 #[allow(dead_code)]
-#[derive(DerivePartialModel, Debug)]
+#[derive(DerivePartialModel, Debug, Clone)]
 #[sea_orm(entity = "user_data::Entity")]
 pub struct UserData {
+    pub user_name: String,
     pub personeelsnummer: String,
-
     pub password: String,
     pub email: String,
     pub file_name: String,

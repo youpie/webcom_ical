@@ -1,4 +1,3 @@
-use dotenvy::var;
 use kuma_client::monitor::{MonitorGroup, MonitorType};
 use kuma_client::{Client, monitor, notification};
 use std::collections::HashMap;
@@ -9,20 +8,22 @@ use strfmt::strfmt;
 use url::Url;
 
 use crate::errors::OptionResult;
-use crate::{email, set_get_name, GenResult};
+use crate::{GenResult, email, get_instance, set_get_name};
 
 const COLOR_RED: &str = "#a51d2d";
 const COLOR_GREEN: &str = "#26a269";
 
-pub async fn first_run(url: &str, personeelsnummer: &str) -> GenResult<()> {
-    let url: Url = url.parse()?;
-    let username = var("KUMA_USERNAME")?;
-    let password = var("KUMA_PASSWORD")?;
+pub async fn first_run() -> GenResult<()> {
+    let (user, properties) = get_instance()?;
+    let kuma_properties = properties.kuma_properties.clone();
+    let url: Url = kuma_properties.domain.parse()?;
+    let username = kuma_properties.username;
+    let password = kuma_properties.password;
     let kuma_client = connect_to_kuma(&url, username, password).await?;
     thread::sleep(Duration::from_millis(100));
-    let notification_id = create_notification(&kuma_client, personeelsnummer, &url).await?;
+    let notification_id = create_notification(&kuma_client, &user.user_name, &url).await?;
     if let Some(monitor_id) =
-        get_monitor_type_id(&kuma_client, personeelsnummer, MonitorType::Push, false).await?
+        get_monitor_type_id(&kuma_client, &user.user_name, MonitorType::Push, false).await?
     {
         debug!("id found in kuma online, ID: {monitor_id}");
         if notification_id.1 {
@@ -35,7 +36,7 @@ pub async fn first_run(url: &str, personeelsnummer: &str) -> GenResult<()> {
 
         return Ok(());
     }
-    let _monitor_id = create_monitor(&kuma_client, personeelsnummer, notification_id.0).await?;
+    let _monitor_id = create_monitor(&kuma_client, &user.user_name, notification_id.0).await?;
     Ok(())
 }
 
@@ -51,20 +52,22 @@ async fn connect_to_kuma(url: &Url, username: String, password: String) -> GenRe
 
 async fn create_monitor(
     kuma_client: &Client,
-    personeelsnummer: &str,
+    user_name: &str,
     notification_id: i32,
 ) -> GenResult<i32> {
-    let heartbeat_interval: i32 = var("KUMA_HEARTBEAT_INTERVAL")?.parse()?;
-    let heartbeat_retry: i32 = var("KUMA_HEARTBEAT_RETRY")?.parse()?;
+    let (_user, properties) = get_instance()?;
+    let heartbeat_interval: i32 =
+        properties.execution_interval_minutes + properties.expected_execution_time_seconds;
+    let heartbeat_retry: i32 = properties.kuma_properties.hearbeat_retry;
     let group_id: i32 = get_monitor_type_id(kuma_client, "Webcom Ical", MonitorType::Group, true)
         .await?
         .unwrap_or_default();
     let monitor = monitor::MonitorPush {
-        name: Some(personeelsnummer.to_string()),
+        name: Some(user_name.to_string()),
         interval: Some(heartbeat_interval),
         max_retries: Some(heartbeat_retry),
         retry_interval: Some(heartbeat_interval),
-        push_token: Some(personeelsnummer.to_string()),
+        push_token: Some(user_name.to_string()),
         notification_id_list: Some(HashMap::from([(notification_id.to_string(), true)])),
         parent: Some(group_id),
         ..Default::default()
@@ -78,12 +81,16 @@ async fn create_monitor(
 // Create a new notification if it does not already exist. The second value tells that a new notification has been created
 async fn create_notification(
     kuma_client: &Client,
-    personeelsnummer: &str,
+    user_name: &str,
     kuma_url: &Url,
 ) -> GenResult<(i32, bool)> {
-    let base_html = read_to_string("./templates/email_base.html").expect("Can't get email base template");
-    let offline_html = read_to_string("./templates/kuma_offline.html").expect("Can't get kuma offline template");
-    let online_html = read_to_string("./templates/kuma_online.html").expect("Can't get kuma online template");
+    let (_user, properties) = get_instance()?;
+    let base_html =
+        read_to_string("./templates/email_base.html").expect("Can't get email base template");
+    let offline_html =
+        read_to_string("./templates/kuma_offline.html").expect("Can't get kuma offline template");
+    let online_html =
+        read_to_string("./templates/kuma_online.html").expect("Can't get kuma online template");
 
     let body_online = strfmt!(&base_html,
         content => strfmt!(&online_html,
@@ -112,25 +119,21 @@ async fn create_notification(
     debug!("Searching if notification already exists");
     let current_notifications = kuma_client.get_notifications().await?;
     for notification in current_notifications {
-        if let Some(name) = notification.name && name == format!("{}_mail", personeelsnummer) {
+        if let Some(name) = notification.name
+            && name == format!("{}_mail", user_name)
+        {
             debug!(
-                "Notification for user {personeelsnummer} already exists, ID: {:?}. Not creating new one",
+                "Notification for user {user_name} already exists, ID: {:?}. Not creating new one",
                 notification.id
             );
             return Ok((notification.id.unwrap_or_default(), false));
         }
     }
-    info!("Notification for user {personeelsnummer} does NOT yet exist, creating one");
+    info!("Notification for user {user_name} does NOT yet exist, creating one");
 
-    let email_env = email::EnvMailVariables::new(true)?;
-    let port = var("KUMA_MAIL_PORT")?;
-    let secure = match var("KUMA_MAIL_SECURE")
-        .unwrap_or(var("KUMA_MAUL_SECURE").unwrap_or("true".into()))
-        .as_str()
-    {
-        "true" => true,
-        _ => false,
-    };
+    let email_env = email::EnvMailVariables::new_kuma()?;
+    let port = properties.kuma_properties.mail_port;
+    let secure = properties.kuma_properties.use_ssl;
     let config = serde_json::json!({
         "smtpHost": email_env.smtp_server,
         "smtpPort": port,
@@ -150,7 +153,7 @@ Webcom Ical weer online
 
     });
     let notification = notification::Notification {
-        name: Some(format!("{}_mail", personeelsnummer.to_string())),
+        name: Some(format!("{}_mail", user_name.to_string())),
         config: Some(config),
         ..Default::default()
     };

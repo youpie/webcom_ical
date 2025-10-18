@@ -13,7 +13,6 @@ extern crate log;
 use clap::Parser;
 use clap::command;
 use dotenvy::dotenv_override;
-use dotenvy::var;
 use email::send_errors;
 use email::send_welcome_mail;
 use sea_orm::Database;

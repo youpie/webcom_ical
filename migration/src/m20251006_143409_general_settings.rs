@@ -16,13 +16,13 @@ impl MigrationTrait for Migration {
                     .table(GeneralPropertiesDB::Table)
                     .if_not_exists()
                     .col(pk_auto(GeneralPropertiesDB::GeneralPropertiesId))
-                    .col(string(GeneralPropertiesDB::SaveTarget))
+                    .col(string(GeneralPropertiesDB::CalendarTarget))
+                    .col(string(GeneralPropertiesDB::FileTarget))
                     .col(string(GeneralPropertiesDB::IcalDomain))
                     .col(string(GeneralPropertiesDB::WebcalDomain))
                     .col(string(GeneralPropertiesDB::PDFShiftDomain))
                     .col(integer(GeneralPropertiesDB::SigninFailExecutionReduce))
                     .col(integer(GeneralPropertiesDB::SigninFailMailReduce))
-                    .col(integer(GeneralPropertiesDB::ExecutionIntervalMinutes))
                     .col(integer(GeneralPropertiesDB::ExpectedExecutionTimeSeconds))
                     .col(integer(GeneralPropertiesDB::ExecutionRetryCount))
                     .col(string(GeneralPropertiesDB::SupportMail))
@@ -79,13 +79,13 @@ impl MigrationTrait for Migration {
 pub enum GeneralPropertiesDB {
     Table,
     GeneralPropertiesId,
-    SaveTarget,
+    CalendarTarget,
+    FileTarget,
     IcalDomain,
     WebcalDomain,
     PDFShiftDomain,
     SigninFailExecutionReduce,
     SigninFailMailReduce,
-    ExecutionIntervalMinutes,
     ExpectedExecutionTimeSeconds,
     ExecutionRetryCount,
     SupportMail,

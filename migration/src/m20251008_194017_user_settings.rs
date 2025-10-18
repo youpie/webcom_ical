@@ -12,6 +12,7 @@ impl MigrationTrait for Migration {
                     .table(UserProperties::Table)
                     .if_not_exists()
                     .col(pk_auto(UserProperties::UserPropertiesId))
+                    .col(integer(UserProperties::ExecutionIntervalMinutes).default(7200))
                     .col(boolean(UserProperties::SendMailNewShift).default(false))
                     .col(boolean(UserProperties::SendMailUpdatedShift).default(false))
                     .col(boolean(UserProperties::SendMailRemovedShift).default(false))
@@ -36,6 +37,7 @@ impl MigrationTrait for Migration {
 pub enum UserProperties {
     Table,
     UserPropertiesId,
+    ExecutionIntervalMinutes,
     SendMailNewShift,
     SendMailUpdatedShift,
     SendMailRemovedShift,

@@ -16,23 +16,6 @@ use crate::GenResult;
 
 const DEFAULT_PREFERENCES_ID: i32 = 1;
 
-#[derive(Debug, Clone)]
-pub struct UserInstanceData {
-    pub user_data: Arc<UserData>,
-    pub general_settings: Arc<GeneralProperties>,
-}
-
-impl UserInstanceData {
-    pub fn new(arc_data: ArcUserInstanceData) -> Self {
-        let user_data = arc_data.user_data.load_full();
-        let general_settings = arc_data.general_settings.load_full();
-        Self {
-            user_data,
-            general_settings,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct ArcUserInstanceData {
     pub user_data: ArcSwap<UserData>,

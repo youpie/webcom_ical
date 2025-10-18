@@ -1,12 +1,11 @@
 use crate::{
-    email::{DATE_DESCRIPTION, TIME_DESCRIPTION}, errors::ResultLog, shift::ShiftState, GenResult, Shift
+    GenResult, Shift,
+    email::{DATE_DESCRIPTION, TIME_DESCRIPTION},
+    errors::ResultLog,
+    get_instance,
+    shift::ShiftState,
 };
-use dotenvy::var;
-use thirtyfour::{
-    WebDriver, WebElement,
-    error::WebDriverResult,
-    prelude::*,
-};
+use thirtyfour::{WebDriver, WebElement, error::WebDriverResult, prelude::*};
 use time::{Duration, Time};
 
 /*
@@ -27,7 +26,7 @@ pub async fn load_broken_shift_information(
             continue;
         }
         // Try to load the broken shift information. If it fails, that is not important
-        if shift.broken_period.is_none(){
+        if shift.broken_period.is_none() {
             info!("Creating broken shift: {}", shift.number);
             load_single_broken_info(driver, shift).await?;
         } else if matches!(shift.state, ShiftState::Changed | ShiftState::New) {
@@ -44,10 +43,7 @@ pub async fn load_broken_shift_information(
     Ok(shifts_clone)
 }
 
-async fn load_single_broken_info(
-    driver: &WebDriver,
-    shift: &mut Shift,
-) -> GenResult<()> {
+async fn load_single_broken_info(driver: &WebDriver, shift: &mut Shift) -> GenResult<()> {
     match get_broken_shift_time(driver, shift).await {
         Ok(_) => {
             info!("Added broken shift time to shift {}", shift.number);
@@ -77,9 +73,11 @@ async fn get_broken_shift_time(driver: &WebDriver, shift: &mut Shift) -> GenResu
 
 /*
 Looks for a time difference between one event in the shift info and the next
-If something boes wrong, skip it. 
+If something boes wrong, skip it.
 */
-pub async fn find_broken_start_stop_time(shift_rows: Vec<WebElement>) -> GenResult<Vec<(Time,Time)>> {
+pub async fn find_broken_start_stop_time(
+    shift_rows: Vec<WebElement>,
+) -> GenResult<Vec<(Time, Time)>> {
     let mut broken_periods: Vec<(Time, Time)> = vec![];
     let mut previous_element_end_time = None;
     for activity in shift_rows {
@@ -118,12 +116,13 @@ A function created to overcome a limitation of gnome calendar
 https://gitlab.gnome.org/GNOME/gnome-calendar/-/issues/944
 Not needed for most people
 */
-pub fn split_night_shift(shifts: &Vec<Shift>) -> Vec<Shift> {
-    let split_option = var("BREAK_UP_NIGHT_SHIFT").unwrap_or_default();
+pub fn split_night_shift(shifts: &Vec<Shift>) -> GenResult<Vec<Shift>> {
+    let (user, _properties) = get_instance()?;
+    let split = user.user_properties.split_night_shift;
     let mut temp_shift: Vec<Shift> = vec![];
-    if split_option != "true" {
+    if !split {
         temp_shift = shifts.clone();
-        return temp_shift;
+        return Ok(temp_shift);
     }
     for shift in shifts {
         if shift.end_date != shift.date {
@@ -140,15 +139,16 @@ pub fn split_night_shift(shifts: &Vec<Shift>) -> Vec<Shift> {
             temp_shift.push(shift.clone());
         }
     }
-    temp_shift
+    Ok(temp_shift)
 }
 
 // Function to stop shifts at midnight. This is a request from Jerry
-pub fn stop_shift_at_midnight(shifts: &Vec<Shift>) -> Vec<Shift> {
-    let split_option = var("STOP_SHIFT_AT_MIDNIGHT").unwrap_or_default();
+pub fn stop_shift_at_midnight(shifts: &Vec<Shift>) -> GenResult<Vec<Shift>> {
+    let (user, _properties) = get_instance()?;
+    let stop = user.user_properties.stop_midnight_shift;
     let mut temp_shifts: Vec<Shift> = vec![];
-    if split_option != "true" {
-        return shifts.clone();
+    if !stop {
+        return Ok(shifts.clone());
     }
     for shift in shifts {
         let mut shift_clone = shift.clone();
@@ -159,7 +159,7 @@ pub fn stop_shift_at_midnight(shifts: &Vec<Shift>) -> Vec<Shift> {
         }
         temp_shifts.push(shift_clone);
     }
-    temp_shifts
+    Ok(temp_shifts)
 }
 
 /*
@@ -227,8 +227,26 @@ pub async fn wait_for_response(
 ) -> WebDriverResult<()> {
     let query = driver.query(element.clone()).first().await?;
     match clickable {
-        true => query.wait_until().wait(std::time::Duration::from_secs(60), std::time::Duration::from_secs(1)).clickable().await?,
-        false => query.wait_until().wait(std::time::Duration::from_secs(60), std::time::Duration::from_secs(1)).displayed().await?,
+        true => {
+            query
+                .wait_until()
+                .wait(
+                    std::time::Duration::from_secs(60),
+                    std::time::Duration::from_secs(1),
+                )
+                .clickable()
+                .await?
+        }
+        false => {
+            query
+                .wait_until()
+                .wait(
+                    std::time::Duration::from_secs(60),
+                    std::time::Duration::from_secs(1),
+                )
+                .displayed()
+                .await?
+        }
     };
     Ok(())
 }

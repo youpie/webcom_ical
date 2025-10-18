@@ -13,6 +13,7 @@ extern crate log;
 use clap::Parser;
 use clap::command;
 use dotenvy::dotenv_override;
+use dotenvy::var;
 use email::send_errors;
 use email::send_welcome_mail;
 use sea_orm::Database;
@@ -46,7 +47,6 @@ use crate::shift::*;
 use crate::variables::ArcUserInstanceData;
 use crate::variables::GeneralProperties;
 use crate::variables::UserData;
-use crate::variables::UserInstanceData;
 use crate::watchdog::watchdog;
 
 pub mod email;
@@ -81,11 +81,12 @@ struct Args {
 }
 
 fn create_shift_link(shift: &Shift, include_domain: bool) -> GenResult<String> {
+    let (_user, properties) = get_instance()?;
     let date_format = format_description!("[day]-[month]-[year]");
     let formatted_date = shift.date.format(date_format)?;
     let domain = match include_domain {
-        true => var("PDF_SHIFT_DOMAIN").unwrap_or("https://emphisia.nl/shift/".to_string()),
-        false => "".to_owned(),
+        true => &properties.pdf_shift_domain,
+        false => "",
     };
     if domain.is_empty() && include_domain == true {
         return Ok(format!(
@@ -104,11 +105,10 @@ fn create_shift_link(shift: &Shift, include_domain: bool) -> GenResult<String> {
 }
 
 fn create_ical_filename() -> GenResult<String> {
-    let username = var("USERNAME")?;
-    match var("RANDOM_FILENAME").ok() {
-        Some(value) if value == "false".to_owned() => Ok(format!("{}.ics", username)),
-        None => Ok(format!("{}.ics", username)),
-        _ => Ok(format!("{}.ics", var("RANDOM_FILENAME")?)),
+    let (user, _properties) = get_instance()?;
+    match &user.file_name {
+        value if value.is_empty() => Ok(format!("{}.ics", user.user_name)),
+        _ => Ok(format!("{}.ics", user.file_name)),
     }
 }
 
@@ -285,15 +285,15 @@ async fn main_program(
     let all_shifts = gebroken_shifts::load_broken_shift_information(&driver, &all_shifts).await?; // Replace the shifts with the newly created list of broken shifts
     ical::save_partial_shift_files(&all_shifts).error("Saving partial shift files");
     let broken_split_shifts = gebroken_shifts::split_broken_shifts(&all_shifts);
-    let midnight_stopped_shifts = gebroken_shifts::stop_shift_at_midnight(&broken_split_shifts);
-    let mut night_split_shifts = gebroken_shifts::split_night_shift(&midnight_stopped_shifts);
+    let midnight_stopped_shifts = gebroken_shifts::stop_shift_at_midnight(&broken_split_shifts)?;
+    let mut night_split_shifts = gebroken_shifts::split_night_shift(&midnight_stopped_shifts)?;
     night_split_shifts.sort_by_key(|shift| shift.magic_number);
     night_split_shifts.dedup();
     debug!("Saving {} shifts", night_split_shifts.len());
     let calendar = create_ical(&night_split_shifts, &all_shifts, &logbook.state);
     send_welcome_mail(&ical_path, false)?;
     info!("Writing to: {:?}", &ical_path);
-    write(ical_path, calendar.as_bytes())?;
+    write(ical_path, calendar?.as_bytes())?;
     logbook.generate_shift_statistics(&all_shifts, non_relevant_shift_len);
     Ok(())
 }
@@ -333,7 +333,7 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, instance: ArcUserInstan
 
         USER_PROPERTIES.replace(Some(instance.user_data.load_full()));
         GENERAL_PROPERTIES.replace(Some(instance.general_settings.load_full()));
-        let (user, properties) = get_instance().expect("Failed to get instance data");
+        let (_user, properties) = get_instance().expect("Failed to get instance data");
 
         create_delete_lock(Some(&continue_execution)).warn("Creating Lock file");
 
@@ -372,7 +372,7 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, instance: ArcUserInstan
         }
 
         while retry_count < max_retry_count {
-            match main_program(&driver retry_count, &mut logbook)
+            match main_program(&driver, retry_count, &mut logbook)
                 .await
                 .warn_owned("Main Program")
             {
@@ -450,9 +450,6 @@ async fn main_loop(receiver: &mut Receiver<StartReason>, instance: ArcUserInstan
 }
 
 async fn get_driver(logbook: &mut ApplicationLogbook) -> GenResult<WebDriver> {
-    let (user, properties) = get_instance()?;
-    let kuma_url = &properties.kuma_properties.domain;
-    let personeelsnummer = &user.personeelsnummer;
     match initiate_webdriver().await {
         Ok(driver) => Ok(driver),
         Err(error) => {
@@ -461,7 +458,7 @@ async fn get_driver(logbook: &mut ApplicationLogbook) -> GenResult<WebDriver> {
             logbook
                 .save(&FailureType::GeckoEngine)
                 .warn("Saving Logbook");
-            send_heartbeat(&FailureType::GeckoEngine, kuma_url, personeelsnummer)
+            send_heartbeat(&FailureType::GeckoEngine)
                 .await
                 .warn("Sending heartbeat");
             return Err("driver fout".into());

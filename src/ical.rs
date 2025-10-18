@@ -7,11 +7,10 @@ use std::{
 
 use crate::{
     FailureType, GenResult, Shift, ShiftState, create_ical_filename, create_shift_link,
-    set_get_name,
+    get_instance, set_get_name,
 };
 use crate::{email::TIME_DESCRIPTION, errors::ResultLog};
 use chrono::{Datelike, Local, Months, NaiveDate, NaiveDateTime, NaiveTime};
-use dotenvy::var;
 use icalendar::{
     Calendar, CalendarComponent, CalendarDateTime, Component, Event, EventLike,
     parser::{read_calendar, unfold},
@@ -204,8 +203,9 @@ pub struct PreviousShiftInformation {
 }
 
 pub fn get_ical_path() -> GenResult<PathBuf> {
+    let (_user, properties) = get_instance()?;
     let mut ical_path = PathBuf::new();
-    ical_path.push(var("SAVE_TARGET")?);
+    ical_path.push(&properties.save_target);
     ical_path.push(create_ical_filename()?);
     Ok(ical_path)
 }
@@ -320,19 +320,18 @@ pub fn create_ical(
     shifts: &Vec<Shift>,
     metadata: &Vec<Shift>,
     previous_exit_code: &FailureType,
-) -> String {
+) -> GenResult<String> {
+    let (_user, properties) = get_instance()?;
     let metadata_shifts_hashmap: HashMap<i64, &Shift> =
         metadata.into_iter().map(|x| (x.magic_number, x)).collect();
     let name = set_get_name(None);
-    let admin_email = var("MAIL_ERROR_TO").unwrap_or_default();
+    let admin_email = &properties.support_mail;
     // get the current systemtime as a unix timestamp
     let current_timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or(Duration::from_secs(0));
-    let heartbeat_interval: i32 = var("KUMA_HEARTBEAT_INTERVAL")
-        .unwrap_or("0".to_owned())
-        .parse()
-        .unwrap_or(0);
+    let heartbeat_interval: i32 =
+        properties.expected_execution_time_seconds + (properties.execution_interval_minutes * 60);
     info!("Creating calendar file...");
     let mut calendar = Calendar::new()
         .name(&format!("Hermes rooster - {}", name))
@@ -360,7 +359,7 @@ pub fn create_ical(
         let metadata_shift = metadata_shifts_hashmap.get(&shift.magic_number);
         calendar.push(create_event(&shift, metadata_shift));
     }
-    String::from(calendar.to_string())
+    Ok(String::from(calendar.to_string()))
 }
 
 /*

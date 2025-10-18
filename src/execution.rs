@@ -28,7 +28,7 @@ pub enum StartReason {
 
 fn get_execution_properties() -> (Duration, StartMinute) {
     let (_user, properties) = get_instance().expect("No instance");
-    let cycle_time = properties.execution_interval_minutes as u64;
+    let cycle_time = (properties.execution_interval_minutes * 60) as u64;
     let starting_minute = || -> GenResult<u8> {
         let path = create_path("starting_minute");
         let starting_minute_str =

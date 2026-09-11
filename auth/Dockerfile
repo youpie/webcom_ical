@@ -1,11 +1,11 @@
-FROM rust:1.91.1 AS builder
+FROM rust:1.98.1 AS builder
 
 WORKDIR /usr/src/mijn_bussie_auth
 
 # Copy vendor files to reduce pointless bandwidth use
 # COPY vendor ./vendor
 # COPY docker_cargo/config.toml ./.cargo/config.toml
-
+RUN rustup default nightly
 COPY Cargo.lock ./
 COPY Cargo.toml ./
 COPY entity ./entity
